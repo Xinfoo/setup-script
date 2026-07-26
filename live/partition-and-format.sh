@@ -126,6 +126,15 @@ partition_selector() {
     return 1
 }
 
+mount_detector() {
+    if findmnt --source "$1"; then
+        echo "This partition has already been mounted." >&2
+        return 1
+    else
+        return 0
+    fi
+}
+
 disk_wiper() {
     # 检查输入是否为空
     if [[ -z "$1" ]]; then
