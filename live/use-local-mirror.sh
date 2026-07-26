@@ -1,10 +1,4 @@
 #!/usr/bin/env bash
-set -euo pipefail
-
-if [[ "$EUID" -ne "0" ]]; then
-    echo "Please run this script with root."
-    exit 1
-fi
 
 use_local_miror() {
     # 查找本地镜像源分区。
@@ -66,5 +60,3 @@ server {
     pacman -Syy &> /dev/null
     echo "Local mirror site set up successfully."
 }
-
-use_local_miror

@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-set -euo pipefail
 
 # 权限检查器
 permission_check() {
