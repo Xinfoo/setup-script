@@ -10,7 +10,7 @@ source "$SRC_DIR/use-local-mirror.sh"
 permission_check
 
 # 是否使用移动硬盘镜像站
-if confirm "Do you want to use local mirror?"; than
+if confirm "Do you want to use local mirror?"; then
     use_local_miror
 else
     # 不使用本地镜像站则检查网络
