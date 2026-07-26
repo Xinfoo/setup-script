@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -e
 
+if [[ "$EUID" -ne "0" ]]; then
+    echo "Please run this script with root."
+    exit 1
+fi
+
 # 查找本地镜像源分区。
 # 依赖该分区 LABEL 固定为 F2FS-DATA。
 devices=($(blkid -t LABEL="F2FS-DATA" -o device))
