@@ -155,3 +155,51 @@ disk_wiper() {
         blkdiscard -f "$1"
     fi
 }
+
+# 硬盘格式化
+disk_formatter() {
+    # 定义要使用的变量和数组
+    local PS3="Select the file system you want to format: "
+    local -a options=(
+        "Ext4"
+        "XFS"
+        "F2FS"
+    )
+
+    # 开设格式化选项
+    select choice in ${options[@]}; do
+        case $choice in
+            "Ext4")
+                mkfs.ext4 -F "$1"
+                break
+                ;;
+            "XFS")
+                mkfs.xfs -f "$1"
+                break
+                ;;
+            "F2FS")
+                # 定义F2FS的选项
+                local -a f2fs_options=(
+                    "Enable_file_system_compression(recommended)"
+                    "Do_not_enable_file_system_compression"
+                    )
+                # 选择选项并格式化
+                echo >&2
+                select f2fs_choice in ${f2fs_options[@]}; do
+                    if [[ "$f2fs_choice" == "Enable_file_system_compression(recommended)" ]]; then
+                        mkfs.f2fs -f -O extra_attr,inode_checksum,sb_checksum,compression "$1"
+                        break 2
+                    elif [[ "$f2fs_choice" == "Do_not_enable_file_system_compression" ]]; then
+                        mkfs.f2fs -f -O extra_attr,inode_checksum,sb_checksum "$1"
+                        break 2
+                    else
+                        echo "Invalid input. Please enter a valid option." >&2
+                    fi
+                done
+                ;;
+            *)
+                echo "Invalid input. Please enter a valid option." >&2
+                ;;
+        esac
+    done
+}
