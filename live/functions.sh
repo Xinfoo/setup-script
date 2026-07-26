@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# 权限检查器
 permission_check() {
     if [[ "$EUID" -ne "0" ]]; then
         echo "Please run this script with root."
@@ -8,6 +9,7 @@ permission_check() {
     fi
 }
 
+# 硬盘探测器
 disk_detector() {
     # 定义要使用的变量和数组
     local disk
@@ -48,6 +50,17 @@ disk_detector() {
     echo "${disk_list[@]}"
 }
 
+# 挂载检查器
+mount_detector() {
+    if findmnt --source "$1"; then
+        echo "This partition has already been mounted." >&2
+        return 1
+    else
+        return 0
+    fi
+}
+
+# 硬盘选择器
 disk_selector() {
     # 定义要使用的变量
     local disk_dev_path
@@ -77,6 +90,7 @@ disk_selector() {
     return 1
 }
 
+# 分区选择器
 partition_selector() {
     # 定义要使用的变量和数组
     local disk_dev_path
@@ -126,15 +140,7 @@ partition_selector() {
     return 1
 }
 
-mount_detector() {
-    if findmnt --source "$1"; then
-        echo "This partition has already been mounted." >&2
-        return 1
-    else
-        return 0
-    fi
-}
-
+# 硬盘擦除器
 disk_wiper() {
     # 检查输入是否为空
     if [[ -z "$1" ]]; then
@@ -149,7 +155,3 @@ disk_wiper() {
         blkdiscard -f "$1"
     fi
 }
-
-disk_selector
-partition_selector
-disk_detector
