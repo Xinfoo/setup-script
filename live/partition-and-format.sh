@@ -63,9 +63,12 @@ disk_selector() {
 }
 
 partition_selector() {
+    # 定义要使用的变量和数组
+    local block
     local partition
     local PS3="Select a partition: "
     local -a block_list=()
+    local -a dev_block_list=()
     local -a partition_list=()
 
     # 循环检测块设备，将可用设备加入数组
@@ -88,7 +91,9 @@ partition_selector() {
         # 检查是否是可移动设备
         if [[ -f "$block_path/removable" ]] && [[ "$(cat "$block_path/removable")" == "0" ]];then
             # 将扫描到的块设备加入数组列表
+            block="/dev/$(basename "$block_path")"
             block_list+=("$block_path")
+            dev_block_list+=("$block")
         fi
     done
 
@@ -100,14 +105,25 @@ partition_selector() {
 
     # 循环处理分区列表数组
     for block_path in "${block_list[@]}"; do
+        # 检查磁盘是否有分区
+        if [[ -z "$(ls "$block_path" | grep "$(basename "$block_path")")" ]]; then
+            continue
+        fi
+        # 将分区加入数组
         for partition in "$block_path/"$(basename "$block_path")*; do
             partition="/dev/$(basename "$partition")"
             partition_list+=("$partition")
         done
     done
 
+    # 检查数组是否为空
+    if [[ "${#partition_list[@]}" == "0" ]];then
+        echo "No usable partitions available!" >&2
+        return 1
+    fi
+
     # 列出块设备信息
-    lsblk -f -o NAME,FSTYPE,SIZE,MOUNTPOINT,FSUSED,FSAVAIL,FSUSE% "${disk_list[@]}" >&2
+    lsblk -f -o NAME,FSTYPE,SIZE,MOUNTPOINT,FSUSED,FSAVAIL,FSUSE% "${dev_block_list[@]}" >&2
     echo >&2
 
     # 选择分区并把分区全路径输出到标准输出
