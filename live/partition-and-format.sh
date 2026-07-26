@@ -15,14 +15,14 @@ install_depends() {
 disk_selector() {
     local disk
     local PS3="Select a disk: "
-    local -a disk_list
+    local -a disk_list=()
 
     for block_path in "/sys/block/"*; do
         if [[ ! -d "$block_path" ]]; then
             continue
         fi
 
-        if [[ ! -f "$block_path/device" ]]; then
+        if [[ ! -e "$block_path/device" ]]; then
             continue
         fi
 
