@@ -37,6 +37,11 @@ disk_selector() {
         return 1
     fi
 
+    for block in "${disk_list[@]}"; do
+        lsblk -f -o NAME,FSTYPE,SIZE,MOUNTPOINT,FSUSED,FSAVAIL,FSUSE% "$block"
+        echo
+    done
+
     select choice in "${disk_list[@]}"; do
         if [[ -n $choice ]]; then
             echo "$choice"
