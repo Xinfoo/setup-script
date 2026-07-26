@@ -8,10 +8,6 @@ permission_check() {
     fi
 }
 
-install_depends() {
-    pacman -Sy --needed --noconfirm gdisk
-}
-
 disk_selector() {
     # 定义要使用的变量和数组
     local disk
@@ -63,6 +59,13 @@ disk_selector() {
         fi
     done
     return 1
+}
+
+disk_wiper() {
+    wipefs -a "$1"
+    if [[ "$(lsblk --noheadings --nodeps --raw --output ROTA "$1")" == "0" ]] && [[ "$(lsblk --discard --noheadings --nodeps --raw --output DISC-GRAN "$1")" != "0B" ]]; then
+        blkdiscard -f "$1"
+    fi
 }
 
 disk_selector
