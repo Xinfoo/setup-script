@@ -62,6 +62,9 @@ disk_selector() {
 }
 
 disk_wiper() {
+    if [[ -z "$1" ]]; then
+        return 1
+    fi
     wipefs -a "$1"
     if [[ "$(lsblk --noheadings --nodeps --raw --output ROTA "$1")" == "0" ]] && [[ "$(lsblk --discard --noheadings --nodeps --raw --output DISC-GRAN "$1")" != "0B" ]]; then
         blkdiscard -f "$1"
