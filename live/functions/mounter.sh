@@ -2,10 +2,16 @@
 
 # 挂载点挂载器
 mounter() {
-    # 定义要使用的变量
-    local mount_point="${mount_point_choices["$1"]}"
     local file_system="${file_system_choices["$1"]}"
     local PS3="Select mount options: "
+
+    # 启动swap
+    if [[ "$file_system" == "swap" ]]; then
+        swapon "$1"
+        return 0
+    fi
+
+    local mount_point="${mount_point_choices["$1"]}"
 
     # 针对F2FS的挂载选项特殊处理
     if [[ "$file_system" == "f2fs" ]]; then
@@ -37,12 +43,6 @@ mounter() {
                 esac
             fi
         done
-    fi
-
-    # 启动swap
-    if [[ "$file_system" == "swap" ]]; then
-        swapon "$1"
-        return 0
     fi
 
     # 挂载普通分区
