@@ -5,7 +5,7 @@ set -euo pipefail
 SRC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SRC_DIR/functions/permission-check.sh"
 source "$SRC_DIR/functions/confirm.sh"
-source "$SRC_DIR/functions/use-local-miror.sh"
+source "$SRC_DIR/functions/use-local-mirror.sh"
 source "$SRC_DIR/functions/disk-detector.sh"
 source "$SRC_DIR/functions/mount-detector.sh"
 source "$SRC_DIR/functions/print-partition-table.sh"
@@ -18,7 +18,7 @@ source "$SRC_DIR/functions/partition-formatter.sh"
 source "$SRC_DIR/functions/mounter.sh"
 # source "./functions/permission-check.sh"
 # source "./functions/confirm.sh"
-# source "./functions/use-local-miror.sh"
+# source "./functions/use-local-mirror.sh"
 # source "./functions/disk-detector.sh"
 # source "./functions/mount-detector.sh"
 # source "./functions/print-partition-table.sh"
@@ -41,7 +41,7 @@ permission_check
 
 # 是否使用移动硬盘镜像站
 if confirm "Do you want to use local mirror?"; then
-    use_local_miror
+    use_local_mirror
 else
     # 不使用本地镜像站则检查网络
     if ! ping -c 3 baidu.com >/dev/null 2>&1; then
@@ -65,7 +65,7 @@ done
 while true; do
     if [[ "$TEMP_CONF_ITEM" == "yes" ]]; then
         SELECTED_DISK="$(disk_selector)"
-        if confirm "Are you sure you want to erase $SELECTED_DISK ? (Data connot be recovered)"; then
+        if confirm "Are you sure you want to erase $SELECTED_DISK? (Data cannot be recovered)"; then
             disk_wiper "$SELECTED_DISK"
         fi
         if confirm "Do you want to erase the other disks?"; then
@@ -79,7 +79,7 @@ echo
 
 # 为硬盘分区
 echo "1>Automatically partition and specify mount points (Will erase the disk)"
-echo "2>Manually parition and manually specify mount points"
+echo "2>Manually partition and manually specify mount points"
 PS3="Select an option: "
 select choice in Auto Manual ; do
     case $choice in
@@ -104,7 +104,8 @@ if [[ "$TEMP_CONF_ITEM" == "auto" ]]; then
     mount_point_choices[""$SELECTED_DISK"p1"]="/boot"
     mount_point_choices[""$SELECTED_DISK"p2"]="/"
 elif [[ "$TEMP_CONF_ITEM" == "manual" ]]; then
+    : # Manual partitioning is not implemented yet.
 else
-    echo "ERROR!!" >&2
+    echo "Error: no partitioning mode was selected." >&2
     exit 1
 fi
