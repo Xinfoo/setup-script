@@ -3,14 +3,15 @@
 # 分区选择器
 partition_selector() {
     # 定义要使用的变量和数组
-    local disk disk_dev_path choice
+    local disk disks disk_dev_path choice
     local partition_sys_dir partition_dev_path
     local PS3="Select a partition: "
     local -a disk_dev_path_list=()
     local -a partition_dev_path_list=()
 
     # 循环处理分区列表数组
-    for disk in $(disk_detector); do
+    disks="$(disk_detector)" || return 1
+    for disk in $disks; do
         # 检查磁盘是否有分区
         if [[ -z "$(ls "/sys/block/$disk" | grep "$disk")" ]]; then
             continue
