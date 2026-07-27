@@ -56,7 +56,7 @@ done
 echo
 
 # 为硬盘分区
-echo "1>Automatically partition and specify mount points"
+echo "1>Automatically partition and specify mount points (Will erase the disk)"
 echo "2>Manually parition and manually specify mount points"
 PS3="Select an option: "
 select choice in Auto Manual ; do

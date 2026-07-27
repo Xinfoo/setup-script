@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+set -euo pipefail
 
 # 权限检查器
 permission_check() {
@@ -76,34 +77,109 @@ mount_detector() {
     fi
 }
 
-# 硬盘选择器
-disk_selector() {
-    # 定义要使用的变量
+# 输出分区状态表
+print_partition_table() {
+    # 定义要使用的变量和数组
     local disk_dev_path
-    local PS3="Select a disk: "
+    local line disk part parent
+    local -A real_fs real_mount real_size real_type
     local -a disk_dev_path_list=()
+    local -a all_disks=()
+    local size fs mount final_fs final_mount
 
-    # 循环处理列表为数组并添加全路径
-    for disk in $(disk_detector); do
-        disk_dev_path="/dev/$disk"
+    # 循环处理磁盘列表添加全路径
+    for item in $(disk_detector); do
+        disk_dev_path="/dev/$item"
         disk_dev_path_list+=("$disk_dev_path")
     done
 
-    # 列出块设备信息
-    lsblk -f -o NAME,FSTYPE,SIZE,MOUNTPOINT,FSUSED,FSAVAIL,FSUSE% "${disk_dev_path_list[@]}" >&2
-    echo >&2
-
-    # 选择块设备并把块设备全路径输出到标准输出
-    select choice in ${disk_dev_path_list[@]}; do
-        if [[ -n $choice ]]; then
-            echo "$choice"
-            return 0
-        else
-            echo "Invalid selection, please choose a number from the list." >&2
+    # 读取所有真实块设备信息
+    while IFS= read -r line; do
+        [[ -z "$line" ]] && continue
+        eval "$line"
+        real_fs["$NAME"]="$FSTYPE"
+        real_mount["$NAME"]="$MOUNTPOINT"
+        real_size["$NAME"]="$SIZE"
+        real_type["$NAME"]="$TYPE"
+        if [[ "$TYPE" == "disk" ]]; then
+            all_disks+=("$NAME")
         fi
-    done
+    done < <(lsblk --paths --pairs --output NAME,SIZE,FSTYPE,MOUNTPOINT,TYPE --noheadings "${disk_dev_path_list[@]}")
 
-    return 1
+    if [[ ${#all_disks[@]} -eq 0 ]]; then
+        echo "No disks found." >&2
+        return
+    fi
+
+    # 表头
+    printf "%-20s %10s %10s %s\n" "DEVICE" "SIZE" "FSTYPE" "MOUNTPOINT"
+    printf "%-20s %10s %10s %s\n" "------" "----" "------" "----------"
+
+    # 遍历每个磁盘
+    for disk in "${all_disks[@]}"; do
+        # 磁盘本身（顶格，宽度20，与表头对齐）
+        size="${real_size[$disk]:--}"
+        fs="${real_fs[$disk]:--}"
+        mount="${real_mount[$disk]:--}"
+        printf "%-20s %10s %10s %s\n" "$disk" "$size" "$fs" "$mount"
+
+        # 收集该磁盘下的分区
+        local -a parts=()
+        # 真实分区
+        for part in "${!real_type[@]}"; do
+            if [[ "${real_type[$part]}" == "part" ]]; then
+                parent="$(sed -E 's/p?[0-9]+$//' <<< "$part")"
+                [[ "$parent" == "$disk" ]] && parts+=("$part")
+            fi
+        done
+        # 预设中存在但系统当前不存在的分区
+        for part in "${!file_system_choices[@]}" "${!mount_point_choices[@]}"; do
+            if [[ -z "${real_size[$part]}" ]]; then
+                parent="$(sed -E 's/p?[0-9]+$//' <<< "$part")"
+                [[ "$parent" == "$disk" ]] && parts+=("$part")
+            fi
+        done
+
+        # 去重并自然排序
+        mapfile -t sorted_parts < <(printf '%s\n' "${parts[@]}" | sort -uV)
+        local count=${#sorted_parts[@]}
+
+        # 输出每个分区
+        for (( i=0; i<count; i++ )); do
+            part="${sorted_parts[$i]}"
+            # 最后一个分区用 └─，其余用 ├─
+            if (( i == count - 1 )); then
+                tree="└─"
+            else
+                tree="├─"
+            fi
+
+            if [[ -n "${real_size[$part]}" ]]; then
+                size="${real_size[$part]}"
+                fs="${real_fs[$part]}"
+                mount="${real_mount[$part]}"
+
+                # 只有当预设值与真实值不同时才覆盖
+                if [[ -n "${file_system_choices[$part]}" && "${file_system_choices[$part]}" != "$fs" ]]; then
+                    final_fs="${file_system_choices[$part]}"
+                else
+                    final_fs="$fs"
+                fi
+                if [[ -n "${mount_point_choices[$part]}" && "${mount_point_choices[$part]}" != "$mount" ]]; then
+                    final_mount="${mount_point_choices[$part]}"
+                else
+                    final_mount="$mount"
+                fi
+            else
+                size="-"
+                final_fs="${file_system_choices[$part]:--}"
+                final_mount="${mount_point_choices[$part]:--}"
+            fi
+
+            # 树符号宽度2，空格1，设备名宽度17，总宽20，与磁盘行设备名对齐
+            printf "%-2s %-17s %10s %10s %s\n" "$tree" "$part" "$size" "$final_fs" "$final_mount"
+        done
+    done
 }
 
 # 分区选择器
@@ -179,19 +255,19 @@ partition_formatter() {
 
     # 格式化文件系统
     case $file_system in
-        "FAT32")
+        "vfat")
             mkfs.fat -F 32 "$1"
             ;;
-        "Ext4")
+        "ext4")
             mkfs.ext4 -F "$1"
             ;;
-        "XFS")
+        "xfs")
             mkfs.xfs -f "$1"
             ;;
-        "F2FS")
+        "f2fs")
             mkfs.f2fs -f -O extra_attr,inode_checksum,sb_checksum,compression "$1"
             ;;
-        "SWAP")
+        "swap")
             mkswap -f "$1"
             ;;
     esac
@@ -205,7 +281,7 @@ mounter() {
     local PS3="Select mount options: "
 
     # 针对F2FS的挂载选项特殊处理
-    if [[ "$file_system" == "F2FS" ]]; then
+    if [[ "$file_system" == "f2fs" ]]; then
         echo "What mount options would you like to enable for your $mount_point F2FS?" >&2
         echo "1>Optimized mount options(recommended)" >&2
         echo "2>Default mount options" >&2
@@ -244,11 +320,11 @@ mounter() {
 file_system_selector() {
     # 定义要使用的变量和数组
     local PS3="Select the file system you want to format: "
-    local -a file_system_list=("Ext4" "XFS" "F2FS")
+    local -a file_system_list=("Ext4" "XFS" "F2FS" "SWAP")
 
     # 检测是否传递EFI参数
     if [[ "$1" == "--efi" ]]; then
-        file_system_choices["$2"]="FAT32"
+        file_system_choices["$2"]="vfat"
         return 0
     fi
 
@@ -256,16 +332,16 @@ file_system_selector() {
     select choice in ${file_system_list[@]}; do
         case $choice in
             "Ext4")
-                file_system_choices["$1"]="Ext4"
+                file_system_choices["$1"]="ext4"
                 ;;
             "XFS")
-                file_system_choices["$1"]="XFS"
+                file_system_choices["$1"]="xfs"
                 ;;
             "F2FS")
-                file_system_choices["$1"]="F2FS"
+                file_system_choices["$1"]="f2fs"
                 ;;
             "SWAP")
-                file_system_choices["$1"]="SWAP"
+                file_system_choices["$1"]="swap"
         esac
     done
 }
@@ -314,3 +390,5 @@ mount_point_selector() {
         done
     fi
 }
+
+print_partition_table
