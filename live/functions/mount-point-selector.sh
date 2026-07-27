@@ -47,6 +47,10 @@ mount_point_selector() {
 
     if confirm "Do you want to select a mount point for this disk?"; then
         select choice in ${mount_point_list[@]}; do
+            if [[ -z "$choice" ]]; then
+                echo "Invalid selection, please choose a number from the list." >&2
+                continue
+            fi
             echo "You have chosen $choice" >&2
             if confirm "Are you sure you've made the right choice?"; then
                 mount_point_choices["$1"]="$choice"
