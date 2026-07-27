@@ -4,11 +4,13 @@
 disk_selector() {
     # 定义要使用的变量
     local disk_dev_path
+    local disks
     local PS3="Select a disk: "
     local -a disk_dev_path_list=()
 
     # 循环处理列表为数组并添加全路径
-    for disk in $(disk_detector); do
+    disks="$(disk_detector)" || return 1
+    for disk in $disks; do
         disk_dev_path="/dev/$disk"
         disk_dev_path_list+=("$disk_dev_path")
     done
