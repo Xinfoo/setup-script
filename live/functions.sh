@@ -172,50 +172,102 @@ disk_wiper() {
     fi
 }
 
-# 硬盘格式化
-disk_formatter() {
+# 分区格式化器
+partition_formatter() {
+    # 从关联数组中获取所要格式化的文件系统
+    local file_system=${file_system_choices["$1"]}
+
+    # 格式化文件系统
+    case $file_system in
+        "FAT32")
+            mkfs.fat -F 32 "$1"
+            ;;
+        "Ext4")
+            mkfs.ext4 -F "$1"
+            ;;
+        "XFS")
+            mkfs.xfs -f "$1"
+            ;;
+        "F2FS")
+            mkfs.f2fs -f -O extra_attr,inode_checksum,sb_checksum,compression "$1"
+            ;;
+        "SWAP")
+            mkswap -f "$1"
+            ;;
+    esac
+}
+
+# 文件系统选择器
+file_system_selector() {
     # 定义要使用的变量和数组
     local PS3="Select the file system you want to format: "
-    local -a options=(
-        "Ext4"
-        "XFS"
-        "F2FS"
-    )
+    local -a file_system_list=("Ext4" "XFS" "F2FS")
 
-    # 开设格式化选项
-    select choice in ${options[@]}; do
+    # 检测是否传递EFI参数
+    if [[ "$1" == "--efi" ]]; then
+        file_system_choices["$2"]="FAT32"
+        return 0
+    fi
+
+    # 选择要格式化的分区并关联数组
+    select choice in ${file_system_list[@]}; do
         case $choice in
             "Ext4")
-                mkfs.ext4 -F "$1"
-                break
+                file_system_choices["$1"]="Ext4"
                 ;;
             "XFS")
-                mkfs.xfs -f "$1"
-                break
+                file_system_choices["$1"]="XFS"
                 ;;
             "F2FS")
-                # 定义F2FS的选项
-                local -a f2fs_options=(
-                    "Enable_file_system_compression(recommended)"
-                    "Do_not_enable_file_system_compression"
-                    )
-                # 选择选项并格式化
-                echo >&2
-                select f2fs_choice in ${f2fs_options[@]}; do
-                    if [[ "$f2fs_choice" == "Enable_file_system_compression(recommended)" ]]; then
-                        mkfs.f2fs -f -O extra_attr,inode_checksum,sb_checksum,compression "$1"
-                        break 2
-                    elif [[ "$f2fs_choice" == "Do_not_enable_file_system_compression" ]]; then
-                        mkfs.f2fs -f -O extra_attr,inode_checksum,sb_checksum "$1"
-                        break 2
-                    else
-                        echo "Invalid input. Please enter a valid option." >&2
-                    fi
-                done
+                file_system_choices["$1"]="F2FS"
                 ;;
-            *)
-                echo "Invalid input. Please enter a valid option." >&2
-                ;;
+            "SWAP")
+                file_system_choices["$1"]="SWAP"
         esac
     done
+}
+
+# 挂载点选择器
+mount_point_selector() {
+    local PS3=""
+    local -a mount_point_list=("/home" "/var" "/usr" "/opt")
+    local -a temp_mount_point_list=()
+
+    # 带有--root参数，直接挂载为根分区
+    if [[ "$1" == "--root" ]]; then
+        mount_point_choices["$2"]="/"
+    fi
+
+    # 带有--efi参数，直接挂载为/boot分区
+    if [[ "$1" == "--efi" ]]; then
+        mount_point_choices["$2"]="/boot"
+    fi
+
+    # 将已经使用过的挂载点移除
+    for mounted_point in ${mount_point_choices[@]}; do
+        if [[ -n $(echo "${mount_point_list[@]}" | grep "$mounted_point") ]]; then
+            for mount_point in ${mount_point_list[@]}; do
+                if [[ "$mount_point" != "$mounted_point" ]]; then
+                    temp_mount_point_list+=("$mount_point")
+                    mount_point_list=("${temp_mount_point_list[@]}")
+                fi
+            done
+        fi
+    done
+
+    # 检查是否为空数组
+    if [[ "${#mount_point_list[@]}" == "0" ]]; then
+        echo "No mount point available!" >&2
+        return 1
+    fi
+
+    if confirm "Do you want to select a mount point for this disk?"; then
+        select choice in ${mount_point_list[@]}; do
+            echo "You have chosen $choice" >&2
+            if confirm "Are you sure you've made the right choice?"; then
+                mount_point_choices["$1"]="$choice"
+                break
+            fi
+        done
+    fi
 }
