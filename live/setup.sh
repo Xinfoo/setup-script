@@ -3,10 +3,8 @@ set -euo pipefail
 
 # 初始化
 SRC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$SRC_DIR/functions.sh"
-source "$SRC_DIR/use-local-mirror.sh"
-source "./functions.sh"
-source "./use-local-mirror.sh"
+source "$SRC_DIR/functions/*"
+sourec "../functions/*"
 
 SELECTED_DISK=""
 SELECTED_PARTITION=""

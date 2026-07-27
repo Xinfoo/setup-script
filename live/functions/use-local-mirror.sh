@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 
+# 使用本地镜像源
 use_local_miror() {
     # 查找本地镜像源分区。
     # 依赖该分区 LABEL 固定为 F2FS-DATA。
