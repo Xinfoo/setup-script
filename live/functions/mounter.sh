@@ -16,22 +16,22 @@ mounter() {
             if [[ "$mount_point" == "/" ]]; then
                 case $choice in
                     Optimized)
-                        mount -o noatime,lazytime,background_gc=off,atgc,nodiscard,fsync_mode=nobarrier "$1" "$mount_point"
+                        mount -o noatime,lazytime,background_gc=off,atgc,nodiscard,fsync_mode=nobarrier "$1" "/mnt"
                         return 0
                         ;;
                     Default)
-                        mount -o "$1" "$mount_point"
+                        mount -o "$1" "/mnt"
                         return 0
                         ;;
                 esac
             else
                 case $choice in
                     Optimized)
-                        mount --mkdir -o noatime,lazytime,background_gc=off,atgc,nodiscard,fsync_mode=nobarrier "$1" "$mount_point"
+                        mount --mkdir -o noatime,lazytime,background_gc=off,atgc,nodiscard,fsync_mode=nobarrier "$1" "/mnt$mount_point"
                         return 0
                         ;;
                     Default)
-                        mount --mkdir "$1" "$mount_point"
+                        mount --mkdir "$1" "/mnt$mount_point"
                         return 0
                         ;;
                 esac
@@ -40,5 +40,5 @@ mounter() {
     fi
 
     # 挂载普通分区
-    mount --mkdir "$1" "$mount_point"
+    mount --mkdir "$1" "/mnt$mount_point"
 }
