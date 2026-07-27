@@ -63,16 +63,22 @@ select choice in Auto Manual ; do
     case $choice in
         Auto)
             TEMP_CONF_ITEM="auto"
+            SELECTED_DISK="$(disk_selector)"
+            if confirm "The selected disk will be erased. Do you want to continue?"; then
+            fi
             ;;
         Manual)
             TEMP_CONF_ITEM="manual"
+            break
             ;;
     esac
 done
 
 if [[ "$TEMP_CONF_ITEM" == "auto" ]]; then
-    echo "Please select a disk to install on."
-    SELECTED_DISK="$(disk_selector)"
+    file_system_choices[""$SELECTED_DISK"p1"]="vfat"
+    file_system_choices[""$SELECTED_DISK"p2"]="xfs"
+    mount_point_choices[""$SELECTED_DISK"p1"]="/boot"
+    mount_point_choices[""$SELECTED_DISK"p2"]="/"
 elif [[ "$TEMP_CONF_ITEM" == "manual" ]]; then
 else
     echo "ERROR!!" >&2
