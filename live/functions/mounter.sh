@@ -20,7 +20,7 @@ mounter() {
                         return 0
                         ;;
                     Default)
-                        mount -o "$1" "/mnt"
+                        mount "$1" "/mnt"
                         return 0
                         ;;
                 esac
