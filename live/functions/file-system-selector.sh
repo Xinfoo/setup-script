@@ -17,15 +17,20 @@ file_system_selector() {
         case $choice in
             "Ext4")
                 file_system_choices["$1"]="ext4"
+                return 0
                 ;;
             "XFS")
                 file_system_choices["$1"]="xfs"
+                return 0
                 ;;
             "F2FS")
                 file_system_choices["$1"]="f2fs"
+                return 0
                 ;;
             "SWAP")
                 file_system_choices["$1"]="swap"
+                return 0
+                ;;
         esac
     done
 }

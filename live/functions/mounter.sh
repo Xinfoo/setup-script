@@ -39,6 +39,12 @@ mounter() {
         done
     fi
 
+    # 启动swap
+    if [[ "$file_system" == "swap" ]]; then
+        swapon "$1"
+        return 0
+    fi
+
     # 挂载普通分区
     mount --mkdir "$1" "/mnt$mount_point"
 }

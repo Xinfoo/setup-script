@@ -9,11 +9,13 @@ mount_point_selector() {
     # 带有--root参数，直接挂载为根分区
     if [[ "$1" == "--root" ]]; then
         mount_point_choices["$2"]="/"
+        return 0
     fi
 
     # 带有--efi参数，直接挂载为/boot分区
     if [[ "$1" == "--efi" ]]; then
         mount_point_choices["$2"]="/boot"
+        return 0
     fi
 
     # 将已经使用过的挂载点移除
