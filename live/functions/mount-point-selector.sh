@@ -6,14 +6,24 @@ mount_point_selector() {
     local -a mount_point_list=("/home" "/var" "/usr" "/opt")
     local -a temp_mount_point_list=()
 
+    if [[ -z "${1:-}" ]]; then
+        return 1
+    fi
+
     # 带有--root参数，直接挂载为根分区
     if [[ "$1" == "--root" ]]; then
+        if [[ -z "${2:-}" ]]; then
+            return 1
+        fi
         mount_point_choices["$2"]="/"
         return 0
     fi
 
     # 带有--efi参数，直接挂载为/boot分区
     if [[ "$1" == "--efi" ]]; then
+        if [[ -z "${2:-}" ]]; then
+            return 1
+        fi
         mount_point_choices["$2"]="/boot"
         return 0
     fi

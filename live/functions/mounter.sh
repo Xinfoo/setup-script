@@ -2,6 +2,10 @@
 
 # 挂载点挂载器
 mounter() {
+    if [[ -z "${1:-}" ]]; then
+        return 1
+    fi
+
     local file_system="${file_system_choices["$1"]}"
     local PS3="Select mount options: "
 

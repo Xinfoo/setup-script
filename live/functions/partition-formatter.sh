@@ -2,6 +2,10 @@
 
 # 分区格式化器
 partition_formatter() {
+    if [[ -z "${1:-}" ]]; then
+        return 1
+    fi
+
     # 从关联数组中获取所要格式化的文件系统
     local file_system="${file_system_choices["$1"]}"
 

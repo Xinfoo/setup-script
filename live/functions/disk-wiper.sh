@@ -3,7 +3,7 @@
 # 硬盘擦除器
 disk_wiper() {
     # 检查输入是否为空
-    if [[ -z "$1" ]]; then
+    if [[ -z "${1:-}" ]]; then
         return 1
     fi
 

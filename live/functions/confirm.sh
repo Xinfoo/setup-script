@@ -6,7 +6,7 @@ confirm() {
     local tmp_choice
 
     while true; do
-        read -rp "$1 [Y/n] " choice
+        read -rp "${1:-} [Y/n] " choice
         tmp_choice=$(echo "$choice" | tr '[:upper:]' '[:lower:]')
 
         if [[ "$tmp_choice" == "y" || -z "$tmp_choice" ]]; then
