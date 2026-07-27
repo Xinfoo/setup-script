@@ -3,8 +3,32 @@ set -euo pipefail
 
 # 初始化
 SRC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$SRC_DIR/functions/*"
-sourec "../functions/*"
+source "$SRC_DIR/functions/permission-check.sh"
+source "$SRC_DIR/functions/confirm.sh"
+source "$SRC_DIR/functions/use-local-miror.sh"
+source "$SRC_DIR/functions/disk-detector.sh"
+source "$SRC_DIR/functions/mount-detector.sh"
+source "$SRC_DIR/functions/print-partition-table.sh"
+source "$SRC_DIR/functions/disk-selector.sh"
+source "$SRC_DIR/functions/partition-selector.sh"
+source "$SRC_DIR/functions/mount-point-selector.sh"
+source "$SRC_DIR/functions/file-system-selector.sh"
+source "$SRC_DIR/functions/disk-wiper.sh"
+source "$SRC_DIR/functions/partition-formatter.sh"
+source "$SRC_DIR/functions/mounter.sh"
+source "./functions/permission-check.sh"
+source "./functions/confirm.sh"
+source "./functions/use-local-miror.sh"
+source "./functions/disk-detector.sh"
+source "./functions/mount-detector.sh"
+source "./functions/print-partition-table.sh"
+source "./functions/disk-selector.sh"
+source "./functions/partition-selector.sh"
+source "./functions/mount-point-selector.sh"
+source "./functions/file-system-selector.sh"
+source "./functions/disk-wiper.sh"
+source "./functions/partition-formatter.sh"
+source "./functions/mounter.sh"
 
 SELECTED_DISK=""
 SELECTED_PARTITION=""
@@ -63,6 +87,8 @@ select choice in Auto Manual ; do
             TEMP_CONF_ITEM="auto"
             SELECTED_DISK="$(disk_selector)"
             if confirm "The selected disk will be erased. Do you want to continue?"; then
+                disk_wiper "$SELECTED_DISK"
+                break
             fi
             ;;
         Manual)
