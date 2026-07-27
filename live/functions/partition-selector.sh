@@ -3,10 +3,9 @@
 # 分区选择器
 partition_selector() {
     # 定义要使用的变量和数组
-    local disk disks disk_dev_path choice
+    local disk disks choice
     local partition_sys_dir partition_dev_path
     local PS3="Select a partition: "
-    local -a disk_dev_path_list=()
     local -a partition_dev_path_list=()
 
     # 循环处理分区列表数组
@@ -16,10 +15,6 @@ partition_selector() {
         if [[ -z "$(ls "/sys/block/$disk" | grep "$disk")" ]]; then
             continue
         fi
-
-        # 循环处理磁盘列表为数组并添加全路径
-        disk_dev_path="/dev/$disk"
-        disk_dev_path_list+=("$disk_dev_path")
 
         # 循环将磁盘下的分区加入数组
         for partition_sys_dir in /sys/block/$disk/$disk*; do
@@ -35,7 +30,7 @@ partition_selector() {
     fi
 
     # 列出块设备信息
-    lsblk -f -o NAME,FSTYPE,SIZE,MOUNTPOINT,FSUSED,FSAVAIL,FSUSE% "${disk_dev_path_list[@]}" >&2
+    print_partition_table >&2
     echo >&2
 
     # 选择分区并把分区全路径输出到标准输出
