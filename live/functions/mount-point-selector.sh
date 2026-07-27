@@ -2,7 +2,7 @@
 
 # 挂载点选择器
 mount_point_selector() {
-    local PS3=""
+    local PS3="Select a mount point: "
     local -a mount_point_list=("/home" "/var" "/usr" "/opt")
     local -a temp_mount_point_list=()
 
@@ -20,14 +20,13 @@ mount_point_selector() {
 
     # 将已经使用过的挂载点移除
     for mounted_point in ${mount_point_choices[@]}; do
-        if [[ -n $(echo "${mount_point_list[@]}" | grep "$mounted_point") ]]; then
-            for mount_point in ${mount_point_list[@]}; do
-                if [[ "$mount_point" != "$mounted_point" ]]; then
-                    temp_mount_point_list+=("$mount_point")
-                    mount_point_list=("${temp_mount_point_list[@]}")
-                fi
-            done
-        fi
+        temp_mount_point_list=()
+        for mount_point in ${mount_point_list[@]}; do
+            if [[ "$mount_point" != "$mounted_point" ]]; then
+                temp_mount_point_list+=("$mount_point")
+            fi
+        done
+        mount_point_list=("${temp_mount_point_list[@]}")
     done
 
     # 检查是否为空数组
