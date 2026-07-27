@@ -6,6 +6,7 @@ mounter() {
         return 1
     fi
 
+    local choice
     local file_system="${file_system_choices["$1"]}"
     local PS3="Select mount options: "
 

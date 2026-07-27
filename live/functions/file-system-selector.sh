@@ -3,6 +3,7 @@
 # 文件系统选择器
 file_system_selector() {
     # 定义要使用的变量和数组
+    local choice
     local PS3="Select the file system you want to format: "
     local -a file_system_list=("Ext4" "XFS" "F2FS" "SWAP")
 

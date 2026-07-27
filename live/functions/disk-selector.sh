@@ -3,7 +3,7 @@
 # 硬盘选择器
 disk_selector() {
     # 定义要使用的变量
-    local disk_dev_path
+    local disk disk_dev_path choice
     local disks
     local PS3="Select a disk: "
     local -a disk_dev_path_list=()

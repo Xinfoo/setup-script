@@ -2,6 +2,9 @@
 
 # 使用本地镜像源
 use_local_mirror() {
+    local SOURCE_PARTITION
+    local -a devices=()
+
     # 查找本地镜像源分区。
     # 依赖该分区 LABEL 固定为 F2FS-DATA。
     devices=($(blkid -t LABEL="F2FS-DATA" -o device))

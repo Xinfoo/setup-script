@@ -3,8 +3,8 @@
 # 分区选择器
 partition_selector() {
     # 定义要使用的变量和数组
-    local disk_dev_path
-    local partition_dev_path
+    local disk disk_dev_path choice
+    local partition_sys_dir partition_dev_path
     local PS3="Select a partition: "
     local -a disk_dev_path_list=()
     local -a partition_dev_path_list=()

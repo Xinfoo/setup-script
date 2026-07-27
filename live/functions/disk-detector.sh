@@ -3,7 +3,7 @@
 # 硬盘探测器
 disk_detector() {
     # 定义要使用的变量和数组
-    local disk
+    local disk disk_sys_dir
     local disk_list=()
 
     # 循环检测块设备，将可用设备加入数组
