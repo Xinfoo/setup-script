@@ -11,6 +11,7 @@ source "$SRC_DIR/functions/processor/print-partition-table.sh"
 source "$SRC_DIR/functions/processor/disk-selector.sh"
 source "$SRC_DIR/functions/processor/partition-selector.sh"
 source "$SRC_DIR/functions/processor/get-swap-size.sh"
+source "$SRC_DIR/functions/processor/find-partition-by-mountpoint.sh"
 source "$SRC_DIR/functions/setter/mount-point-setter.sh"
 source "$SRC_DIR/functions/setter/file-system-setter.sh"
 source "$SRC_DIR/functions/actuator/use-local-mirror.sh"
@@ -23,6 +24,7 @@ source "$SRC_DIR/functions/actuator/manual-partitioner.sh"
 MAIN_INSTALL_DISK=""
 SELECTED_DISK=""
 PS3="Enter a number: "
+mountpoint_list=( "/" "/boot" "/home" "/var" "/usr" "/opt" )
 declare -A file_system_choices=()
 declare -A mount_point_choices=()
 
@@ -75,4 +77,17 @@ select choice in "${options[@]}"; do
 done
 
 # 分区格式化
+clear
+print_partition_table
+if confirm "The new disk partition will be formatted. Do you want to continue?"; then
+    partition_formatter
+else
+    exit 1
+fi
 
+# 分区挂载
+for mountpoint in ${mountpoint_list[@]}; do
+    if find_partition_by_mountpoint "$mountpoint"; then
+
+    fi
+done

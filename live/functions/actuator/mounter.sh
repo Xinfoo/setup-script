@@ -26,7 +26,7 @@ mounter() {
             if [[ "$mount_point" == "/" ]]; then
                 case "$REPLY" in
                     1)
-                        mount -o noatime,lazytime,background_gc=off,atgc,nodiscard,fsync_mode=nobarrier "$1" "/mnt"
+                        mount -o noatime,lazytime,atgc,nodiscard,fsync_mode=nobarrier "$1" "/mnt"
                         return 0
                         ;;
                     2)
@@ -37,7 +37,7 @@ mounter() {
             else
                 case "$REPLY" in
                     1)
-                        mount --mkdir -o noatime,lazytime,background_gc=off,atgc,nodiscard,fsync_mode=nobarrier "$1" "/mnt$mount_point"
+                        mount --mkdir -o noatime,lazytime,atgc,nodiscard,fsync_mode=nobarrier "$1" "/mnt$mount_point"
                         return 0
                         ;;
                     2)
