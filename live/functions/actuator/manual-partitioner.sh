@@ -62,7 +62,11 @@ manual_partitioner() {
                     break
                 fi
             fi
-            break
+            if confirm "Do you want to continue assigning mount points for the partitions or enabling the swap partition?"; then
+                continue
+            else
+                break
+            fi
         done
     fi
 
