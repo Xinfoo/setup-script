@@ -20,9 +20,9 @@ source "$SRC_DIR/functions/actuator/mounter.sh"
 source "$SRC_DIR/functions/actuator/automatic-partitioner.sh"
 source "$SRC_DIR/functions/actuator/manual-partitioner.sh"
 
+MAIN_INSTALL_DISK=""
 SELECTED_DISK=""
-SELECTED_PARTITION=""
-TEMP_CONF_ITEM=""
+PS3="Enter a number: "
 declare -A file_system_choices=()
 declare -A mount_point_choices=()
 
@@ -39,3 +39,36 @@ else
         exit 1
     fi
 fi
+
+# 选择磁盘
+echo "Please select a primary disk on which to install the system."
+MAIN_INSTALL_DISK="$(disk_selector)"
+
+# 磁盘分区
+options=(
+    "Use the automatic partitioner and mounter"
+    "Use the manually partitioner and mounter"
+    )
+echo "Please select a disk partitioning scheme."
+select choice in "${options}"; do
+    case "$REPLY" in
+        1)
+            automatic_partitioner "$MAIN_INSTALL_DISK"
+            break
+            ;;
+        2)
+            manual_partitioner --main "$MAIN_INSTALL_DISK"
+            if confirm "Do you want to partition other disks?"; then
+                SELECTED_DISK="$(disk_selector)"
+                manual_partitioner "$MAIN_INSTALL_DISK"
+            fi
+            break
+            ;;
+        *)
+            echo "Invalid selection, please choose a number from the list."
+            ;;
+    esac
+done
+
+# 分区格式化
+
