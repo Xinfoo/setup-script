@@ -76,7 +76,7 @@ basic_software_installer(){
                 ;;
             3)
                 kernel="linux-zen"
-                kernel="linux-zen-headers"
+                kernel_headers="linux-zen-headers"
                 break
                 ;;
             4)
@@ -100,5 +100,6 @@ basic_software_installer(){
         pacstrap -K /mnt ${package_list[@]} $kernel $kernel_headers $micro_code $onboard_audio
     else
         echo "Mirror error; unable to install software." >&2
+        return 1
     fi
 }
