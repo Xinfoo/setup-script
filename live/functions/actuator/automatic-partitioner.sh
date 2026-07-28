@@ -41,7 +41,9 @@ automatic_partitioner() {
                 # SWAP
                 file_system_setter --swap "${1}${partition_tab}3"
 
-                sfdisk "$1" <<EOF
+                print_partition_table
+                if confirm "Your disk will be partitioned according to the table above; are you sure you want to continue?"; then
+                    sfdisk "$1" <<EOF
 label: gpt
 unit: MiB
 
@@ -49,8 +51,12 @@ size=1024,type=C12A7328-F81F-11D2-BA4B-00A0C93EC93B
 size=-$swap_size_mib,type=0FC63DAF-8483-4772-8E79-3D69D8477DE4
 size=$swap_size_mib,type=0657FD6D-A4AB-43C4-84E5-0933C84B4F4F
 EOF
-
-                return 0
+                    return 0
+                else
+                    declare -A file_system_choices=()
+                    declare -A mount_point_choices=()
+                    return 1
+                fi
                 ;;
             2)
                 # EFI
@@ -70,7 +76,9 @@ EOF
                 # SWAP
                 file_system_setter --swap "${1}${partition_tab}3"
 
-                sfdisk "$1" <<EOF
+                print_partition_table
+                if confirm "Your disk will be partitioned according to the table above; are you sure you want to continue?"; then
+                    sfdisk "$1" <<EOF
 label: gpt
 unit: MiB
 
@@ -79,8 +87,12 @@ size=102400,type=0FC63DAF-8483-4772-8E79-3D69D8477DE4
 size=-$swap_size_mib,type=0FC63DAF-8483-4772-8E79-3D69D8477DE4
 size=$swap_size_mib,type=0657FD6D-A4AB-43C4-84E5-0933C84B4F4F
 EOF
-
-                return 0
+                    return 0
+                else
+                    declare -A file_system_choices=()
+                    declare -A mount_point_choices=()
+                    return 1
+                fi
                 ;;
             3)
                 # EFI
@@ -92,15 +104,21 @@ EOF
                 file_system_setter --noswap "${1}${partition_tab}2"
                 mount_point_choices["${1}${partition_tab}2"]="/"
 
-                sfdisk "$1" <<EOF
+                print_partition_table
+                if confirm "Your disk will be partitioned according to the table above; are you sure you want to continue?"; then
+                    sfdisk "$1" <<EOF
 lobel: gpt
 unit: MiB
 
 size=1024,type=C12A7328-F81F-11D2-BA4B-00A0C93EC93B
 size=,type=0FC63DAF-8483-4772-8E79-3D69D8477DE4
 EOF
-
-                return 0
+                    return 0
+                else
+                    declare -A file_system_choices=()
+                    declare -A mount_point_choices=()
+                    return 1
+                fi
                 ;;
             *)
                 echo "Please enter a valid number." >&2
