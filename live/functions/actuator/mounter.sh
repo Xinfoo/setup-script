@@ -9,6 +9,7 @@ mounter() {
     local choice
     local file_system="${file_system_choices["$1"]}"
     local PS3="Select mount options: "
+    local -a options=("Optimized mount options(recommended)" "Default mount options")
 
     # 启动swap
     if [[ "$file_system" == "swap" ]]; then
@@ -21,27 +22,25 @@ mounter() {
     # 针对F2FS的挂载选项特殊处理
     if [[ "$file_system" == "f2fs" ]]; then
         echo "What mount options would you like to enable for your $mount_point F2FS?" >&2
-        echo "1>Optimized mount options(recommended)" >&2
-        echo "2>Default mount options" >&2
-        select choice in Optimized Default; do
+        select choice in "${options[@]}"; do
             if [[ "$mount_point" == "/" ]]; then
-                case $choice in
-                    Optimized)
+                case "$REPLY" in
+                    1)
                         mount -o noatime,lazytime,background_gc=off,atgc,nodiscard,fsync_mode=nobarrier "$1" "/mnt"
                         return 0
                         ;;
-                    Default)
+                    2)
                         mount "$1" "/mnt"
                         return 0
                         ;;
                 esac
             else
-                case $choice in
-                    Optimized)
+                case "$REPLY" in
+                    1)
                         mount --mkdir -o noatime,lazytime,background_gc=off,atgc,nodiscard,fsync_mode=nobarrier "$1" "/mnt$mount_point"
                         return 0
                         ;;
-                    Default)
+                    2)
                         mount --mkdir "$1" "/mnt$mount_point"
                         return 0
                         ;;

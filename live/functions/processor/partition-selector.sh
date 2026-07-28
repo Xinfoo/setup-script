@@ -10,7 +10,7 @@ partition_selector() {
 
     # 循环处理分区列表数组
     disks="$(disk_detector)" || return 1
-    for disk in $disks; do
+    for disk in "$disks"; do
         # 检查磁盘是否有分区
         if [[ -z "$(ls "/sys/block/$disk" | grep "$disk")" ]]; then
             continue
@@ -34,7 +34,7 @@ partition_selector() {
     echo >&2
 
     # 选择分区并把分区全路径输出到标准输出
-    select choice in ${partition_dev_path_list[@]}; do
+    select choice in "${partition_dev_path_list[@]}"; do
         if [[ -n $choice ]]; then
             echo "$choice"
             return 0

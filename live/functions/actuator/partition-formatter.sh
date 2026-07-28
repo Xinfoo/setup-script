@@ -10,7 +10,7 @@ partition_formatter() {
     local file_system="${file_system_choices["$1"]}"
 
     # 格式化文件系统
-    case $file_system in
+    case "$file_system" in
         "vfat")
             mkfs.fat -F 32 "$1"
             ;;

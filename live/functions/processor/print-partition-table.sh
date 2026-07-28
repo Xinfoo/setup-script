@@ -20,7 +20,7 @@ print_partition_table() {
 
     # 获取可用磁盘列表
     detected_disks="$(disk_detector)" || return 1
-    for item in $detected_disks; do
+    for item in "$detected_disks"; do
         disk_dev_path_list+=("/dev/$item")
     done
 
