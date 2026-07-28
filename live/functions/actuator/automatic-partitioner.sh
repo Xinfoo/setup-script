@@ -54,8 +54,8 @@ size=$swap_size_mib,type=0657FD6D-A4AB-43C4-84E5-0933C84B4F4F
 EOF
                     return 0
                 else
-                    declare -A file_system_choices=()
-                    declare -A mount_point_choices=()
+                    file_system_choices=()
+                    mount_point_choices=()
                     return 1
                 fi
                 ;;
@@ -91,8 +91,8 @@ size=$swap_size_mib,type=0657FD6D-A4AB-43C4-84E5-0933C84B4F4F
 EOF
                     return 0
                 else
-                    declare -A file_system_choices=()
-                    declare -A mount_point_choices=()
+                    file_system_choices=()
+                    mount_point_choices=()
                     return 1
                 fi
                 ;;
