@@ -12,16 +12,14 @@ basic_software_installer(){
     local -a platform_list=(
         "Intel"
         "AMD"
-        "Virtual machine"
-        )
+        "Virtual machine")
 
     # 内核列表
     local -a kernel_list=(
         "linux             (Latest kernel)"
         "linux-lts         (Long-Term Support (LTS) kernel)"
         "linux-zen         (High-performance kernel optimized for desktop users)"
-        "linux-hardened    (A security-focused kernel)"
-    )
+        "linux-hardened    (A security-focused kernel)")
 
     # 基本软件包列表
     local -a package_list=(
@@ -38,8 +36,7 @@ basic_software_installer(){
         "vi"
         "man-db"
         "man-pages"
-        "texinfo"
-        )
+        "texinfo")
 
     # 选择CPU平台
     select choice in "${platform_list[@]}"; do

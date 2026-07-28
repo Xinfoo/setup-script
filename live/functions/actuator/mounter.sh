@@ -9,7 +9,9 @@ mounter() {
     local choice
     local file_system="${file_system_choices["$1"]}"
     local PS3="Select mount options: "
-    local -a options=("Optimized mount options(recommended)" "Default mount options")
+    local -a options=(
+        "Optimized mount options(recommended)"
+        "Default mount options")
 
     # 启动swap
     if [[ "$file_system" == "swap" ]]; then

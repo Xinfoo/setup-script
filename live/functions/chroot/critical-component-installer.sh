@@ -8,8 +8,7 @@ critical_component_installer() {
         "zsh-completions"
         "zsh-autosuggestions"
         "zsh-syntax-highlighting"
-        "grml-zsh-config"
-        )
+        "grml-zsh-config")
 
     # 网络相关软件包列表
     local -a network_packages_list=(
@@ -17,8 +16,7 @@ critical_component_installer() {
         "iwd"
         "dhcpcd"
         "iftop"
-        "nethogs"
-        )
+        "nethogs")
 
     # 安装zsh
     pacman -S --needed --noconfirm ${zsh_packages_list[@]}

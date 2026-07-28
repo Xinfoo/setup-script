@@ -15,8 +15,7 @@ automatic_partitioner() {
     local -a options=(
         "| EFI (1GiB) | ROOT (AUTO) | SWAP (AUTO) |"
         "| EFI (1GiB) | ROOT (100GiB) | HOME (AUTO) | SWAP (AUTO) |"
-        "| EFI (1GiB) | ROOT (AUTO) |"
-        )
+        "| EFI (1GiB) | ROOT (AUTO) |")
 
     swap_size_mib="$(get_swap_size)" || return 1
 
