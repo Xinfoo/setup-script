@@ -41,6 +41,7 @@ else
 fi
 
 # 选择磁盘
+clear
 echo "Please select a primary disk on which to install the system."
 MAIN_INSTALL_DISK="$(disk_selector)"
 
@@ -50,7 +51,7 @@ options=(
     "Use the manually partitioner and mounter"
     )
 echo "Please select a disk partitioning scheme."
-select choice in "${options}"; do
+select choice in "${options[@]}"; do
     case "$REPLY" in
         1)
             automatic_partitioner "$MAIN_INSTALL_DISK"
@@ -58,11 +59,14 @@ select choice in "${options}"; do
             ;;
         2)
             manual_partitioner --main "$MAIN_INSTALL_DISK"
-            if confirm "Do you want to partition other disks?"; then
-                SELECTED_DISK="$(disk_selector)"
-                manual_partitioner "$MAIN_INSTALL_DISK"
-            fi
-            break
+            while true; do
+                if confirm "Do you want to partition other disks?"; then
+                    SELECTED_DISK="$(disk_selector)"
+                    manual_partitioner "$SELECTED_DISK"
+                else
+                    break 2
+                fi
+            done
             ;;
         *)
             echo "Invalid selection, please choose a number from the list."
