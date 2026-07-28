@@ -20,6 +20,12 @@ automatic_partitioner() {
 
     swap_size_mib="$(get_swap_size)" || return 1
 
+    if [[ "$1" =~ ^"nvme" ]]; then
+        partition_tab="p"
+    else
+        partition_tab=""
+    fi
+
     select choice in "${options[@]}"; do
         case "$REPLY" in
             1)
@@ -31,11 +37,6 @@ size=1024,type=C12A7328-F81F-11D2-BA4B-00A0C93EC93B
 size=-$swap_size_mib,type=0FC63DAF-8483-4772-8E79-3D69D8477DE4
 size=$swap_size_mib,type=0657FD6D-A4AB-43C4-84E5-0933C84B4F4F
 EOF
-                if [[ "$1" =~ ^"nvme" ]]; then
-                    partition_tab="p"
-                else
-                    partition_tab=""
-                fi
 
                 # EFI
                 file_system_setter --efi "${1}${partition_tab}1"
@@ -61,11 +62,6 @@ size=102400,type=0FC63DAF-8483-4772-8E79-3D69D8477DE4
 size=-$swap_size_mib,type=0FC63DAF-8483-4772-8E79-3D69D8477DE4
 size=$swap_size_mib,type=0657FD6D-A4AB-43C4-84E5-0933C84B4F4F
 EOF
-                if [[ "$1" =~ ^"nvme" ]]; then
-                    partition_tab="p"
-                else
-                    partition_tab=""
-                fi
 
                 # EFI
                 file_system_setter --efi "${1}${partition_tab}1"
@@ -94,11 +90,6 @@ unit: MiB
 size=1024,type=C12A7328-F81F-11D2-BA4B-00A0C93EC93B
 size=,type=0FC63DAF-8483-4772-8E79-3D69D8477DE4
 EOF
-                if [[ "$1" =~ ^"nvme" ]]; then
-                    partition_tab="p"
-                else
-                    partition_tab=""
-                fi
 
                 # EFI
                 file_system_setter --efi "${1}${partition_tab}1"
