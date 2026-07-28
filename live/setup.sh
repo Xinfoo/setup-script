@@ -115,3 +115,10 @@ PARTITION="$(find_partition_by_mountpoint "/opt")"
 if [[ -n "$PARTITION" ]]; then
     mounter "$PARTITION"
 fi
+
+# 启用swap
+for PARTITION in "${!file_system_choices[@]}"; do
+    if [[ "${file_system_choices["$PARTITION"]}" == "swap" ]]; then
+        mounter "$PARTITION"
+    fi
+done
