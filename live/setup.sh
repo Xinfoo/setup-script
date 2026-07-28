@@ -20,6 +20,7 @@ source "$SRC_DIR/functions/actuator/partition-formatter.sh"
 source "$SRC_DIR/functions/actuator/mounter.sh"
 source "$SRC_DIR/functions/actuator/automatic-partitioner.sh"
 source "$SRC_DIR/functions/actuator/manual-partitioner.sh"
+source "$SRC_DIR/functions/installer/basic-soft-installer.sh"
 
 MAIN_INSTALL_DISK=""
 SELECTED_DISK=""
@@ -122,3 +123,11 @@ for PARTITION in "${!file_system_choices[@]}"; do
         mounter "$PARTITION"
     fi
 done
+
+# 安装基本软件
+if confirm "The next step is to install the base system. Do you want to continue?"; then
+    basic-software-installer
+else
+    exit 1
+fi
+
