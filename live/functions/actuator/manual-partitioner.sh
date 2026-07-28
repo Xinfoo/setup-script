@@ -35,7 +35,7 @@ manual_partitioner() {
         # 根分区
         clear
         echo "Please select a partition as the root(/) partition." >&2
-        parition="$(partition_selector "$disk")" || return 1
+        partition="$(partition_selector "$disk")" || return 1
         echo "Select a file system for the root partition." >&2
         file_system_setter --noswap "$partition"
         mount_point_setter --root "$partition"
@@ -62,6 +62,7 @@ manual_partitioner() {
                     break
                 fi
             fi
+            break
         done
     fi
 

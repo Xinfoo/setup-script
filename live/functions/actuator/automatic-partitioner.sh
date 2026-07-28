@@ -118,8 +118,8 @@ size=,type=0FC63DAF-8483-4772-8E79-3D69D8477DE4
 EOF
                     return 0
                 else
-                    declare -A file_system_choices=()
-                    declare -A mount_point_choices=()
+                    file_system_choices=()
+                    mount_point_choices=()
                     return 1
                 fi
                 ;;
