@@ -23,8 +23,8 @@ source "$SRC_DIR/functions/actuator/manual-partitioner.sh"
 
 MAIN_INSTALL_DISK=""
 SELECTED_DISK=""
+PARTITION=""
 PS3="Enter a number: "
-mountpoint_list=( "/" "/boot" "/home" "/var" "/usr" "/opt" )
 declare -A file_system_choices=()
 declare -A mount_point_choices=()
 
@@ -86,8 +86,32 @@ else
 fi
 
 # 分区挂载
-for mountpoint in ${mountpoint_list[@]}; do
-    if find_partition_by_mountpoint "$mountpoint"; then
+PARTITION="$(find_partition_by_mountpoint "/")"
+if [[ -n "$PARTITION" ]]; then
+    mounter "$PARTITION"
+fi
 
-    fi
-done
+PARTITION="$(find_partition_by_mountpoint "/boot")"
+if [[ -n "$PARTITION" ]]; then
+    mounter "$PARTITION"
+fi
+
+PARTITION="$(find_partition_by_mountpoint "/usr")"
+if [[ -n "$PARTITION" ]]; then
+    mounter "$PARTITION"
+fi
+
+PARTITION="$(find_partition_by_mountpoint "/var")"
+if [[ -n "$PARTITION" ]]; then
+    mounter "$PARTITION"
+fi
+
+PARTITION="$(find_partition_by_mountpoint "/home")"
+if [[ -n "$PARTITION" ]]; then
+    mounter "$PARTITION"
+fi
+
+PARTITION="$(find_partition_by_mountpoint "/opt")"
+if [[ -n "$PARTITION" ]]; then
+    mounter "$PARTITION"
+fi
