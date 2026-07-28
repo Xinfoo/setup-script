@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
-# 文件系统选择器
-file_system_selector() {
+# 文件系统设置器
+file_system_setter() {
     # 定义要使用的变量和数组
     local choice
     local PS3="Select the file system you want to format: "

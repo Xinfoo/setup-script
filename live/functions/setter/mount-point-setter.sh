@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
-# 挂载点选择器
-mount_point_selector() {
+# 挂载点设置器
+mount_point_setter() {
     local mounted_point mount_point choice
     local PS3="Select a mount point: "
     local -a mount_point_list=("/home" "/var" "/usr" "/opt")
