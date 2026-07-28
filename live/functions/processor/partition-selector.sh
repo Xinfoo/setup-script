@@ -8,8 +8,14 @@ partition_selector() {
     local PS3="Select a partition: "
     local -a partition_dev_path_list=()
 
+    # 检查输入
+    if [[ -z "${1:-}" ]]; then
+        disks="$(disk_detector)" || return 1
+    else
+        disks="$1"
+    fi
+
     # 循环处理分区列表数组
-    disks="$(disk_detector)" || return 1
     for disk in "$disks"; do
         # 检查磁盘是否有分区
         if [[ -z "$(ls "/sys/block/$disk" | grep "$disk")" ]]; then
