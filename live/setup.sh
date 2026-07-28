@@ -146,3 +146,13 @@ else
 fi
 
 genfstab -U /mnt >> /mnt/etc/fstab
+
+cp -ra "$SRC_DIR/functions/chroot/" "/mnt/root/setup-script-functions/"
+cp "$SRC_DIR/chroot-setup.sh" "/mnt/root/setup.sh"
+
+echo
+echo "Please manually execute ./setup.sh"
+arch-chroot -S /mnt
+
+rm -rf "/mnt/root/setup-script-functions"
+rm -f "/mnt/root/setup.sh"
