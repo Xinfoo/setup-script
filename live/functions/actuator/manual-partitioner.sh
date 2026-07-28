@@ -22,6 +22,11 @@ manual_partitioner() {
         main_disk="yes"
     fi
 
+    # 询问用户是否要擦除磁盘
+    if confirm "Do you want to erase the disk?"; then
+        disk_wiper "$disk"
+    fi
+
     # 分区前的最后警告
     echo "Next, you will manually partition the selected disk; cfdisk will be launched. You must ensure the partitioning is complete before exiting. " >&2
     if confirm "Do you wish to proceed?"; then
@@ -71,8 +76,8 @@ manual_partitioner() {
     fi
 
     print_partition_table
-    echo "Ensure that the new mount scheme does not contain duplicate mounts,"
-    echo "and that there exists one and only one root partition and EFI partition."
+    echo "Ensure that the new mount scheme does not contain duplicate mounts," >&2
+    echo "and that there exists one and only one root partition and EFI partition." >&2
     if confirm "Are you sure you want this partitioning scheme?"; then
         return 0
     else
