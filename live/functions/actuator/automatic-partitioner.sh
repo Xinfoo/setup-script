@@ -29,15 +29,6 @@ automatic_partitioner() {
     select choice in "${options[@]}"; do
         case "$REPLY" in
             1)
-                sfdisk "$1" <<EOF
-label: gpt
-unit: MiB
-
-size=1024,type=C12A7328-F81F-11D2-BA4B-00A0C93EC93B
-size=-$swap_size_mib,type=0FC63DAF-8483-4772-8E79-3D69D8477DE4
-size=$swap_size_mib,type=0657FD6D-A4AB-43C4-84E5-0933C84B4F4F
-EOF
-
                 # EFI
                 file_system_setter --efi "${1}${partition_tab}1"
                 mount_point_choices["${1}${partition_tab}1"]="/boot"
@@ -50,19 +41,18 @@ EOF
                 # SWAP
                 file_system_setter --swap "${1}${partition_tab}3"
 
-                return 0
-                ;;
-            2)
                 sfdisk "$1" <<EOF
 label: gpt
 unit: MiB
 
 size=1024,type=C12A7328-F81F-11D2-BA4B-00A0C93EC93B
-size=102400,type=0FC63DAF-8483-4772-8E79-3D69D8477DE4
 size=-$swap_size_mib,type=0FC63DAF-8483-4772-8E79-3D69D8477DE4
 size=$swap_size_mib,type=0657FD6D-A4AB-43C4-84E5-0933C84B4F4F
 EOF
 
+                return 0
+                ;;
+            2)
                 # EFI
                 file_system_setter --efi "${1}${partition_tab}1"
                 mount_point_choices["${1}${partition_tab}1"]="/boot"
@@ -80,17 +70,19 @@ EOF
                 # SWAP
                 file_system_setter --swap "${1}${partition_tab}3"
 
-                return 0
-                ;;
-            3)
                 sfdisk "$1" <<EOF
-lobel: gpt
+label: gpt
 unit: MiB
 
 size=1024,type=C12A7328-F81F-11D2-BA4B-00A0C93EC93B
-size=,type=0FC63DAF-8483-4772-8E79-3D69D8477DE4
+size=102400,type=0FC63DAF-8483-4772-8E79-3D69D8477DE4
+size=-$swap_size_mib,type=0FC63DAF-8483-4772-8E79-3D69D8477DE4
+size=$swap_size_mib,type=0657FD6D-A4AB-43C4-84E5-0933C84B4F4F
 EOF
 
+                return 0
+                ;;
+            3)
                 # EFI
                 file_system_setter --efi "${1}${partition_tab}1"
                 mount_point_choices["${1}${partition_tab}1"]="/boot"
@@ -99,6 +91,14 @@ EOF
                 echo "Select a file system for formatting the ROOT partition." >&2
                 file_system_setter --noswap "${1}${partition_tab}2"
                 mount_point_choices["${1}${partition_tab}2"]="/"
+
+                sfdisk "$1" <<EOF
+lobel: gpt
+unit: MiB
+
+size=1024,type=C12A7328-F81F-11D2-BA4B-00A0C93EC93B
+size=,type=0FC63DAF-8483-4772-8E79-3D69D8477DE4
+EOF
 
                 return 0
                 ;;
