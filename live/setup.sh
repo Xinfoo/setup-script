@@ -124,6 +124,20 @@ for PARTITION in "${!file_system_choices[@]}"; do
     fi
 done
 
+echo "Disk partition mounting complete."
+sleep 3
+
+# 检查fstab生成器是否正确
+clear
+echo
+genfstab -U /mnt
+echo
+if confirm "Is this generated fstab file correct?"; then
+    echo "This file will ultimately be placed at /mnt/etc/fstab."
+else
+    exit 1
+fi
+
 # 安装基本软件
 if confirm "The next step is to install the base system. Do you want to continue?"; then
     basic-software-installer
@@ -131,3 +145,4 @@ else
     exit 1
 fi
 
+genfstab -U /mnt >> /mnt/etc/fstab
