@@ -42,7 +42,8 @@ automatic_partitioner() {
                 file_system_setter --swap "${1}${partition_tab}3"
 
                 print_partition_table
-                if confirm "Your disk will be partitioned according to the table above; are you sure you want to continue?"; then
+                if confirm "Your disk will be partitioned according to the table above; are you sure you want to continue?(Data cannot be recovered)"; then
+                    disk_wiper "$1"
                     sfdisk "$1" <<EOF
 label: gpt
 unit: MiB
@@ -77,7 +78,8 @@ EOF
                 file_system_setter --swap "${1}${partition_tab}3"
 
                 print_partition_table
-                if confirm "Your disk will be partitioned according to the table above; are you sure you want to continue?"; then
+                if confirm "Your disk will be partitioned according to the table above; are you sure you want to continue?(Data cannot be recovered)"; then
+                    disk_wiper "$1"
                     sfdisk "$1" <<EOF
 label: gpt
 unit: MiB
@@ -105,7 +107,8 @@ EOF
                 mount_point_choices["${1}${partition_tab}2"]="/"
 
                 print_partition_table
-                if confirm "Your disk will be partitioned according to the table above; are you sure you want to continue?"; then
+                if confirm "Your disk will be partitioned according to the table above; are you sure you want to continue?(Data cannot be recovered)"; then
+                    disk_wiper "$1"
                     sfdisk "$1" <<EOF
 lobel: gpt
 unit: MiB
