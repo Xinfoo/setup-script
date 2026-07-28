@@ -20,7 +20,7 @@ automatic_partitioner() {
 
     swap_size_mib="$(get_swap_size)" || return 1
 
-    if [[ "$1" =~ ^"nvme" ]]; then
+    if [[ "$1" =~ ^"/dev/nvme" ]]; then
         partition_tab="p"
     else
         partition_tab=""
@@ -71,11 +71,11 @@ EOF
 
                 # HOME
                 echo "Select a file system for formatting the HOME partition." >&2
-                file_system_setter --noswap "${1}${partition_tab}2"
-                mount_point_choices["${1}${partition_tab}2"]="/home"
+                file_system_setter --noswap "${1}${partition_tab}3"
+                mount_point_choices["${1}${partition_tab}3"]="/home"
 
                 # SWAP
-                file_system_setter --swap "${1}${partition_tab}3"
+                file_system_setter --swap "${1}${partition_tab}4"
 
                 print_partition_table
                 if confirm "Your disk will be partitioned according to the table above; are you sure you want to continue?(Data cannot be recovered)"; then
@@ -110,7 +110,7 @@ EOF
                 if confirm "Your disk will be partitioned according to the table above; are you sure you want to continue?(Data cannot be recovered)"; then
                     disk_wiper "$1"
                     sfdisk "$1" <<EOF
-lobel: gpt
+label: gpt
 unit: MiB
 
 size=1024,type=C12A7328-F81F-11D2-BA4B-00A0C93EC93B

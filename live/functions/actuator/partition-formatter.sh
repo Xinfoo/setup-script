@@ -13,19 +13,19 @@ partition_formatter() {
         # 格式化文件系统
         case "$file_system" in
             "vfat")
-                mkfs.fat -F 32 "$file_system_dev_path"
+                mkfs.fat -F 32 "$partition_dev_path"
                 ;;
             "ext4")
-                mkfs.ext4 -F "$file_system_dev_path"
+                mkfs.ext4 -F "$partition_dev_path"
                 ;;
             "xfs")
-                mkfs.xfs -f "$file_system_dev_path"
+                mkfs.xfs -f "$partition_dev_path"
                 ;;
             "f2fs")
-                mkfs.f2fs -f -O extra_attr,inode_checksum,sb_checksum,compression "$file_system_dev_path"
+                mkfs.f2fs -f -O extra_attr,inode_checksum,sb_checksum,compression "$partition_dev_path"
                 ;;
             "swap")
-                mkswap -f "$file_system_dev_path"
+                mkswap -f "$partition_dev_path"
                 ;;
         esac
     done

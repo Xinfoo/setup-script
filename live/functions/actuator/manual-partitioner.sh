@@ -38,12 +38,14 @@ manual_partitioner() {
         parition="$(partition_selector "$disk")" || return 1
         echo "Select a file system for the root partition." >&2
         file_system_setter --noswap "$partition"
+        mount_point_setter --root "$partition"
 
         # EFI分区
         clear
         echo "Please select a partition as the EFI(/boot) partition."
-        parition="$(partition_selector "$disk")" || return 1
+        partition="$(partition_selector "$disk")" || return 1
         file_system_setter --efi "$partition"
+        mount_point_setter --efi "$partition"
     fi
 
     if confirm "Do you want to configure mount points for other partitions or enable a swap partition?"; then
@@ -52,7 +54,7 @@ manual_partitioner() {
             echo "Please select the partition to assign a mount point to."
             partition="$(partition_selector "$disk")" || return 1
             file_system_setter "$partition"
-            if [[ "${file_system_chocies["$partition"]}" != "swap" ]]; then
+            if [[ "${file_system_choices["$partition"]}" != "swap" ]]; then
                 mount_point_setter "$partition" || continue
                 if confirm "Do you want to continue assigning mount points for the partitions or enabling the swap partition?"; then
                     continue

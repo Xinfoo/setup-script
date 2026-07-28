@@ -42,26 +42,26 @@ file_system_setter() {
             return 1
         fi
         partition="$2"
-        unset "file_system_list[4]"
+        unset "file_system_list[3]"
     fi
 
     # 选择要格式化的分区并关联数组
     select choice in "${file_system_list[@]}"; do
         case "$choice" in
             "Ext4")
-                file_system_choices["$1"]="ext4"
+                file_system_choices["$partition"]="ext4"
                 return 0
                 ;;
             "XFS")
-                file_system_choices["$1"]="xfs"
+                file_system_choices["$partition"]="xfs"
                 return 0
                 ;;
             "F2FS")
-                file_system_choices["$1"]="f2fs"
+                file_system_choices["$partition"]="f2fs"
                 return 0
                 ;;
             "SWAP")
-                file_system_choices["$1"]="swap"
+                file_system_choices["$partition"]="swap"
                 return 0
                 ;;
         esac

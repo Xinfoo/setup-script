@@ -12,11 +12,11 @@ partition_selector() {
     if [[ -z "${1:-}" ]]; then
         disks="$(disk_detector)" || return 1
     else
-        disks="$1"
+        disks="$(basename "$1")"
     fi
 
     # 循环处理分区列表数组
-    for disk in "$disks"; do
+    for disk in $disks; do
         # 检查磁盘是否有分区
         if [[ -z "$(ls "/sys/block/$disk" | grep "$disk")" ]]; then
             continue
