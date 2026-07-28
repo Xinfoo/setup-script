@@ -148,7 +148,9 @@ fi
 genfstab -U /mnt >> /mnt/etc/fstab
 
 cp -ra "$SRC_DIR/functions/chroot/" "/mnt/root/setup-script-functions/"
-cp "$SRC_DIR/chroot-setup.sh" "/mnt/root/setup.sh"
+cp -a "$SRC_DIR/functions/processor/confirm.sh" "/mnt/root/setup-script-functions/confirm.sh"
+cp -a "$SRC_DIR/functions/processor/permission-check.sh" "$SRC_DIR/functions/processor/permission-check.sh"
+cp -a "$SRC_DIR/chroot-setup.sh" "/mnt/root/setup.sh"
 
 echo
 echo "Please manually execute ./setup.sh"
