@@ -70,4 +70,14 @@ manual_partitioner() {
         done
     fi
 
+    print_partition_table
+    echo "Ensure that the new mount scheme does not contain duplicate mounts,"
+    echo "and that there exists one and only one root partition and EFI partition."
+    if confirm "Are you sure you want this partitioning scheme?"; then
+        return 0
+    else
+        file_system_choices=()
+        mount_point_choices=()
+        return 1
+    fi
 }
