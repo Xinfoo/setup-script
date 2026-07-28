@@ -20,7 +20,7 @@ source "$SRC_DIR/functions/actuator/partition-formatter.sh"
 source "$SRC_DIR/functions/actuator/mounter.sh"
 source "$SRC_DIR/functions/actuator/automatic-partitioner.sh"
 source "$SRC_DIR/functions/actuator/manual-partitioner.sh"
-source "$SRC_DIR/functions/installer/basic-soft-installer.sh"
+source "$SRC_DIR/functions/actuator/basic-soft-installer.sh"
 
 MAIN_INSTALL_DISK=""
 SELECTED_DISK=""
