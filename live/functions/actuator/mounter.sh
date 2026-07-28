@@ -49,6 +49,10 @@ mounter() {
         done
     fi
 
-    # 挂载普通分区
-    mount --mkdir "$1" "/mnt$mount_point"
+    # 挂载普通文件系统
+    if [[ "$mount_point" == "/" ]]; then
+        mount "$1" "/mnt"
+    else
+        mount --mkdir "$1" "/mnt$mount_point"
+    fi
 }
