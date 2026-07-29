@@ -5,7 +5,7 @@ basic_setter() {
     local choice
     local region
     local hostname
-    local PS3="Do you want to use the Chinese locale or the English locale?"
+    local PS3="Enter a number: "
     local -a language=(
         "English(US)"
         "Chinese(China Mainland)")
@@ -33,6 +33,7 @@ basic_setter() {
     locale-gen
 
     # 设置locale
+    echo "Do you want to use the Chinese locale or the English locale?" >&2
     select choice in "${language[@]}"; do
         case "$REPLY" in
             1)

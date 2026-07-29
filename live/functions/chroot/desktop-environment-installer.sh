@@ -3,6 +3,7 @@
 # 桌面环境安装器
 desktop_environment_installer() {
     local choice
+    local PS3="Select a desktop environment: "
 
     # 桌面环境列表
     local -a desktop_environment=(
@@ -23,7 +24,6 @@ desktop_environment_installer() {
         "kcharselect"
         "ksystemlog"
         "kompare"
-        "k3b"
         "kid3"
         "haruna")
     # kde输入法
@@ -42,13 +42,24 @@ desktop_environment_installer() {
         "ibus"
         "ibus-libpinyin")
 
+    # 字体包
+    local -a fonts=(
+        "noto-fonts"
+        "noto-fonts-cjk"
+        "noto-fonts-emoji"
+        "noto-fonts-extra"
+        "ttf-jetbrains-mono"
+        "ttf-dejavu"
+        "ttf-nerd-fonts-symbols"
+        "ttf-nerd-fonts-symbols-mono")
+
     # 选择桌面环境安装
     echo "Select a desktop environment you want to install." >&2
     select choice in "${desktop_environment[@]}"; do
         case "$REPLY" in
             1)
                 DESKTOP_ENVIRONMENT="KDE"
-                pacman -S --needed --noconfirm plasma
+                pacman -S --needed plasma sddm-kcm
 
                 if confirm "Do you want to install the recommended software for KDE Plasma?"; then
                     pacman -S --needed --noconfirm ${kde_extra_packages[@]}
@@ -62,7 +73,7 @@ desktop_environment_installer() {
                 ;;
             2)
                 DESKTOP_ENVIRONMENT="Gnome"
-                pacman -S --needed --noconfirm gnome
+                pacman -S --needed gnome gdm
 
                 if confirm "Do you want to install the recommended GNOME software?"; then
                     pacman -S --needed --noconfirm ${gnome_extra_packages[@]}
@@ -79,4 +90,7 @@ desktop_environment_installer() {
                 ;;
         esac
     done
+
+    # 安装字体
+    pacman -S --needed --noconfirm ${fonts[@]}
 }
