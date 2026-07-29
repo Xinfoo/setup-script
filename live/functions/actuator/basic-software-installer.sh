@@ -7,6 +7,7 @@ basic_software_installer(){
     local kernel=""
     local kernel_headers=""
     local onboard_audio=""
+    local PS3="Enter a number: "
 
     # 平台列表
     local -a platform_list=(

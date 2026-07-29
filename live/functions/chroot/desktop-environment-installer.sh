@@ -3,6 +3,7 @@
 # 桌面环境安装器
 desktop_environment_installer() {
     local choice
+    local PS3="Select a desktop environment: "
 
     # 桌面环境列表
     local -a desktop_environment=(
