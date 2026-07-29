@@ -68,6 +68,7 @@ select choice in "${options[@]}"; do
             manual_partitioner --main "$MAIN_INSTALL_DISK"
             while true; do
                 if confirm "Do you want to partition other disks?"; then
+                    clear
                     SELECTED_DISK="$(disk_selector)"
                     manual_partitioner "$SELECTED_DISK"
                 else
