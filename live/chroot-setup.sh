@@ -14,5 +14,6 @@ source "$SRC_DIR/setup-script-functions/final-setter.sh"
 source "$SRC_DIR/setup-script-functions/extra-software-installer.sh"
 
 DESKTOP_ENVIRONMENT=""
+INPUT_METHOD=""
 FIREWALL=""
 PRINTER=""
