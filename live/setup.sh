@@ -20,7 +20,7 @@ source "$SRC_DIR/functions/actuator/partition-formatter.sh"
 source "$SRC_DIR/functions/actuator/mounter.sh"
 source "$SRC_DIR/functions/actuator/automatic-partitioner.sh"
 source "$SRC_DIR/functions/actuator/manual-partitioner.sh"
-source "$SRC_DIR/functions/actuator/basic-soft-installer.sh"
+source "$SRC_DIR/functions/actuator/basic-software-installer.sh"
 
 MAIN_INSTALL_DISK=""
 SELECTED_DISK=""
@@ -140,21 +140,21 @@ fi
 
 # 安装基本软件
 if confirm "The next step is to install the base system. Do you want to continue?"; then
-    basic-software-installer
+    basic_software_installer
 else
     exit 1
 fi
 
 genfstab -U /mnt >> /mnt/etc/fstab
 
-cp -ra "$SRC_DIR/functions/chroot/" "/mnt/root/setup-script-functions/"
-cp -a "$SRC_DIR/functions/processor/confirm.sh" "/mnt/root/setup-script-functions/confirm.sh"
-cp -a "$SRC_DIR/functions/processor/permission-check.sh" "$SRC_DIR/functions/processor/permission-check.sh"
-cp -a "$SRC_DIR/chroot-setup.sh" "/mnt/root/setup.sh"
+cp -ra "$SRC_DIR/functions/chroot/" "/mnt/setup-script-functions/"
+cp -a "$SRC_DIR/functions/processor/confirm.sh" "/mnt/setup-script-functions/confirm.sh"
+cp -a "$SRC_DIR/functions/processor/permission-check.sh" "/mnt/setup-script-functions/permission-check.sh"
+cp -a "$SRC_DIR/chroot-setup.sh" "/mnt/setup.sh"
 
 echo
 echo "Please manually execute ./setup.sh"
 arch-chroot -S /mnt
 
-rm -rf "/mnt/root/setup-script-functions"
-rm -f "/mnt/root/setup.sh"
+rm -rf "/mnt/setup-script-functions"
+rm -f "/mnt/setup.sh"

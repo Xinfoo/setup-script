@@ -6,7 +6,7 @@ basic_setter() {
     local hostname
 
     # 设置时区
-    echo "Setting timezone..." >$2
+    echo "Setting timezone..." >&2
     while true; do
         read -p '(Enter region/city e.g. "Asia/Shanghai"): ' region
 

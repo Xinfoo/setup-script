@@ -19,7 +19,7 @@ desktop_environment_installer() {
         "filelight"
         "kcalc"
         "gwenview"
-        "oklar"
+        "okular"
         "kcharselect"
         "ksystemlog"
         "kompare"
