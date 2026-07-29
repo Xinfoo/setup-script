@@ -13,6 +13,7 @@ source "$SRC_DIR/setup-script-functions/bootloader-installer.sh"
 source "$SRC_DIR/setup-script-functions/final-setter.sh"
 source "$SRC_DIR/setup-script-functions/extra-software-installer.sh"
 
+BLUETOOTH=""
 DESKTOP_ENVIRONMENT=""
 INPUT_METHOD=""
 FIREWALL=""

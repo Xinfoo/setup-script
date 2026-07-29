@@ -37,6 +37,7 @@ extra_driver_installer() {
 
     # 蓝牙设备
     if confirm "Do you have a Bluetooth device?"; then
+        BLUETOOTH="yes"
         pacman -S --needed --noconfirm ${bluetooth_driver[@]}
     fi
 }
