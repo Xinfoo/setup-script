@@ -59,7 +59,7 @@ desktop_environment_installer() {
         case "$REPLY" in
             1)
                 DESKTOP_ENVIRONMENT="KDE"
-                pacman -S --needed plasma
+                pacman -S --needed plasma sddm-kcm
 
                 if confirm "Do you want to install the recommended software for KDE Plasma?"; then
                     pacman -S --needed --noconfirm ${kde_extra_packages[@]}
@@ -73,7 +73,7 @@ desktop_environment_installer() {
                 ;;
             2)
                 DESKTOP_ENVIRONMENT="Gnome"
-                pacman -S --needed gnome
+                pacman -S --needed gnome gdm
 
                 if confirm "Do you want to install the recommended GNOME software?"; then
                     pacman -S --needed --noconfirm ${gnome_extra_packages[@]}
