@@ -55,7 +55,6 @@ desktop_environment_installer() {
                 fi
 
                 if confirm "Do you want to install a Chinese input method?"; then
-                    INPUT_METHOD="fcitx5"
                     pacman -S --needed --noconfirm ${kde_input_method[@]}
                 fi
 
@@ -70,7 +69,6 @@ desktop_environment_installer() {
                 fi
 
                 if confirm "Do you want to install a Chinese input method?"; then
-                    INPUT_METHOD="ibus"
                     pacman -S --needed --noconfirm ${gnome_input_method[@]}
                 fi
 

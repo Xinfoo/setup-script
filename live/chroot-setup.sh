@@ -15,7 +15,6 @@ source "$SRC_DIR/setup-script-functions/extra-software-installer.sh"
 
 BLUETOOTH=""
 DESKTOP_ENVIRONMENT=""
-INPUT_METHOD=""
 FIREWALL=""
 PRINTER=""
 
@@ -44,4 +43,4 @@ bootloader_installer
 final_setter
 
 echo "System configuration complete."
-echo "Please enter "exit" to manually exit the chroot environment."
+echo 'Please enter "exit" to manually exit the chroot environment.'
