@@ -20,7 +20,7 @@ disk_selector() {
     echo >&2
 
     # 选择块设备并把块设备全路径输出到标准输出
-    select choice in ${disk_dev_path_list[@]}; do
+    select choice in "${disk_dev_path_list[@]}"; do
         if [[ -n $choice ]]; then
             echo "$choice"
             return 0
