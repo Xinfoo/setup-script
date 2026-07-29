@@ -25,6 +25,7 @@ source "$SRC_DIR/functions/actuator/basic-software-installer.sh"
 MAIN_INSTALL_DISK=""
 SELECTED_DISK=""
 PARTITION=""
+PARTITION_ID=""
 PS3="Enter a number: "
 declare -A file_system_choices=()
 declare -A mount_point_choices=()
@@ -145,8 +146,14 @@ else
     exit 1
 fi
 
+# 生成fstab
 genfstab -U /mnt >> /mnt/etc/fstab
 
+# 获取根目录UUID
+PARTITION="$(find_partition_by_mountpoint "/")"
+echo "$(blkid -s UUID -o value "$PARTITION")" > "/mnt/ROOT-UUID.txt"
+
+# 复制chroot内安装脚本
 cp -ra "$SRC_DIR/functions/chroot/" "/mnt/setup-script-functions/"
 cp -a "$SRC_DIR/functions/processor/confirm.sh" "/mnt/setup-script-functions/confirm.sh"
 cp -a "$SRC_DIR/functions/processor/permission-check.sh" "/mnt/setup-script-functions/permission-check.sh"
@@ -158,3 +165,16 @@ arch-chroot -S /mnt
 
 rm -rf "/mnt/setup-script-functions"
 rm -f "/mnt/setup.sh"
+
+# 卸载硬盘
+echo "Unmounting partition..."
+umount -R /mnt
+
+# 生成EFI启动项
+echo "Adding to startup entries..."
+PARTITION="$(find_partition_by_mountpoint "/boot")"
+PARTITION_ID="${PARTITION: -1}"
+sleep 2
+efibootmgr --create --disk $MAIN_INSTALL_DISK --part $PARTITION_ID --loader '\EFI\systemd\systemd-bootx64.efi' --label 'Linux Boot Manager' --unicode
+echo "System installation complete!"
+echo 'After that, type "reboot" to restart.'
