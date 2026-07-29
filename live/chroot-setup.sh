@@ -42,5 +42,35 @@ bootloader_installer
 # 最终配置
 final_setter
 
+# 设置镜像站
+if confirm "Do you want to use a mirror optimized for the China region?"; then
+    echo 'Setting up software mirror site...'
+    echo '################################################################################
+############################ Arch Linux mirrorlist #############################
+################################################################################
+
+Server = https://mirrors.tuna.tsinghua.edu.cn/archlinux/$repo/os/$arch
+Server = https://mirrors.ustc.edu.cn/archlinux/$repo/os/$arch
+Server = https://mirrors.163.com/archlinux/$repo/os/$arch
+Server = https://mirrors.bfsu.edu.cn/archlinux/$repo/os/$arch
+Server = https://mirrors.cqu.edu.cn/archlinux/$repo/os/$arch
+Server = https://mirrors.hit.edu.cn/archlinux/$repo/os/$arch
+Server = https://mirrors.hust.edu.cn/archlinux/$repo/os/$arch
+Server = https://mirrors.jcut.edu.cn/archlinux/$repo/os/$arch
+Server = https://mirrors.jlu.edu.cn/archlinux/$repo/os/$arch
+Server = https://mirrors.jxust.edu.cn/archlinux/$repo/os/$arch
+Server = https://mirrors.neusoft.edu.cn/archlinux/$repo/os/$arch
+Server = https://mirrors.nju.edu.cn/archlinux/$repo/os/$arch
+Server = https://mirrors.njupt.edu.cn/archlinux/$repo/os/$arch
+Server = https://mirror.nyist.edu.cn/archlinux/$repo/os/$arch
+Server = https://mirrors.qlu.edu.cn/archlinux/$repo/os/$arch
+Server = https://mirrors.qvq.net.cn/archlinux/$repo/os/$arch
+Server = https://mirror.redrock.team/archlinux/$repo/os/$arch
+Server = https://mirrors.shanghaitech.edu.cn/archlinux/$repo/os/$arch
+Server = https://mirrors.sjtug.sjtu.edu.cn/archlinux/$repo/os/$arch
+Server = https://mirrors.wsyu.edu.cn/archlinux/$repo/os/$arch
+Server = https://mirrors.xjtu.edu.cn/archlinux/$repo/os/$arch' > "/etc/pacman.d/mirrorlist"
+fi
+
 echo "System configuration complete."
 echo 'Please enter "exit" to manually exit the chroot environment.'

@@ -2,8 +2,13 @@
 
 # 基本设置器
 basic_setter() {
+    local choice
     local region
     local hostname
+    local PS3="Do you want to use the Chinese locale or the English locale?"
+    local -a language=(
+        "English(US)"
+        "Chinese(China Mainland)")
 
     # 设置时区
     echo "Setting timezone..." >&2
@@ -24,10 +29,25 @@ basic_setter() {
     # 生成locale
     echo "Generating locale..." >&2
     sed -i 's/#en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/g' "/etc/locale.gen"
+    sed -i 's/#zh_CN.UTF-8 UTF-8/zh_CN.UTF-8 UTF-8/g' "/etc/locale.gen"
     locale-gen
 
     # 设置locale
-    echo 'LANG=en_US.UTF-8' > "/etc/locale.conf"
+    select choice in "${language[@]}"; do
+        case "$REPLY" in
+            1)
+                echo 'LANG=en_US.UTF-8' > "/etc/locale.conf"
+                break
+                ;;
+            2)
+                echo 'LANG=zh_CN.UTF-8' > "/etc/locale.conf"
+                break
+                ;;
+            *)
+                echo "Invalid selection, please choose a number from the list." >&2
+                ;;
+        esac
+    done
 
     # 设置主机名
     echo "Setting hostname..." >&2
