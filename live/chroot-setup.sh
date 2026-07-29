@@ -12,3 +12,7 @@ source "$SRC_DIR/setup-script-functions/desktop-environment-installer.sh"
 source "$SRC_DIR/setup-script-functions/bootloader-installer.sh"
 source "$SRC_DIR/setup-script-functions/final-setter.sh"
 source "$SRC_DIR/setup-script-functions/extra-software-installer.sh"
+
+DESKTOP_ENVIRONMENT=""
+FIREWALL=""
+PRINTER=""

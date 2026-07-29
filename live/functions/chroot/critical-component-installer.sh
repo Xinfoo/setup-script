@@ -18,9 +18,20 @@ critical_component_installer() {
         "iftop"
         "nethogs")
 
+    # UEFI相关的工具
+    local -a uefi_tools=(
+        "efivar"
+        "efitools"
+        "efibootmgr"
+        "sbsigntools"
+        "mokutil")
+
     # 安装zsh
     pacman -S --needed --noconfirm ${zsh_packages_list[@]}
 
     # 安装网络
     pacman -S --needed --noconfirm ${network_packages_list[@]}
+
+    # 安装uefi工具
+    pacman -S --needed --noconfirm ${uefi_tools[@]}
 }
