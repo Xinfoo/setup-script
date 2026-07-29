@@ -14,9 +14,8 @@ critical_component_installer() {
     local -a network_packages_list=(
         "networkmanager"
         "iwd"
-        "dhcpcd"
-        "iftop"
-        "nethogs")
+        "dhcpcd" 
+        "dhclient")
 
     # UEFI相关的工具
     local -a uefi_tools=(

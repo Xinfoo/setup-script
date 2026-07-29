@@ -20,11 +20,11 @@ extra_software_installer() {
         "wget"
         "aria2"
         "usbutils"
-        "kitty"
         "cmus")
 
-    # 额外的编辑器和工具
-    local -a editors=(
+    # 附加可选工具
+    local -a extra_tools=(
+        "kitty"
         "neovim"
         "neovide"
         "lua51"
@@ -33,7 +33,15 @@ extra_software_installer() {
         "ripgrep"
         "wl-clipboard"
         "npm"
-        "vim")
+        "vim"
+        "mpv")
+
+    # 桌面环境常用组件
+    local -a desktop_software=(
+        "chromium"
+        "thunderbird"
+        "libreoffice-fresh"
+        "gimp")
 
     echo
     if confirm "Do you want to install a firewall?"; then
@@ -60,8 +68,14 @@ extra_software_installer() {
     fi
 
     echo
-    echo "${editors[@]}" >&2
+    echo "${extra_tools[@]}" >&2
     if confirm "Do you want to install this software?"; then
-        pacman -S --needed --noconfirm ${editors[@]}
+        pacman -S --needed --noconfirm ${extra_tools[@]}
+    fi
+
+    echo
+    echo "${desktop_software[@]}" >&2
+    if confirm "Do you want to install this software?"; then
+        pacman -S --needed --noconfirm ${desktop_software[@]}
     fi
 }
