@@ -2,20 +2,23 @@
 
 # 引导安装器
 bootloader_installer() {
-    local ROOT_UUID="$(cat "$SRC_DIR/ROOT-UUID.txt")"
+    local kernel="$(cat "$SRC_DIR/info/kernel-img.txt")"
+    local micro_code="$(cat "$SRC_DIR/info/micro-code-img.txt")"
+    local initramfs="$(cat "$SRC_DIR/info/initramfs-img.txt")"
+    local root_uuid="$(cat "$SRC_DIR/info/root-uuid.txt")"
     bootctl install
 
     echo "title Arch Linux
-linux /vmlinuz-linux-zen
-initrd /intel-ucode.img
-initrd /initramfs-linux-zen.img
-options root=UUID=$ROOT_UUID rw loglevel=3" > "/boot/loader/entries/arch.conf"
+linux /$kernel
+initrd /$micro_code
+initrd /$initramfs
+options root=UUID=$root_uuid rw loglevel=3" > "/boot/loader/entries/arch.conf"
 
     echo "title Arch Linux Fallback
-linux /vmlinuz-linux-zen
-initrd /intel-ucode.img
-initrd /initramfs-linux-zen.img
-options root=UUID=$ROOT_UUID rw loglevel=3" > "/boot/loader/entries/arch-fallback.conf"
+linux /$kernel
+initrd /$micro_code
+initrd /$initramfs
+options root=UUID=$root_uuid rw loglevel=3" > "/boot/loader/entries/arch-fallback.conf"
 
     echo "default arch.conf
 editor no

@@ -43,10 +43,12 @@ basic_software_installer(){
         case "$REPLY" in
             1)
                 micro_code="intel-ucode"
+                MICRO_CODE="intel-ucode.img"
                 break
                 ;;
             2)
                 micro_code="amd-ucode"
+                MICRO_CODE="amd-ucode.img"
                 break
                 ;;
             3)
@@ -64,21 +66,29 @@ basic_software_installer(){
             1)
                 kernel="linux"
                 kernel_headers="linux-headers"
+                KERNEL="vmlinuz-linux"
+                INITRAMFS="initramfs-linux.img"
                 break
                 ;;
             2)
                 kernel="linux-lts"
                 kernel_headers="linux-lts-headers"
+                KERNEL="vmlinuz-linux-lts"
+                INITRAMFS="initramfs-linux-lts.img"
                 break
                 ;;
             3)
                 kernel="linux-zen"
                 kernel_headers="linux-zen-headers"
+                KERNEL="vmlinuz-linux-zen"
+                INITRAMFS="initramfs-linux-zen.img"
                 break
                 ;;
             4)
                 kernel="linux-hardened"
                 kernel_headers="linux-hardened-headers"
+                KERNEL="vmlinuz-linux-hardened"
+                INITRAMFS="initramfs-linux-hardened.img"
                 break
                 ;;
             *)

@@ -26,6 +26,9 @@ MAIN_INSTALL_DISK=""
 SELECTED_DISK=""
 PARTITION=""
 PARTITION_ID=""
+MICRO_CODE=""
+KERNEL=""
+INITRAMFS=""
 PS3="Enter a number: "
 declare -A file_system_choices=()
 declare -A mount_point_choices=()
@@ -149,9 +152,14 @@ fi
 # 生成fstab
 genfstab -U /mnt >> /mnt/etc/fstab
 
-# 获取根目录UUID
+# 传递信息
+mkdir "/mnt/info"
+echo "$KERNEL" > "/mnt/info/kernel-img.txt"
+echo "$MICRO_CODE" > "/mnt/info/micro-code-img.txt"
+echo "$INITRAMFS" > "/mnt/info/initramfs-img.txt"
+# 获取根目录UUID并传递
 PARTITION="$(find_partition_by_mountpoint "/")"
-echo "$(blkid -s UUID -o value "$PARTITION")" > "/mnt/ROOT-UUID.txt"
+echo "$(blkid -s UUID -o value "$PARTITION")" > "/mnt/info/root-uuid.txt"
 
 # 复制chroot内安装脚本
 cp -ra "$SRC_DIR/functions/chroot/" "/mnt/setup-script-functions/"
@@ -163,6 +171,7 @@ echo
 echo "Please manually execute ./setup.sh"
 arch-chroot -S /mnt
 
+rm -rf "/mnt/info"
 rm -rf "/mnt/setup-script-functions"
 rm -f "/mnt/setup.sh"
 
