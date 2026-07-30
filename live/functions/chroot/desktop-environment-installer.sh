@@ -67,6 +67,10 @@ desktop_environment_installer() {
 
                 if confirm "Do you want to install a Chinese input method?"; then
                     pacman -S --needed --noconfirm ${kde_input_method[@]}
+                    echo '
+XMODIFIERS=@im=fcitx
+SDL_IM_MODULE=fcitx
+GLFW_IM_MODULE=ibus' >> "/etc/environment"
                 fi
 
                 break

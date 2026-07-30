@@ -180,11 +180,6 @@ rm -f "/mnt/setup.sh"
 echo "Unmounting partition..."
 umount -R /mnt
 
-# 生成EFI启动项
-echo "Adding to startup entries..."
-PARTITION="$(find_partition_by_mountpoint "/boot")"
-PARTITION_ID="${PARTITION: -1}"
-sleep 2
-efibootmgr --create --disk $MAIN_INSTALL_DISK --part $PARTITION_ID --loader '\EFI\systemd\systemd-bootx64.efi' --label 'Linux Boot Manager' --unicode
+# 安装完成
 echo "System installation complete!"
 echo 'After that, type "reboot" to restart.'

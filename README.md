@@ -51,7 +51,7 @@ chroot 内的配置脚本执行完成后，输入：
 exit
 ```
 
-Live 阶段的主脚本随后会继续清理临时文件、卸载目标文件系统并创建 EFI 固件启动项。
+Live 阶段的主脚本随后会继续清理临时文件并卸载目标文件系统。systemd-boot 的安装和 EFI 固件启动项注册由 chroot 阶段的 `bootctl install` 完成。
 
 ## 安装流程
 
@@ -177,15 +177,14 @@ systemd-boot 配置会根据之前选择的内核和 CPU 平台生成，不会�
 脚本生成两个启动配置：
 
 - `Arch Linux`；
-- `Arch Linux Fallback`，作为内核参数配置被修改后的备用条目。
+- `Arch Linux Fallback`，当前使用与默认条目相同的内核、initramfs 和内核参数。
 
-chroot 内的 `bootctl install` 负责把 systemd-boot 文件安装到 EFI 分区。退出 chroot 后，Live 环境中的 `efibootmgr` 负责注册固件启动项。
+chroot 内的 `bootctl install` 负责把 systemd-boot 安装到 EFI 分区、写入 EFI 默认/回退加载器路径，并注册名为 `Linux Boot Manager` 的固件启动项。
 
 最后，脚本会：
 
 - 删除复制到目标系统根目录的安装函数和临时信息；
 - 递归卸载 `/mnt` 下的文件系统；
-- 创建名为 `Linux Boot Manager` 的 EFI 启动项；
 - 提示用户手动执行 `reboot`。
 
 ## 安装完成后的系统状态
@@ -224,7 +223,6 @@ live/
 
 - 仅面向 UEFI + GPT + systemd-boot 安装方式；
 - 自动分区主要面向 SATA/SCSI 和 NVMe 设备命名；
-- EFI 分区号按设备名最后一位传递给 `efibootmgr`，因此预期 EFI 位于第 1–9 个分区；
 - 手动分区方案的正确性主要由用户最终确认；
 - 脚本不会保存旧分区表、旧文件系统或旧配置；
 - 多处配置使用针对当前 Arch Linux 默认文件内容的精确 `sed` 替换，系统包更新后可能需要调整；
