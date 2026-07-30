@@ -69,6 +69,11 @@ desktop_environment_installer() {
                     pacman -S --needed --noconfirm ${kde_input_method[@]}
                 fi
 
+                echo '
+XMODIFIERS=@im=fcitx
+SDL_IM_MODULE=fcitx
+GLFW_IM_MODULE=ibus' >> "/etc/environment"
+
                 break
                 ;;
             2)
