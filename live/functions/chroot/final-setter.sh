@@ -50,6 +50,9 @@ ProcessSizeMax=0' > "/etc/systemd/coredump.conf.d/custom.conf"
         systemctl enable cups.socket
     fi
 
+    # 将新建用户的默认shell改成zsh
+    sed -i 's|SHELL=/usr/bin/bash|SHELL=/usr/bin/zsh|g' "/etc/default/useradd"
+
     # 设置用户名
     echo "Creating user account..." >&2
     while true; do

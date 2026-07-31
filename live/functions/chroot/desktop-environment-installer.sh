@@ -48,6 +48,7 @@ desktop_environment_installer() {
         "noto-fonts-cjk"
         "noto-fonts-emoji"
         "noto-fonts-extra"
+        "ttf-sarasa-gothic"
         "ttf-jetbrains-mono"
         "ttf-dejavu"
         "ttf-nerd-fonts-symbols"
@@ -97,4 +98,50 @@ GLFW_IM_MODULE=ibus' >> "/etc/environment"
 
     # 安装字体
     pacman -S --needed --noconfirm ${fonts[@]}
+
+    # 设置字体
+    echo '<fontconfig>
+    <alias>
+        <family>sans-serif</family>
+        <prefer>
+            <family>Noto Sans</family>
+            <family>Noto Sans CJK SC</family>
+            <family>Noto Sans CJK TC</family>
+            <family>Noto Sans CJK JP</family>
+            <family>Noto Sans CJK KR</family>
+            <family>Noto Color Emoji</family>
+            <family>Nerd Fonts Symbols</family>
+            <family>DejaVu Sans</family>
+        </prefer>
+    </alias>
+
+    <alias>
+        <family>serif</family>
+        <prefer>
+            <family>Noto Serif</family>
+            <family>Noto Serif CJK SC</family>
+            <family>Noto Serif CJK TC</family>
+            <family>Noto Serif CJK JP</family>
+            <family>Noto Serif CJK KR</family>
+            <family>Noto Color Emoji</family>
+            <family>Nerd Fonts Symbols</family>
+            <family>DejaVu Serif</family>
+        </prefer>
+    </alias>
+
+    <alias>
+        <family>monospace</family>
+        <prefer>
+            <family>JetBrains Mono</family>
+            <family>Sarasa Mono SC</family>
+            <family>Sarasa Mono TC</family>
+            <family>Sarasa Mono JP</family>
+            <family>Sarasa Mono KR</family>
+            <family>Noto Sans Mono</family>
+            <family>Noto Color Emoji</family>
+            <family>Nerd Fonts Symbols Mono</family>
+            <family>DejaVu Sans Mono</family>
+        </prefer>
+    </alias>
+</fontconfig>' > "/etc/fonts/local.conf"
 }
