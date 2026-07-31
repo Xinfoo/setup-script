@@ -110,7 +110,7 @@ GLFW_IM_MODULE=ibus' >> "/etc/environment"
             <family>Noto Sans CJK JP</family>
             <family>Noto Sans CJK KR</family>
             <family>Noto Color Emoji</family>
-            <family>Nerd Fonts Symbols</family>
+            <family>Symbols Nerd Font</family>
             <family>DejaVu Sans</family>
         </prefer>
     </alias>
@@ -124,7 +124,7 @@ GLFW_IM_MODULE=ibus' >> "/etc/environment"
             <family>Noto Serif CJK JP</family>
             <family>Noto Serif CJK KR</family>
             <family>Noto Color Emoji</family>
-            <family>Nerd Fonts Symbols</family>
+            <family>Symbols Nerd Font</family>
             <family>DejaVu Serif</family>
         </prefer>
     </alias>
@@ -135,11 +135,11 @@ GLFW_IM_MODULE=ibus' >> "/etc/environment"
             <family>JetBrains Mono</family>
             <family>Sarasa Mono SC</family>
             <family>Sarasa Mono TC</family>
-            <family>Sarasa Mono JP</family>
-            <family>Sarasa Mono KR</family>
+            <family>Sarasa Mono J</family>
+            <family>Sarasa Mono K</family>
             <family>Noto Sans Mono</family>
             <family>Noto Color Emoji</family>
-            <family>Nerd Fonts Symbols Mono</family>
+            <family>Symbols Nerd Font Mono</family>
             <family>DejaVu Sans Mono</family>
         </prefer>
     </alias>
