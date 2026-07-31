@@ -35,6 +35,7 @@ desktop_environment_installer() {
     local -a gnome_extra_packages=(
         "dconf-editor"
         "gnome-tweaks"
+        "file-roller"
         "gnome-shell-extension-appindicator")
     
     # gnome输入法
