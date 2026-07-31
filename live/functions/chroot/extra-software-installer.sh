@@ -19,6 +19,7 @@ extra_software_installer() {
         "lynx"
         "wget"
         "aria2"
+        "rsync"
         "usbutils"
         "cmus")
 
@@ -52,7 +53,7 @@ extra_software_installer() {
     echo
     if confirm "Do you want to install the printer components?"; then
         PRINTER="yes"
-        pacman -S --needed --noconfirm cups
+        pacman -S --needed --noconfirm cups system-config-printer
     fi
 
     echo
