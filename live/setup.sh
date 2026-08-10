@@ -29,6 +29,8 @@ PARTITION_ID=""
 MICRO_CODE=""
 KERNEL=""
 INITRAMFS=""
+SECURE_BOOT=""
+EFI_VARIABLES=""
 TLP=""
 PS3="Enter a number: "
 declare -A file_system_choices=()
@@ -171,13 +173,41 @@ cp -a "$SRC_DIR/functions/processor/confirm.sh" "/mnt/setup-script-functions/con
 cp -a "$SRC_DIR/functions/processor/permission-check.sh" "/mnt/setup-script-functions/permission-check.sh"
 cp -a "$SRC_DIR/chroot-setup.sh" "/mnt/setup.sh"
 
+# 复制shim(如果存在)，到安装目录
+if [[ -n "$(ls "$SRC_DIR/shim-signed.pkg.tar.zst")" ]]; then
+    cp -a "$SRC_DIR/shim-signed.pkg.tar.zst" "/mnt/shim-signed.pkg.tar.zst"
+fi
+
+# 复制安全启动证书(如果存在)，到root目录
+if [[ -n "$(ls "$SRC_DIR/secure-boot/")" ]]; then
+    cp -ra "$SRC_DIR/secure-boot/" "/mnt/root/secure-boot/"
+    chmod 500 "/mnt/root/secure-boot"
+    chmod 400 /mnt/root/secure-boot/*
+fi
+
 echo
 echo "Please manually execute ./setup.sh"
 arch-chroot -S /mnt
 
+# 获取安全启动和启动项信息
+SECURE_BOOT="$(cat "/mnt/info/secure-boot.txt")"
+EFI_VARIABLES="$(cat "/mnt/info/efi-variables.txt")"
+# 获取/boot信息
+PARTITION="$(find_partition_by_mountpoint "/boot")"
+PARTITION_ID="${PARTITION: -1}"
+# 创建启动项
+if [[ "$EFI_VARIABLES" == "yes" ]]; then
+    if [[ "$SECURE_BOOT" == "yes" ]]; then
+        efibootmgr --create --disk $MAIN_INSTALL_DISK --part $PARTITION_ID --loader '\EFI\ARCH\SHIMX64.EFI' --label 'Arch Linux' --unicode
+    else
+        efibootmgr --create --disk $MAIN_INSTALL_DISK --part $PARTITION_ID --loader '\EFI\systemd\systemd-bootx64.efi' --label 'Linux Boot Manager' --unicode
+    fi
+fi
+
 rm -rf "/mnt/info"
 rm -rf "/mnt/setup-script-functions"
 rm -f "/mnt/setup.sh"
+rm -f "/mnt/shim-signed.pkg.tar.zst"
 
 # 卸载硬盘
 echo "Unmounting partition..."
