@@ -2,6 +2,7 @@
 
 # 最终设置器
 final_setter() {
+    local tlp="$(cat "/info/tlp.txt")"
     local user_name
 
     # 让NetworkManager使用iwd作为wifi后端
@@ -25,7 +26,7 @@ wifi.backend=iwd' > "/etc/NetworkManager/conf.d/wifi_backend.conf"
     echo '[Coredump]
 Storage=none
 ProcessSizeMax=0' > "/etc/systemd/coredump.conf.d/custom.conf"
-    
+
     # 启用服务
     echo "enabling services..." >&2
     systemctl enable NetworkManager.service
@@ -42,6 +43,10 @@ ProcessSizeMax=0' > "/etc/systemd/coredump.conf.d/custom.conf"
         systemctl enable gdm.service
     fi
 
+    if [[ "$tlp" == "yes" ]]; then
+        systemctl enable tlp.service
+    fi
+
     if [[ "$FIREWALL" == "yes" ]]; then
         systemctl enable firewalld.service
     fi
@@ -49,6 +54,9 @@ ProcessSizeMax=0' > "/etc/systemd/coredump.conf.d/custom.conf"
     if [[ "$PRINTER" == "yes" ]]; then
         systemctl enable cups.socket
     fi
+
+    # 将新建用户的默认shell改成zsh
+    sed -i 's|SHELL=/usr/bin/bash|SHELL=/usr/bin/zsh|g' "/etc/default/useradd"
 
     # 设置用户名
     echo "Creating user account..." >&2

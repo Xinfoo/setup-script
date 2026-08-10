@@ -29,6 +29,7 @@ PARTITION_ID=""
 MICRO_CODE=""
 KERNEL=""
 INITRAMFS=""
+TLP=""
 PS3="Enter a number: "
 declare -A file_system_choices=()
 declare -A mount_point_choices=()
@@ -161,6 +162,8 @@ echo "$INITRAMFS" > "/mnt/info/initramfs-img.txt"
 # 获取根目录UUID并传递
 PARTITION="$(find_partition_by_mountpoint "/")"
 echo "$(blkid -s UUID -o value "$PARTITION")" > "/mnt/info/root-uuid.txt"
+
+echo "$TLP" > "/mnt/info/tlp.txt"
 
 # 复制chroot内安装脚本
 cp -ra "$SRC_DIR/functions/chroot/" "/mnt/setup-script-functions/"

@@ -101,6 +101,7 @@ basic_software_installer(){
     # 是否是笔记本
     if confirm "Is this device a laptop?"; then
         onboard_audio="sof-firmware"
+        TLP="yes"
     fi
 
     # 安装

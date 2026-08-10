@@ -7,7 +7,11 @@ bootloader_installer() {
     local initramfs="$(cat "$SRC_DIR/info/initramfs-img.txt")"
     local root_uuid="$(cat "$SRC_DIR/info/root-uuid.txt")"
 
-    bootctl install
+    if confirm "Create a boot entry for the boot manager?"; then
+        bootctl install
+    else
+        bootctl --no-variables install
+    fi
 
     if [[ -z "$micro_code" ]]; then
         echo "title Arch Linux

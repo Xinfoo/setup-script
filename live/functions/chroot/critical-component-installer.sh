@@ -2,6 +2,8 @@
 
 # 重要组件安装器
 critical_component_installer() {
+    # 是否启用TLP
+    local tlp="$(cat "/info/tlp.txt")"
     # zsh相关软件包列表
     local -a zsh_packages_list=(
         "zsh"
@@ -33,4 +35,9 @@ critical_component_installer() {
 
     # 安装uefi工具
     pacman -S --needed --noconfirm ${uefi_tools[@]}
+
+    # 安装TLP
+    if [[ "$tlp" == "yes" ]]; then
+        pacman -S --needed --noconfirm tlp
+    fi
 }

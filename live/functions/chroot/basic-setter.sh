@@ -72,7 +72,7 @@ basic_setter() {
             echo "Please re-enter your root password..." >&2
         fi
     done
-    
+
     # 配置包管理器
     echo "Configuring package manager..." >&2
     sed -i 's/#Color/Color/g' "/etc/pacman.conf"
