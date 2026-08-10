@@ -39,7 +39,7 @@ desktop_environment_installer() {
         "gnome-tweaks"
         "file-roller"
         "gnome-shell-extension-appindicator")
-    
+
     # gnome输入法
     local -a gnome_input_method=(
         "ibus"

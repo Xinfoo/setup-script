@@ -26,7 +26,7 @@ wifi.backend=iwd' > "/etc/NetworkManager/conf.d/wifi_backend.conf"
     echo '[Coredump]
 Storage=none
 ProcessSizeMax=0' > "/etc/systemd/coredump.conf.d/custom.conf"
-    
+
     # 启用服务
     echo "enabling services..." >&2
     systemctl enable NetworkManager.service
