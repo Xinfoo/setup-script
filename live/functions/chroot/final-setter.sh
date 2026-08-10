@@ -2,6 +2,7 @@
 
 # 最终设置器
 final_setter() {
+    local tlp="$(cat "/info/tlp.txt")"
     local user_name
 
     # 让NetworkManager使用iwd作为wifi后端
@@ -40,6 +41,10 @@ ProcessSizeMax=0' > "/etc/systemd/coredump.conf.d/custom.conf"
         systemctl enable sddm.service
     elif [[ "$DESKTOP_ENVIRONMENT" == "Gnome" ]]; then
         systemctl enable gdm.service
+    fi
+
+    if [[ "$tlp" == "yes" ]]; then
+        systemctl enable tlp.service
     fi
 
     if [[ "$FIREWALL" == "yes" ]]; then

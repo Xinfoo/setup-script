@@ -3,6 +3,7 @@
 # 桌面环境安装器
 desktop_environment_installer() {
     local choice
+    local tlp="$(cat "/info/tlp.txt")"
     local PS3="Select a desktop environment: "
 
     # 桌面环境列表
@@ -80,6 +81,10 @@ GLFW_IM_MODULE=ibus' >> "/etc/environment"
             2)
                 DESKTOP_ENVIRONMENT="Gnome"
                 pacman -S --needed gnome gdm
+
+                if [[ "$tlp" == "yes" ]]; then
+                    pacman -S --needed --noconfirm tlp-pd
+                fi
 
                 if confirm "Do you want to install the recommended GNOME software?"; then
                     pacman -S --needed --noconfirm ${gnome_extra_packages[@]}
