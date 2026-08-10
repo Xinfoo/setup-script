@@ -31,10 +31,16 @@ bootloader_installer() {
         cp -a "/usr/share/shim-signed/shimx64.efi" "/boot/EFI/ARCH/SHIMX64.EFI"
         cp -a "/usr/share/shim-signed/mmx64.efi" "/boot/EFI/ARCH/MMX64.EFI"
         cp -a "/usr/share/shim-signed/fbx64.efi" "/boot/EFI/ARCH/FBX64.EFI"
+        # 生成供 fallback 使用的固件启动项描述文件。
+        {
+            printf '\xff\xfe'
+            printf 'SHIMX64.EFI,Arch Linux,,Arch Linux Secure Boot\r\n' | iconv -f UTF-8 -t UTF-16LE
+        } > "/boot/EFI/ARCH/BOOTX64.CSV"
         mv "/boot/$kernel" "/boot/$kernel.bak"
         sbsign --key "/root/secure-boot/MOK.key" --cert "/root/secure-boot/MOK.crt" --output "/boot/EFI/BOOT/GRUBX64.EFI" "/boot/EFI/systemd/systemd-bootx64.efi"
         sbsign --key "/root/secure-boot/MOK.key" --cert "/root/secure-boot/MOK.crt" --output "/boot/EFI/ARCH/GRUBX64.EFI" "/boot/EFI/systemd/systemd-bootx64.efi"
         sbsign --key "/root/secure-boot/MOK.key" --cert "/root/secure-boot/MOK.crt" --output "/boot/$kernel" "/boot/$kernel.bak"
+        cp -a "/root/secure-boot/MOK.cer" "/boot/Arch_Linux_Secure_Boot_Key.cer"
     else
         bootctl --no-variables install
     fi

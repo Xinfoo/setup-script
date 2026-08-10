@@ -174,12 +174,12 @@ cp -a "$SRC_DIR/functions/processor/permission-check.sh" "/mnt/setup-script-func
 cp -a "$SRC_DIR/chroot-setup.sh" "/mnt/setup.sh"
 
 # 复制shim(如果存在)，到安装目录
-if [[ -n "$(ls "$SRC_DIR/shim-signed.pkg.tar.zst")" ]]; then
+if [[ -f "$SRC_DIR/shim-signed.pkg.tar.zst" ]]; then
     cp -a "$SRC_DIR/shim-signed.pkg.tar.zst" "/mnt/shim-signed.pkg.tar.zst"
 fi
 
 # 复制安全启动证书(如果存在)，到root目录
-if [[ -n "$(ls "$SRC_DIR/secure-boot/")" ]]; then
+if [[ -d "$SRC_DIR/secure-boot/" ]]; then
     cp -ra "$SRC_DIR/secure-boot/" "/mnt/root/secure-boot/"
     chmod 500 "/mnt/root/secure-boot"
     chmod 400 /mnt/root/secure-boot/*

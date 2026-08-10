@@ -37,6 +37,70 @@ sudo ./live/setup.sh
 
 脚本中的确认问题使用 `[Y/n]` 形式。直接按 Enter 等同于选择 Yes，请在涉及磁盘擦除、格式化和分区表写入时仔细确认。
 
+### Secure Boot（可选）
+
+Secure Boot 支持依赖用户预先准备的 shim 软件包和 MOK 密钥，不会自动下载软件包、生成密钥或注册 MOK。第一次操作前应保持固件中的 Secure Boot 关闭，并备份密钥。
+
+在运行 `./live/setup.sh` 前，仓库中需要存在以下文件：
+
+```text
+live/
+├── shim-signed.pkg.tar.zst
+└── secure-boot/
+    ├── MOK.key
+    ├── MOK.crt
+    └── MOK.cer
+```
+
+- `shim-signed.pkg.tar.zst`：预先构建好的 `shim-signed` 软件包，需要重命名为该固定名称；
+- `MOK.key`：PEM 格式的 RSA 私钥，供 `sbsign` 使用；
+- `MOK.crt`：PEM 格式的 X.509 证书，供 `sbsign` 使用；
+- `MOK.cer`：同一证书的 DER 版本，供 MokManager 或 `mokutil` 注册。
+
+`shim-signed` 来自 AUR，应提前在另一套可用的 Arch Linux 系统中以普通用户构建，然后把生成的软件包复制并重命名到本仓库：
+
+```bash
+git clone https://aur.archlinux.org/shim-signed.git
+cd shim-signed
+makepkg -s
+cp shim-signed-*.pkg.tar.zst /path/to/setup-script/live/shim-signed.pkg.tar.zst
+```
+
+不要使用 root 运行 `makepkg`。将示例中的 `/path/to/setup-script` 替换为本仓库的实际路径。
+
+可以在仓库根目录生成一组新的 MOK 密钥：
+
+```bash
+mkdir -p live/secure-boot
+
+openssl req -new -x509 -newkey rsa:2048 -sha256 -nodes \
+    -days 3650 \
+    -subj "/CN=Arch Linux Secure Boot/" \
+    -keyout live/secure-boot/MOK.key \
+    -out live/secure-boot/MOK.crt
+
+openssl x509 -outform DER \
+    -in live/secure-boot/MOK.crt \
+    -out live/secure-boot/MOK.cer
+
+chmod 600 live/secure-boot/MOK.key
+chmod 644 live/secure-boot/MOK.crt live/secure-boot/MOK.cer
+```
+
+> [!CAUTION]
+> `MOK.key` 是能够签署可启动代码的私钥。不要把 `shim-signed.pkg.tar.zst`、`secure-boot/` 或其中的密钥提交到 Git，也不要把私钥提供给其他人。私钥丢失后，将无法使用原密钥为更新后的内核和引导器签名。
+
+脚本检测到 shim 软件包和密钥目录后，会在 chroot 阶段询问是否启用 Secure Boot。选择 Yes 后，脚本会：
+
+- 安装本地 `shim-signed` 软件包；
+- 将 shim、MokManager 和 fallback 安装到 EFI 分区；
+- 使用 MOK 签署 systemd-boot 和当前选择的内核；
+- 自动生成 `/boot/EFI/ARCH/BOOTX64.CSV`，无需手动创建 CSV；
+- 将 DER 证书复制为 `/boot/Arch_Linux_Secure_Boot_Key.cer`，供 MokManager 直接读取；
+- 保留 `/root/secure-boot/`，供首次注册 MOK 和后续重新签名使用。
+
+如果缺少这些材料，脚本会跳过 Secure Boot，继续执行普通的 systemd-boot 安装。
+
 ### chroot 阶段
 
 Live 阶段安装完基础系统后，脚本会进入目标系统的 chroot shell，并提示手动执行：
@@ -183,6 +247,89 @@ systemd-boot 配置会根据之前选择的内核和 CPU 平台生成，不会�
 
 chroot 内的 `bootctl install` 会把 systemd-boot 安装到 EFI 分区，并写入 EFI 默认/回退加载器路径。用户可以选择是否注册名为 `Linux Boot Manager` 的 EFI 固件启动项；选择不注册时，引导文件和默认/回退路径仍会正常安装。
 
+启用 Secure Boot 时，脚本会改用 shim 作为第一阶段加载器：
+
+```text
+/boot/EFI/BOOT/BOOTX64.EFI       # shim 回退入口
+/boot/EFI/BOOT/GRUBX64.EFI       # 使用 MOK 签名的 systemd-boot
+/boot/EFI/BOOT/MMX64.EFI         # MokManager
+/boot/EFI/BOOT/FBX64.EFI         # fallback
+/boot/EFI/ARCH/SHIMX64.EFI       # 固件启动项指向的 shim
+/boot/EFI/ARCH/GRUBX64.EFI       # 使用 MOK 签名的 systemd-boot
+/boot/EFI/ARCH/MMX64.EFI         # MokManager
+/boot/EFI/ARCH/BOOTX64.CSV       # fallback 用于恢复固件启动项
+/boot/Arch_Linux_Secure_Boot_Key.cer  # 供 MokManager 注册的 DER 证书
+```
+
+此时主动创建的 EFI 固件启动项名称为 `Arch Linux`，并指向 `\EFI\ARCH\SHIMX64.EFI`。即使没有主动创建，固件也可以尝试标准回退路径；fallback 会根据 `BOOTX64.CSV` 恢复启动项。
+
+#### 首次注册 MOK
+
+脚本会把公开的 DER 证书复制到 EFI 分区根目录。安装完成后，可以进入固件设置启用 Secure Boot，然后尝试启动 `Arch Linux`。shim 尚不信任新签名时会进入 MokManager；选择从磁盘注册密钥，在 EFI 分区中找到：
+
+```text
+Arch_Linux_Secure_Boot_Key.cer
+```
+
+确认注册并按提示重新启动。不同版本的 MokManager 菜单文字可能略有差异，通常需要依次选择从磁盘注册密钥、选择证书、查看并确认密钥，然后重启。
+
+`MOK.cer` 是公开证书，不包含私钥，可以保留在 EFI 分区中，以便以后重新注册。真正需要严格保护的是 `/root/secure-boot/MOK.key`。
+
+如果 MokManager 没有自动出现，也可以先关闭 Secure Boot，正常启动一次新安装的 Arch Linux，然后提交注册请求：
+
+```bash
+sudo mokutil --import /root/secure-boot/MOK.cer
+sudo mokutil --list-new
+```
+
+`mokutil --import` 会要求设置一个临时密码。重新启动后进入 MokManager，确认注册并输入该密码。完成注册并再次重启后，再进入固件设置启用 Secure Boot。
+
+进入系统后可以检查状态和签名：
+
+```bash
+mokutil --sb-state
+mokutil --test-key /root/secure-boot/MOK.cer
+sbverify --list /boot/EFI/ARCH/GRUBX64.EFI
+sbverify --list /boot/vmlinuz-linux
+```
+
+最后一条命令中的内核文件名需要根据实际选择改为 `vmlinuz-linux-lts`、`vmlinuz-linux-zen` 或 `vmlinuz-linux-hardened`。
+
+#### 系统更新后的重新签名
+
+内核更新会覆盖已经签名的 `/boot/vmlinuz-*`。每次更新内核后，都必须使用保留的 MOK 重新签名。以下示例以 `linux` 内核为例：
+
+```bash
+kernel=/boot/vmlinuz-linux
+mv "$kernel" "${kernel}.unsigned"
+sbsign \
+    --key /root/secure-boot/MOK.key \
+    --cert /root/secure-boot/MOK.crt \
+    --output "$kernel" \
+    "${kernel}.unsigned"
+sbverify --list "$kernel"
+```
+
+systemd 更新后，也应使用新版 systemd-boot 重新生成 shim 的第二阶段加载器：
+
+```bash
+systemd_boot=/usr/lib/systemd/boot/efi/systemd-bootx64.efi
+
+sbsign \
+    --key /root/secure-boot/MOK.key \
+    --cert /root/secure-boot/MOK.crt \
+    --output /boot/EFI/BOOT/GRUBX64.EFI \
+    "$systemd_boot"
+
+sbsign \
+    --key /root/secure-boot/MOK.key \
+    --cert /root/secure-boot/MOK.crt \
+    --output /boot/EFI/ARCH/GRUBX64.EFI \
+    "$systemd_boot"
+```
+
+重新签名前不要删除 `/root/secure-boot/MOK.key`。如果使用 NVIDIA DKMS 或其他外部内核模块，还需要另外配置模块签名；本脚本目前不负责为 DKMS 模块签名。
+
 最后，脚本会：
 
 - 删除复制到目标系统根目录的安装函数和临时信息；
@@ -194,7 +341,7 @@ chroot 内的 `bootctl install` 会把 systemd-boot 安装到 EFI 分区，并�
 正常完成后，目标系统将具有：
 
 - 使用 UUID 的 `/etc/fstab`；
-- systemd-boot、两个 Arch Linux 启动配置，以及由用户选择是否注册的 `Linux Boot Manager` EFI 固件启动项；
+- systemd-boot、两个 Arch Linux 启动配置，以及由用户选择是否注册的普通或 Secure Boot EFI 固件启动项；
 - 用户选择的 Arch 内核和对应头文件；
 - Intel/AMD microcode，或适用于虚拟机的无 microcode 配置；
 - NetworkManager，并使用 iwd 作为 Wi-Fi 后端；
@@ -231,6 +378,8 @@ live/
 - 多处配置使用针对当前 Arch Linux 默认文件内容的精确 `sed` 替换，系统包更新后可能需要调整；
 - 使用 `F2FS-DATA` 本地镜像安装时，重启前必须将目标系统从临时 localhost 镜像切换到永久镜像；
 - NVIDIA 分支只安装 `nvidia-open-dkms`；
+- Secure Boot 需要用户自行准备和保护 MOK、完成首次注册，并在内核或 systemd-boot 更新后重新签名；
+- Secure Boot 分支只签署内核和 systemd-boot，不会把 initramfs 和内核参数封装进统一内核映像，也不会自动签署 DKMS 模块；
 - 安装过程包含大量交互，不适合无人值守执行；
 - 当前项目仍应先在虚拟机或可丢弃磁盘上完成实际验证，再用于保存重要数据的机器。
 
