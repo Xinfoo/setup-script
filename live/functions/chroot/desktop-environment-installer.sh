@@ -9,7 +9,8 @@ desktop_environment_installer() {
     # 桌面环境列表
     local -a desktop_environment=(
         "KDE Plasma"
-        "Gnome")
+        "Gnome"
+        "Do not install a desktop environment")
 
     # kde桌面额外软件
     local -a kde_extra_packages=(
@@ -94,6 +95,9 @@ GLFW_IM_MODULE=ibus' >> "/etc/environment"
                     pacman -S --needed --noconfirm ${gnome_input_method[@]}
                 fi
 
+                break
+                ;;
+            3)
                 break
                 ;;
             *)

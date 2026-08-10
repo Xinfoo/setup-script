@@ -1,6 +1,6 @@
 # Arch Linux Setup Script
 
-这是一个面向 Arch Linux Live 环境的交互式安装脚本。它负责完成磁盘分区、格式化、挂载、基础系统安装、chroot 内配置、桌面环境安装以及 systemd-boot 引导配置。
+这是一个面向 Arch Linux Live 环境的交互式安装脚本。它负责完成磁盘分区、格式化、挂载、基础系统安装、chroot 内配置、可选的桌面环境安装以及 systemd-boot 引导配置。
 
 这个项目不是通用安装框架，也不是无人值守安装器。它按照作者自己的安装习惯设计，适合已经了解 Linux 磁盘、分区、挂载点和 UEFI 启动方式的用户。
 
@@ -144,7 +144,7 @@ EFI 分区固定使用 FAT32。ROOT 和 HOME 可以选择 Ext4、XFS 或 F2FS。
 - `linux-zen`；
 - `linux-hardened`。
 
-脚本会同时安装对应的内核头文件。笔记本还可以选择安装 `sof-firmware`。
+脚本会同时安装对应的内核头文件。选择笔记本时，脚本还会安装 `sof-firmware` 和 TLP，并在目标系统中启用 `tlp.service`。
 
 基础软件包括 `base`、`base-devel`、文件系统工具、编辑器以及 Arch 手册等。安装完成后，脚本将 UUID 格式的 fstab 写入 `/mnt/etc/fstab`。
 
@@ -158,12 +158,14 @@ EFI 分区固定使用 FAT32。ROOT 和 HOME 可以选择 Ext4、XFS 或 F2FS。
 4. 启用 pacman 彩色输出并刷新软件包数据库；
 5. 安装 Zsh、NetworkManager、iwd、网络工具和 UEFI 工具；
 6. 按用户选择安装 Intel 显卡组件、NVIDIA Open DKMS 驱动和蓝牙组件；
-7. 安装 KDE Plasma 或 GNOME；
-8. 可选安装中文输入法、桌面推荐软件、Firewall、打印组件及额外工具；
+7. 安装 KDE Plasma、GNOME，或者跳过桌面环境安装；
+8. 可选安装中文输入法、桌面推荐软件、Firewall、打印组件及额外工具；选择跳过桌面环境时，仍会安装字体，并继续询问是否安装这些可选软件；
 9. 安装并配置 systemd-boot；
 10. 配置服务、创建普通用户、设置密码并打开 `visudo`。
 
 NVIDIA 分支会修改 `/etc/mkinitcpio.conf`，加入 NVIDIA 模块并移除默认 `kms` hook。该逻辑依赖当前 Arch Linux 的默认配置格式。
+
+选择笔记本并安装 GNOME 时，脚本还会安装 `tlp-pd`，使 GNOME 可以通过 Power Profiles 接口使用 TLP。KDE Plasma 直接使用 TLP 作为 PowerDevil 的可选后端，因此不会额外安装 `tlp-pd`。
 
 chroot 配置结束前，脚本会询问是否写入针对中国地区的 pacman 镜像列表。该设置用于目标系统安装完成后的软件更新，不影响此前已经完成的软件安装。
 
@@ -198,9 +200,10 @@ chroot 内的 `bootctl install` 负责把 systemd-boot 安装到 EFI 分区、�
 - NetworkManager，并使用 iwd 作为 Wi-Fi 后端；
 - systemd-timesyncd 和 fstrim timer；
 - 已禁用持久化核心转储；
-- KDE Plasma 或 GNOME 桌面；
+- KDE Plasma、GNOME，或者不安装桌面环境；
 - 一个属于 `wheel` 组、默认 shell 为 Zsh 的普通用户；
-- 根据选择启用的蓝牙、显示管理器、Firewall 和 CUPS 服务。
+- 笔记本上安装并启用的 TLP；
+- 根据选择启用的蓝牙、显示管理器、Firewall 和 CUPS 服务；未安装桌面环境时不会启用显示管理器。
 
 脚本会打开 `visudo`，sudo 权限的具体内容由用户自行编辑。
 
