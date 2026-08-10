@@ -51,7 +51,7 @@ chroot 内的配置脚本执行完成后，输入：
 exit
 ```
 
-Live 阶段的主脚本随后会继续清理临时文件并卸载目标文件系统。systemd-boot 的安装和 EFI 固件启动项注册由 chroot 阶段的 `bootctl install` 完成。
+Live 阶段的主脚本随后会继续清理临时文件并卸载目标文件系统。systemd-boot 由 chroot 阶段的 `bootctl install` 安装，用户可以选择是否同时注册 EFI 固件启动项。
 
 ## 安装流程
 
@@ -181,7 +181,7 @@ systemd-boot 配置会根据之前选择的内核和 CPU 平台生成，不会�
 - `Arch Linux`；
 - `Arch Linux Fallback`，当前使用与默认条目相同的内核、initramfs 和内核参数。
 
-chroot 内的 `bootctl install` 负责把 systemd-boot 安装到 EFI 分区、写入 EFI 默认/回退加载器路径，并注册名为 `Linux Boot Manager` 的固件启动项。
+chroot 内的 `bootctl install` 会把 systemd-boot 安装到 EFI 分区，并写入 EFI 默认/回退加载器路径。用户可以选择是否注册名为 `Linux Boot Manager` 的 EFI 固件启动项；选择不注册时，引导文件和默认/回退路径仍会正常安装。
 
 最后，脚本会：
 
@@ -194,7 +194,7 @@ chroot 内的 `bootctl install` 负责把 systemd-boot 安装到 EFI 分区、�
 正常完成后，目标系统将具有：
 
 - 使用 UUID 的 `/etc/fstab`；
-- systemd-boot 及两个 Arch Linux 启动配置；
+- systemd-boot、两个 Arch Linux 启动配置，以及由用户选择是否注册的 `Linux Boot Manager` EFI 固件启动项；
 - 用户选择的 Arch 内核和对应头文件；
 - Intel/AMD microcode，或适用于虚拟机的无 microcode 配置；
 - NetworkManager，并使用 iwd 作为 Wi-Fi 后端；
