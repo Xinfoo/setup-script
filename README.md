@@ -222,7 +222,7 @@ EFI 分区固定使用 FAT32。ROOT 和 HOME 可以选择 Ext4、XFS 或 F2FS。
 4. 启用 pacman 彩色输出并刷新软件包数据库；
 5. 安装 Zsh、NetworkManager、iwd、网络工具和 UEFI 工具；
 6. 按用户选择安装 Intel 显卡组件、NVIDIA Open DKMS 驱动和蓝牙组件；
-7. 安装 KDE Plasma、GNOME，或者跳过桌面环境安装；
+7. 安装 KDE Plasma、GNOME、实验性的 Hyprland，或者跳过桌面环境安装；
 8. 可选安装中文输入法、桌面推荐软件、Firewall、打印组件及额外工具；选择跳过桌面环境时，仍会安装字体，并继续询问是否安装这些可选软件；
 9. 安装并配置 systemd-boot；
 10. 配置服务、创建普通用户、设置密码并打开 `visudo`。
@@ -230,6 +230,12 @@ EFI 分区固定使用 FAT32。ROOT 和 HOME 可以选择 Ext4、XFS 或 F2FS。
 NVIDIA 分支会修改 `/etc/mkinitcpio.conf`，加入 NVIDIA 模块并移除默认 `kms` hook。该逻辑依赖当前 Arch Linux 的默认配置格式。
 
 选择笔记本并安装 GNOME 时，脚本还会安装 `tlp-pd`，使 GNOME 可以通过 Power Profiles 接口使用 TLP。KDE Plasma 直接使用 TLP 作为 PowerDevil 的可选后端，因此不会额外安装 `tlp-pd`。
+
+#### Hyprland（实验性）
+
+选择 Hyprland 后，脚本会安装 Hyprland、UWSM、greetd、ReGreet、PipeWire、Waybar、Wofi、Mako、Hyprpaper、Thunar、桌面门户和常用的 Wayland 工具，并启用 `greetd.service`。脚本还会生成供 ReGreet 单独使用的 `/etc/greetd/hyprland.lua`，并为 ReGreet 设置 Materia GTK 主题、Papirus 图标和 Noto Sans 字体。
+
+该选项只准备基础组件和图形登录界面，不会为普通用户生成 Hyprland 及相关组件的配置文件，也不会配置相应的 systemd 用户单元。用户需要在安装完成后自行准备这些配置。
 
 chroot 配置结束前，脚本会询问是否写入针对中国地区的 pacman 镜像列表。该设置用于目标系统安装完成后的软件更新，不影响此前已经完成的软件安装。
 
@@ -347,10 +353,10 @@ sbsign \
 - NetworkManager，并使用 iwd 作为 Wi-Fi 后端；
 - systemd-timesyncd 和 fstrim timer；
 - 已禁用持久化核心转储；
-- KDE Plasma、GNOME，或者不安装桌面环境；
+- KDE Plasma、GNOME、实验性的 Hyprland，或者不安装桌面环境；
 - 一个属于 `wheel` 组、默认 shell 为 Zsh 的普通用户；
 - 笔记本上安装并启用的 TLP；
-- 根据选择启用的蓝牙、显示管理器、Firewall 和 CUPS 服务；未安装桌面环境时不会启用显示管理器。
+- 根据选择启用的蓝牙、显示管理器、Firewall 和 CUPS 服务；Hyprland 使用 greetd/ReGreet，未安装桌面环境时不会启用显示管理器。
 
 脚本会打开 `visudo`，sudo 权限的具体内容由用户自行编辑。
 
@@ -378,6 +384,7 @@ live/
 - 多处配置使用针对当前 Arch Linux 默认文件内容的精确 `sed` 替换，系统包更新后可能需要调整；
 - 使用 `F2FS-DATA` 本地镜像安装时，重启前必须将目标系统从临时 localhost 镜像切换到永久镜像；
 - NVIDIA 分支只安装 `nvidia-open-dkms`；
+- Hyprland 选项仍处于实验阶段，只安装基础组件并配置 ReGreet；用户需要自行准备 Hyprland 配置文件和相关的 systemd 用户单元配置；
 - Secure Boot 需要用户自行准备和保护 MOK、完成首次注册，并在内核或 systemd-boot 更新后重新签名；
 - Secure Boot 分支只签署内核和 systemd-boot，不会把 initramfs 和内核参数封装进统一内核映像，也不会自动签署 DKMS 模块；
 - 安装过程包含大量交互，不适合无人值守执行；
