@@ -9,8 +9,10 @@ final_setter() {
     echo "Configuring NetworkManager..." >&2
     sleep 1
     # NetworkManager 配置项如果改名，WiFi 后端设置会失效。
-    echo '[device]
-wifi.backend=iwd' > "/etc/NetworkManager/conf.d/wifi_backend.conf"
+    cat > "/etc/NetworkManager/conf.d/wifi_backend.conf" << EOF
+[device]
+wifi.backend=iwd
+EOF
 
     # 设置时间同步
     echo "Configuring time synchronization..." >&2
@@ -23,9 +25,11 @@ wifi.backend=iwd' > "/etc/NetworkManager/conf.d/wifi_backend.conf"
     sleep 1
     mkdir "/etc/systemd/coredump.conf.d/"
     sleep 1
-    echo '[Coredump]
+    cat > "/etc/systemd/coredump.conf.d/custom.conf" << EOF
+[Coredump]
 Storage=none
-ProcessSizeMax=0' > "/etc/systemd/coredump.conf.d/custom.conf"
+ProcessSizeMax=0
+EOF
 
     # 启用服务
     echo "enabling services..." >&2
@@ -39,8 +43,14 @@ ProcessSizeMax=0' > "/etc/systemd/coredump.conf.d/custom.conf"
 
     if [[ "$DESKTOP_ENVIRONMENT" == "KDE" ]]; then
         systemctl enable sddm.service
-    elif [[ "$DESKTOP_ENVIRONMENT" == "Gnome" ]]; then
+    fi
+
+    if [[ "$DESKTOP_ENVIRONMENT" == "Gnome" ]]; then
         systemctl enable gdm.service
+    fi
+
+    if [[ "$DESKTOP_ENVIRONMENT" == "Hyprland" ]]; then
+        systemctl enable greetd.service
     fi
 
     if [[ "$tlp" == "yes" ]]; then

@@ -36,7 +36,7 @@ use_local_mirror() {
     mkdir -p "/etc/nginx/conf.d"
     sed -i '/http {/a\    include       conf.d/*.conf;' "/etc/nginx/nginx.conf"
 
-    echo '
+    cat > "/etc/nginx/conf.d/local_mirror.conf" << 'EOF'
 types_hash_max_size 4096;
 types_hash_bucket_size 128;
 server {
@@ -54,7 +54,7 @@ server {
         try_files $uri $uri/ =404;
     }
 }
-' > "/etc/nginx/conf.d/local_mirror.conf"
+EOF
 
     nginx
     echo "Nginx configuration is completed."
