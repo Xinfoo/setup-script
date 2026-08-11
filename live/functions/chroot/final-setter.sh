@@ -39,8 +39,14 @@ ProcessSizeMax=0' > "/etc/systemd/coredump.conf.d/custom.conf"
 
     if [[ "$DESKTOP_ENVIRONMENT" == "KDE" ]]; then
         systemctl enable sddm.service
-    elif [[ "$DESKTOP_ENVIRONMENT" == "Gnome" ]]; then
+    fi
+
+    if [[ "$DESKTOP_ENVIRONMENT" == "Gnome" ]]; then
         systemctl enable gdm.service
+    fi
+
+    if [[ "$DESKTOP_ENVIRONMENT" == "Hyprland" ]]; then
+        systemctl enable greetd.service
     fi
 
     if [[ "$tlp" == "yes" ]]; then
