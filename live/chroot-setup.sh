@@ -45,7 +45,8 @@ final_setter
 # 设置镜像站
 if confirm "Do you want to use a mirror optimized for the China region?"; then
     echo 'Setting up software mirror site...'
-    echo '################################################################################
+    cat > "/etc/pacman.d/mirrorlist" << 'EOF'
+################################################################################
 ############################ Arch Linux mirrorlist #############################
 ################################################################################
 
@@ -69,7 +70,8 @@ Server = https://mirror.redrock.team/archlinux/$repo/os/$arch
 Server = https://mirrors.shanghaitech.edu.cn/archlinux/$repo/os/$arch
 Server = https://mirrors.sjtug.sjtu.edu.cn/archlinux/$repo/os/$arch
 Server = https://mirrors.wsyu.edu.cn/archlinux/$repo/os/$arch
-Server = https://mirrors.xjtu.edu.cn/archlinux/$repo/os/$arch' > "/etc/pacman.d/mirrorlist"
+Server = https://mirrors.xjtu.edu.cn/archlinux/$repo/os/$arch
+EOF
 fi
 
 echo "System configuration complete."

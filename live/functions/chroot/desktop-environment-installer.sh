@@ -224,7 +224,8 @@ EOF
     pacman -S --needed --noconfirm ${fonts[@]}
 
     # 设置字体
-    echo '<fontconfig>
+    cat > "/etc/fonts/local.conf" << EOF
+<fontconfig>
     <alias>
         <family>sans-serif</family>
         <prefer>
@@ -267,5 +268,6 @@ EOF
             <family>DejaVu Sans Mono</family>
         </prefer>
     </alias>
-</fontconfig>' > "/etc/fonts/local.conf"
+</fontconfig>
+EOF
 }

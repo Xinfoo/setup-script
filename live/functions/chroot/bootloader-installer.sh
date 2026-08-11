@@ -51,27 +51,35 @@ bootloader_installer() {
     fi
 
     if [[ -z "$micro_code" ]]; then
-        echo "title Arch Linux
+        cat > "/boot/loader/entries/arch.conf" << EOF
+title Arch Linux
 linux /$kernel
 initrd /$initramfs
-options root=UUID=$root_uuid rw loglevel=3" > "/boot/loader/entries/arch.conf"
+options root=UUID=$root_uuid rw loglevel=3
+EOF
 
-        echo "title Arch Linux Fallback
+        cat > "/boot/loader/entries/arch-fallback.conf" << EOF
+title Arch Linux Fallback
 linux /$kernel
 initrd /$initramfs
-options root=UUID=$root_uuid rw loglevel=3" > "/boot/loader/entries/arch-fallback.conf"
+options root=UUID=$root_uuid rw loglevel=3
+EOF
     else
-        echo "title Arch Linux
+        cat > "/boot/loader/entries/arch.conf" << EOF
+title Arch Linux
 linux /$kernel
 initrd /$micro_code
 initrd /$initramfs
-options root=UUID=$root_uuid rw loglevel=3" > "/boot/loader/entries/arch.conf"
+options root=UUID=$root_uuid rw loglevel=3
+EOF
 
-        echo "title Arch Linux Fallback
+        cat > "/boot/loader/entries/arch-fallback.conf" << EOF
+title Arch Linux Fallback
 linux /$kernel
 initrd /$micro_code
 initrd /$initramfs
-options root=UUID=$root_uuid rw loglevel=3" > "/boot/loader/entries/arch-fallback.conf"
+options root=UUID=$root_uuid rw loglevel=3
+EOF
     fi
 
     echo "default arch.conf
