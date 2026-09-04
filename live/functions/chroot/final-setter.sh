@@ -31,6 +31,17 @@ Storage=none
 ProcessSizeMax=0
 EOF
 
+    # 限制Journal大小
+    echo "Limit journal size..." >&2
+    sleep 1
+    mkdir "/etc/systemd/journald.conf.d"
+    sleep
+    cat > "/etc/systemd/journald.conf.d/custom.conf" << EOF
+[Journal]
+SystemMaxUse=500M
+SystemMaxFileSize=50M
+EOF
+
     # 启用服务
     echo "enabling services..." >&2
     systemctl enable NetworkManager.service
