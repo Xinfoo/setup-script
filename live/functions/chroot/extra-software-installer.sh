@@ -13,6 +13,7 @@ extra_software_installer() {
     # 终端工具
     local -a terminal_tools=(
         "git"
+        "openssh"
         "htop"
         "nvtop"
         "tmux"
