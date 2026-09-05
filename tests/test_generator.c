@@ -54,6 +54,15 @@ static void make_partition(PartitionInfo *partition, unsigned number,
     partition->start_sector = UINT64_C(2048) + (uint64_t)(number - 1) * UINT64_C(2097152);
 }
 
+static void make_second_disk(DiskInfo *disk)
+{
+    make_disk(disk, 0);
+    copy_text(disk->name, sizeof(disk->name), "sdb");
+    copy_text(disk->path, sizeof(disk->path), "/dev/sdb");
+    copy_text(disk->model, sizeof(disk->model), "Integration Test Data Disk");
+    copy_text(disk->serial, sizeof(disk->serial), "GENERATOR-TEST-002");
+}
+
 static char *read_file(const char *path)
 {
     FILE *file = fopen(path, "r");
@@ -410,16 +419,16 @@ static bool test_existing_keep_and_format_actions(void)
     make_partition(&disk.partitions[2], 3, UINT64_C(500) * GIB, "xfs");
     plan_init(&plan);
     plan_select_disk(&plan, &disk);
-    plan.storage.partitions[0].usage = PART_BOOT;
-    plan.storage.partitions[1].usage = PART_ROOT;
-    plan.storage.partitions[1].action = ACTION_FORMAT;
-    plan.storage.partitions[1].target_fs = FS_F2FS;
-    plan.storage.partitions[1].f2fs_mode = F2FS_COMPRESSED;
-    plan.storage.partitions[2].usage = PART_HOME;
+    plan.storage.disks[0].partitions[0].usage = PART_BOOT;
+    plan.storage.disks[0].partitions[1].usage = PART_ROOT;
+    plan.storage.disks[0].partitions[1].action = ACTION_FORMAT;
+    plan.storage.disks[0].partitions[1].target_fs = FS_F2FS;
+    plan.storage.disks[0].partitions[1].f2fs_mode = F2FS_COMPRESSED;
+    plan.storage.disks[0].partitions[2].usage = PART_HOME;
 
     if (!generate_script(&plan, &script)) return false;
     passed &= require_fragment(&script,
-                               "readonly STORAGE_MODE='existing'",
+                               "DISK_MODES=(\n    'existing'\n)",
                                "existing-partition mode");
     passed &= require_fragment(&script,
                                "PART_ACTIONS=(\n    'format'\n    'keep'\n    'keep'\n)",
@@ -513,6 +522,42 @@ static bool test_custom_package_config_is_emitted(void)
     return passed;
 }
 
+static bool test_multi_disk_format_only_script(void)
+{
+    DiskInfo system_disk;
+    DiskInfo data_disk;
+    InstallPlan plan;
+    GeneratedScript script;
+    bool passed = true;
+
+    make_disk(&system_disk, 0);
+    make_second_disk(&data_disk);
+    plan_init(&plan);
+    plan_select_disk(&plan, &system_disk);
+    plan_use_automatic(&plan, &system_disk, STORAGE_AUTO_ROOT_ONLY);
+    if (!plan_add_disk(&plan, &data_disk)) return false;
+    disk_plan_use_automatic(&plan.storage.disks[1], &data_disk, STORAGE_AUTO_DATA);
+
+    if (!generate_script(&plan, &script)) return false;
+    passed &= require_fragment(&script,
+                               "INSTALL_DISKS=(\n    '/dev/nvme0n1'\n    '/dev/sdb'\n)",
+                               "both participating disks");
+    passed &= require_fragment(&script,
+                               "DISK_MODES=(\n    'auto-root-only'\n    'auto-data'\n)",
+                               "per-disk partition modes");
+    passed &= require_fragment(&script, "'/dev/sdb1'",
+                               "the format-only data partition");
+    passed &= require_fragment(&script, "'unused'",
+                               "an unmounted partition purpose");
+    passed &= require_fragment(&script,
+                               "[[ \"$usage\" != swap && \"$usage\" != unused ]] || continue",
+                               "the format-only mount skip");
+    passed &= require_fragment(&script, "auto-data)",
+                               "the single data-disk partitioner");
+    generated_script_destroy(&script);
+    return passed;
+}
+
 int main(void)
 {
     bool automatic = test_automatic_script();
@@ -520,6 +565,7 @@ int main(void)
     bool symlink = test_output_symlink_is_rejected();
     bool local_mirror = test_local_mirror_script();
     bool custom_packages = test_custom_package_config_is_emitted();
+    bool multi_disk = test_multi_disk_format_only_script();
 
     (void)printf("%s automatic generator integration\n",
                  automatic ? "PASS" : "FAIL");
@@ -531,6 +577,8 @@ int main(void)
                  local_mirror ? "PASS" : "FAIL");
     (void)printf("%s custom package configuration\n",
                  custom_packages ? "PASS" : "FAIL");
-    return automatic && existing && symlink && local_mirror && custom_packages
+    (void)printf("%s multi-disk format-only generation\n",
+                 multi_disk ? "PASS" : "FAIL");
+    return automatic && existing && symlink && local_mirror && custom_packages && multi_disk
                ? EXIT_SUCCESS : EXIT_FAILURE;
 }

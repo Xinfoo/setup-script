@@ -37,6 +37,7 @@ typedef struct {
     const char *script_path;
     Screen screen;
     int row;
+    size_t active_disk;
     int review_offset;
     int preview_offset;
     bool dirty;
@@ -71,20 +72,20 @@ static void set_status(UiState *state, const char *message)
 
 static bool disk_identity_matches(const InstallPlan *plan, const HardwareInventory *inventory)
 {
-    const DiskInfo *disk;
-    if (plan->storage.disk_path[0] == '\0') return true;
-    disk = inventory_find_disk(inventory, plan->storage.disk_path);
-    if (disk == NULL || disk->read_only || disk->size_bytes != plan->storage.disk_size_bytes) return false;
-    if (plan->storage.disk_serial[0] != '\0' &&
-        strcmp(disk->serial, plan->storage.disk_serial) != 0) return false;
-    if (plan->storage.disk_model[0] != '\0' &&
-        strcmp(disk->model, plan->storage.disk_model) != 0) return false;
-    if (plan->storage.mode == STORAGE_EXISTING) {
-        if (strcasecmp(disk->partition_table, plan->storage.partition_table) != 0) return false;
-        for (size_t index = 0; index < plan->storage.partition_count; ++index) {
-            const PartitionPlan *planned = &plan->storage.partitions[index];
+    for (size_t disk_index = 0; disk_index < plan->storage.disk_count; ++disk_index) {
+        const DiskPlan *planned_disk = &plan->storage.disks[disk_index];
+        const DiskInfo *disk = inventory_find_disk(inventory, planned_disk->path);
+        if (disk == NULL || disk->read_only || disk->size_bytes != planned_disk->size_bytes) return false;
+        if (planned_disk->serial[0] != '\0' && strcmp(disk->serial, planned_disk->serial) != 0)
+            return false;
+        if (planned_disk->model[0] != '\0' && strcmp(disk->model, planned_disk->model) != 0)
+            return false;
+        if (planned_disk->mode != STORAGE_EXISTING) continue;
+        if (strcasecmp(disk->partition_table, planned_disk->partition_table) != 0) return false;
+        for (size_t index = 0; index < planned_disk->partition_count; ++index) {
+            const PartitionPlan *planned = &planned_disk->partitions[index];
             const PartitionInfo *current = NULL;
-            if (planned->usage == PART_UNUSED) continue;
+            if (planned->usage == PART_UNUSED && planned->action != ACTION_FORMAT) continue;
             for (size_t part = 0; part < disk->partition_count; ++part) {
                 if (disk->partitions[part].number == planned->number &&
                     strcmp(disk->partitions[part].path, planned->device) == 0) {
@@ -393,6 +394,17 @@ static bool generate(UiState *state)
     return true;
 }
 
+static const DiskPlan *root_disk_plan(const InstallPlan *plan)
+{
+    for (size_t disk_index = 0; disk_index < plan->storage.disk_count; ++disk_index) {
+        const DiskPlan *disk = &plan->storage.disks[disk_index];
+        for (size_t index = 0; index < disk->partition_count; ++index) {
+            if (disk->partitions[index].usage == PART_ROOT) return disk;
+        }
+    }
+    return NULL;
+}
+
 static void draw_home(UiState *state)
 {
     static const char *const names[] = {
@@ -403,13 +415,15 @@ static void draw_home(UiState *state)
     ValidationReport report;
     char size[32];
     validate_plan(state->plan, &report);
-    format_size(state->plan->storage.disk_size_bytes, size, sizeof(size));
-    if (state->plan->storage.disk_path[0] == '\0')
+    const DiskPlan *root_disk = root_disk_plan(state->plan);
+    if (root_disk != NULL) format_size(root_disk->size_bytes, size, sizeof(size));
+    else copy_text(size, sizeof(size), "-");
+    if (state->plan->storage.disk_count == 0)
         copy_text(details[0], sizeof(details[0]), "Not configured");
     else
-        (void)snprintf(details[0], sizeof(details[0]), "%.120s | %.20s | %.80s",
-                       state->plan->storage.disk_path, size,
-                       storage_mode_name(state->plan->storage.mode));
+        (void)snprintf(details[0], sizeof(details[0]), "%zu disk(s) | root %.100s | %.20s",
+                       state->plan->storage.disk_count,
+                       root_disk != NULL ? root_disk->path : "not assigned", size);
     (void)snprintf(details[1], sizeof(details[1]), "%s | %s | %s",
                    platform_name(state->plan->system.platform), kernel_name(state->plan->system.kernel),
                    state->plan->system.laptop ? "laptop" : "desktop");
@@ -488,27 +502,34 @@ static int disk_dialog(const HardwareInventory *inventory, const char *selected_
 
 static void choose_disk(UiState *state)
 {
-    int choice = disk_dialog(state->inventory, state->plan->storage.disk_path);
+    StoragePlan *storage = &state->plan->storage;
+    const char *active_path = state->active_disk < storage->disk_count
+                                  ? storage->disks[state->active_disk].path : "";
+    int choice = disk_dialog(state->inventory, active_path);
     if (choice < 0) return;
     const DiskInfo *disk = &state->inventory->disks[choice];
+    DiskPlan *existing = plan_find_disk(state->plan, disk->path);
+    if (existing != NULL) {
+        state->active_disk = (size_t)(existing - storage->disks);
+        state->row = 0;
+        set_status(state, "Active storage disk changed; no plan data was reset.");
+        return;
+    }
     if (disk->read_only) {
         set_status(state, "The selected disk is read-only and cannot be an installation target.");
         return;
     }
-    if (strcmp(state->plan->storage.disk_path, disk->path) == 0 &&
-        disk_identity_matches(state->plan, state->inventory)) {
-        set_status(state, "That disk is already the current installation target.");
-        return;
-    }
     if (disk->removable && !confirm_dialog("Removable disk",
         "This disk is removable or connected by USB. Select it anyway?")) return;
-    if (state->plan->storage.disk_path[0] != '\0' &&
-        !confirm_dialog("Change target disk", "Changing disk resets the storage plan. Continue?")) return;
-    plan_select_disk(state->plan, disk);
-    state->target_identity_matches = true;
+    if (!plan_add_disk(state->plan, disk)) {
+        set_status(state, "The installation plan already contains the maximum number of disks.");
+        return;
+    }
+    state->active_disk = storage->disk_count - 1;
+    state->target_identity_matches = disk_identity_matches(state->plan, state->inventory);
     state->row = 0;
     state->dirty = true;
-    set_status(state, "Target disk selected; existing partitions are untouched.");
+    set_status(state, "Disk added with its existing partitions untouched.");
 }
 
 static void choose_layout(UiState *state)
@@ -516,20 +537,31 @@ static void choose_layout(UiState *state)
     static const char *const options[] = {
         "Root + recommended swap",
         "100 GiB root + home + recommended swap",
-        "Root only, no swap"
+        "Root only, no swap",
+        "Single whole-disk data partition (no mount point yet)"
     };
-    const DiskInfo *disk = inventory_find_disk(state->inventory, state->plan->storage.disk_path);
+    StoragePlan *storage = &state->plan->storage;
+    DiskPlan *planned_disk;
+    const DiskInfo *disk;
     int choice;
-    if (disk == NULL) {
-        set_status(state, "Select a target disk first.");
+    if (state->active_disk >= storage->disk_count) {
+        set_status(state, "Add an installation disk first.");
         return;
     }
-    choice = choose_dialog("Guided whole-disk layout (planning only)", options, 3, 0);
+    planned_disk = &storage->disks[state->active_disk];
+    disk = inventory_find_disk(state->inventory, planned_disk->path);
+    if (disk == NULL) {
+        set_status(state, "The active disk is no longer present.");
+        return;
+    }
+    choice = choose_dialog("Guided whole-disk layout (active disk only)", options, 4,
+                           planned_disk->mode == STORAGE_AUTO_DATA ? 3 : 0);
     if (choice < 0) return;
     if (!confirm_dialog("Replace partition table",
-        "The generated script will erase every partition on this disk. Continue planning?")) return;
-    plan_use_automatic(state->plan, disk, choice == 0 ? STORAGE_AUTO_ROOT_SWAP :
-                       choice == 1 ? STORAGE_AUTO_HOME_SWAP : STORAGE_AUTO_ROOT_ONLY);
+        "The generated script will erase every partition on the active disk. Continue planning?")) return;
+    disk_plan_use_automatic(planned_disk, disk, choice == 0 ? STORAGE_AUTO_ROOT_SWAP :
+                            choice == 1 ? STORAGE_AUTO_HOME_SWAP :
+                            choice == 2 ? STORAGE_AUTO_ROOT_ONLY : STORAGE_AUTO_DATA);
     state->row = 0;
     state->dirty = true;
     set_status(state, "Guided layout applied to the plan; no disk was modified.");
@@ -537,16 +569,24 @@ static void choose_layout(UiState *state)
 
 static void use_existing(UiState *state)
 {
-    const DiskInfo *disk = inventory_find_disk(state->inventory, state->plan->storage.disk_path);
-    if (disk == NULL) {
-        set_status(state, "Select a target disk first.");
+    StoragePlan *storage = &state->plan->storage;
+    DiskPlan *planned_disk;
+    const DiskInfo *disk;
+    if (state->active_disk >= storage->disk_count) {
+        set_status(state, "Add an installation disk first.");
         return;
     }
-    if (!confirm_dialog("Use existing partitions", "Reset current storage assignments from detected partitions?")) return;
-    plan_select_disk(state->plan, disk);
+    planned_disk = &storage->disks[state->active_disk];
+    disk = inventory_find_disk(state->inventory, planned_disk->path);
+    if (disk == NULL) {
+        set_status(state, "The active disk is no longer present.");
+        return;
+    }
+    if (!confirm_dialog("Use existing partitions", "Reset assignments on the active disk from detected partitions?")) return;
+    disk_plan_use_existing(planned_disk, disk);
     state->row = 0;
     state->dirty = true;
-    state->target_identity_matches = true;
+    state->target_identity_matches = disk_identity_matches(state->plan, state->inventory);
     set_status(state, "Existing partitions loaded. KEEP never formats a filesystem.");
 }
 
@@ -573,61 +613,97 @@ static void refresh_disks(UiState *state)
     }
 }
 
+static void remove_active_disk(UiState *state)
+{
+    StoragePlan *storage = &state->plan->storage;
+    if (state->active_disk >= storage->disk_count) return;
+    if (!confirm_dialog("Remove disk from plan",
+                        "Remove the active disk and all of its partition assignments?")) return;
+    if (state->active_disk + 1 < storage->disk_count) {
+        memmove(&storage->disks[state->active_disk],
+                &storage->disks[state->active_disk + 1],
+                (storage->disk_count - state->active_disk - 1) * sizeof(storage->disks[0]));
+    }
+    --storage->disk_count;
+    memset(&storage->disks[storage->disk_count], 0, sizeof(storage->disks[0]));
+    if (state->active_disk >= storage->disk_count && state->active_disk > 0) --state->active_disk;
+    state->row = 0;
+    state->dirty = true;
+    state->target_identity_matches = disk_identity_matches(state->plan, state->inventory);
+    set_status(state, "Disk removed from the installation plan; no device was modified.");
+}
+
 static void draw_storage(UiState *state)
 {
     StoragePlan *storage = &state->plan->storage;
-    char disk_size[32];
+    int available = LINES - 10;
+    int selected_line = 0;
+    int visual_line = 0;
+    int offset;
+
     draw_shell(state, "Storage plan - editing changes only the generated plan",
-               "D disk   A guided layout   E existing   U purpose   F format   O F2FS profile   R refresh   Esc back");
-    if (storage->disk_path[0] == '\0') {
+               "D add/select   X remove disk   A layout   E existing   U mount   F format   O F2FS   R refresh   Esc back");
+    if (storage->disk_count == 0) {
         attron(COLOR_PAIR(COLOR_WARNING));
-        mvaddstr(5, 4, "No target disk selected.");
+        mvaddstr(5, 4, "No installation disk added.");
         attroff(COLOR_PAIR(COLOR_WARNING));
-        mvaddstr(7, 4, "Press D to select a disk. This program does not modify partition tables.");
+        mvaddstr(7, 4, "Press D to add a disk. This program only edits the generated plan.");
         return;
     }
-    format_size(storage->disk_size_bytes, disk_size, sizeof(disk_size));
-    mvprintw(4, 2, "Disk: %s  %-28.28s  %s", storage->disk_path, storage->disk_model, disk_size);
-    mvprintw(5, 2, "Mode: %s", storage_mode_name(storage->mode));
-    if (storage->mode != STORAGE_EXISTING) {
-        attron(A_BOLD | COLOR_PAIR(COLOR_ERROR));
-        put_clipped(6, 2, COLS - 4, "DESTRUCTIVE PLAN: generated script will replace the GPT partition table.");
-        attroff(A_BOLD | COLOR_PAIR(COLOR_ERROR));
-    } else {
-        attron(COLOR_PAIR(COLOR_OK));
-        put_clipped(6, 2, COLS - 4, "KEEP skips mkfs but mounted files may be updated; FORMAT erases the partition.");
-        attroff(COLOR_PAIR(COLOR_OK));
-    }
+    if (state->active_disk >= storage->disk_count) state->active_disk = 0;
+    mvprintw(4, 2, "%zu disk(s); D changes the active group. FORMAT may be used without a mount point.",
+             storage->disk_count);
     attron(A_BOLD);
-    mvprintw(8, 2, "%-18s %8s %-8s %-8s %-7s %-7s %-9s",
+    mvprintw(5, 2, "%-18s %8s %-8s %-8s %-7s %-7s %-9s",
              "Device", "Size", "Current", "Action", "Target", "Purpose", "Mount");
     if (COLS >= 96) addstr(" Profile");
     attroff(A_BOLD);
-    int available = LINES - 13;
-    int offset = state->row >= available ? state->row - available + 1 : 0;
-    for (int line = 0; line < available; ++line) {
-        int index = offset + line;
-        char size[32];
-        char operation[16];
-        const PartitionPlan *part;
-        if ((size_t)index >= storage->partition_count) break;
-        part = &storage->partitions[index];
-        format_size(part->size_bytes, size, sizeof(size));
-        if (part->usage == PART_UNUSED) copy_text(operation, sizeof(operation), "IGNORE");
-        else if (part->planned) copy_text(operation, sizeof(operation), "CREATE");
-        else copy_text(operation, sizeof(operation), part->action == ACTION_FORMAT ? "FORMAT" : "KEEP");
-        if (index == state->row) attron(COLOR_PAIR(COLOR_SELECTED));
-        mvprintw(9 + line, 2, "%-18.18s %8.8s %-8.8s %-8.8s %-7.7s %-7.7s %-9.9s",
-                 part->device, size, part->current_fs[0] != '\0' ? part->current_fs : "-", operation,
-                 part->action == ACTION_FORMAT ? filesystem_name(part->target_fs) :
-                 (part->current_fs[0] != '\0' ? part->current_fs : "-"),
-                 usage_name(part->usage), partition_mountpoint(part->usage));
-        if (COLS >= 96) {
-            Filesystem effective = part->action == ACTION_FORMAT ? part->target_fs :
-                                   filesystem_from_name(part->current_fs);
-            printw(" %s", effective == FS_F2FS ? f2fs_mode_name(part->f2fs_mode) : "-");
+
+    for (size_t disk_index = 0; disk_index < state->active_disk; ++disk_index)
+        selected_line += 1 + (int)storage->disks[disk_index].partition_count;
+    selected_line += 1 + state->row;
+    offset = selected_line >= available ? selected_line - available + 1 : 0;
+
+    for (size_t disk_index = 0; disk_index < storage->disk_count; ++disk_index) {
+        const DiskPlan *disk = &storage->disks[disk_index];
+        char disk_size[32];
+        format_size(disk->size_bytes, disk_size, sizeof(disk_size));
+        if (visual_line >= offset && visual_line < offset + available) {
+            int y = 6 + visual_line - offset;
+            attron(A_BOLD | COLOR_PAIR(disk->mode == STORAGE_EXISTING ? COLOR_TITLE : COLOR_ERROR));
+            mvprintw(y, 2, "%c DISK %-18.18s %8.8s %-28.28s  %s",
+                     disk_index == state->active_disk ? '>' : ' ', disk->path, disk_size,
+                     disk->model[0] != '\0' ? disk->model : "Unknown model",
+                     storage_mode_name(disk->mode));
+            attroff(A_BOLD | COLOR_PAIR(disk->mode == STORAGE_EXISTING ? COLOR_TITLE : COLOR_ERROR));
         }
-        if (index == state->row) attroff(COLOR_PAIR(COLOR_SELECTED));
+        ++visual_line;
+        for (size_t index = 0; index < disk->partition_count; ++index, ++visual_line) {
+            const PartitionPlan *part = &disk->partitions[index];
+            char size[32];
+            char operation[16];
+            bool selected = disk_index == state->active_disk && (int)index == state->row;
+            if (visual_line < offset || visual_line >= offset + available) continue;
+            format_size(part->size_bytes, size, sizeof(size));
+            if (part->planned) copy_text(operation, sizeof(operation), "CREATE");
+            else if (part->usage == PART_UNUSED && part->action == ACTION_KEEP)
+                copy_text(operation, sizeof(operation), "IGNORE");
+            else copy_text(operation, sizeof(operation),
+                           part->action == ACTION_FORMAT ? "FORMAT" : "KEEP");
+            if (selected) attron(COLOR_PAIR(COLOR_SELECTED));
+            mvprintw(6 + visual_line - offset, 2,
+                     "  %-16.16s %8.8s %-8.8s %-8.8s %-7.7s %-7.7s %-9.9s",
+                     part->device, size, part->current_fs[0] != '\0' ? part->current_fs : "-",
+                     operation, part->action == ACTION_FORMAT ? filesystem_name(part->target_fs) :
+                     (part->current_fs[0] != '\0' ? part->current_fs : "-"),
+                     usage_name(part->usage), partition_mountpoint(part->usage));
+            if (COLS >= 96) {
+                Filesystem effective = part->action == ACTION_FORMAT ? part->target_fs :
+                                       filesystem_from_name(part->current_fs);
+                printw(" %s", effective == FS_F2FS ? f2fs_mode_name(part->f2fs_mode) : "-");
+            }
+            if (selected) attroff(COLOR_PAIR(COLOR_SELECTED));
+        }
     }
 }
 
@@ -638,10 +714,10 @@ static bool regular_filesystem(Filesystem filesystem)
 
 static bool edit_partition_format(UiState *state, PartitionPlan *partition);
 
-static void edit_partition_usage(UiState *state, PartitionPlan *partition)
+static void edit_partition_usage(UiState *state, DiskPlan *disk, PartitionPlan *partition)
 {
     static const char *const options[] = {
-        "Ignore this partition",
+        "No mount point (use F to choose IGNORE or FORMAT)",
         "Root filesystem                         /",
         "EFI system partition                    /boot",
         "User data                               /home",
@@ -657,7 +733,7 @@ static void edit_partition_usage(UiState *state, PartitionPlan *partition)
     Filesystem current;
     int choice;
 
-    if (partition->planned) {
+    if (partition->planned && disk->mode != STORAGE_AUTO_DATA) {
         set_status(state, "Guided-layout purposes are fixed; choose another layout to change them.");
         return;
     }
@@ -668,8 +744,13 @@ static void edit_partition_usage(UiState *state, PartitionPlan *partition)
     partition->usage = (PartitionUsage)choice;
     current = filesystem_from_name(partition->current_fs);
     if (partition->usage == PART_UNUSED) {
-        partition->action = ACTION_KEEP;
-        partition->target_fs = FS_NONE;
+        if (partition->planned && disk->mode == STORAGE_AUTO_DATA) {
+            partition->action = ACTION_FORMAT;
+            if (partition->target_fs == FS_NONE) partition->target_fs = FS_EXT4;
+        } else {
+            partition->action = ACTION_KEEP;
+            partition->target_fs = FS_NONE;
+        }
     } else if (partition->usage == PART_ROOT || partition->usage == PART_VAR ||
                partition->usage == PART_USR) {
         partition->action = ACTION_FORMAT;
@@ -689,6 +770,8 @@ static void edit_partition_usage(UiState *state, PartitionPlan *partition)
     }
 
     if (partition->usage != PART_UNUSED && partition->usage != old_usage &&
+        !(partition->planned &&
+          (partition->usage == PART_BOOT || partition->usage == PART_SWAP)) &&
         !edit_partition_format(state, partition)) {
         *partition = original;
         set_status(state, "Purpose change canceled; no partition action was changed.");
@@ -699,28 +782,30 @@ static void edit_partition_usage(UiState *state, PartitionPlan *partition)
         partition->target_fs != old_target) {
         state->dirty = true;
         if (partition->usage == PART_UNUSED) {
-            (void)snprintf(state->status, sizeof(state->status),
-                           "%.180s is ignored and will not be mounted or formatted.",
-                           partition->device);
+            if (partition->action == ACTION_FORMAT) {
+                (void)snprintf(state->status, sizeof(state->status),
+                               "%.180s will be formatted without a mount point.",
+                               partition->device);
+            } else {
+                (void)snprintf(state->status, sizeof(state->status),
+                               "%.180s is ignored and will not be mounted or formatted.",
+                               partition->device);
+            }
         }
     }
 }
 
 static bool edit_partition_format(UiState *state, PartitionPlan *partition)
 {
-    const char *options[4];
-    PartitionAction actions[4];
-    Filesystem filesystems[4];
+    const char *options[6];
+    PartitionAction actions[6];
+    Filesystem filesystems[6];
     char keep_label[96];
     size_t count = 0;
     int current_choice = 0;
     int choice;
     Filesystem current = filesystem_from_name(partition->current_fs);
 
-    if (partition->usage == PART_UNUSED) {
-        set_status(state, "Assign a purpose before choosing a filesystem action.");
-        return false;
-    }
     if (partition->planned &&
         (partition->usage == PART_BOOT || partition->usage == PART_SWAP)) {
         set_status(state, partition->usage == PART_BOOT ?
@@ -761,6 +846,14 @@ static bool edit_partition_format(UiState *state, PartitionPlan *partition)
         options[count] = "FORMAT as F2FS (erases this partition)";
         actions[count] = ACTION_FORMAT;
         filesystems[count++] = FS_F2FS;
+        if (partition->usage == PART_UNUSED) {
+            options[count] = "FORMAT as FAT32 (no mount point)";
+            actions[count] = ACTION_FORMAT;
+            filesystems[count++] = FS_VFAT;
+            options[count] = "FORMAT as swap (do not activate)";
+            actions[count] = ACTION_FORMAT;
+            filesystems[count++] = FS_SWAP;
+        }
     }
 
     for (size_t index = 0; index < count; ++index) {
@@ -819,20 +912,24 @@ static void edit_f2fs_mode(UiState *state, PartitionPlan *partition)
 static void handle_storage(UiState *state, int key)
 {
     StoragePlan *storage = &state->plan->storage;
+    DiskPlan *disk;
     if (key == 27) { state->screen = SCREEN_HOME; state->row = 0; return; }
     if (key == 'd' || key == 'D') { choose_disk(state); return; }
+    if (key == 'x' || key == 'X') { remove_active_disk(state); return; }
     if (key == 'a' || key == 'A') { choose_layout(state); return; }
     if (key == 'e' || key == 'E') { use_existing(state); return; }
     if (key == 'r' || key == 'R') { refresh_disks(state); return; }
-    if (storage->partition_count == 0) return;
+    if (state->active_disk >= storage->disk_count) return;
+    disk = &storage->disks[state->active_disk];
+    if (disk->partition_count == 0) return;
     if (key == KEY_UP && state->row > 0) --state->row;
-    else if (key == KEY_DOWN && (size_t)(state->row + 1) < storage->partition_count) ++state->row;
+    else if (key == KEY_DOWN && (size_t)(state->row + 1) < disk->partition_count) ++state->row;
     else if (key == 'u' || key == 'U' || key == ' ') {
-        edit_partition_usage(state, &storage->partitions[state->row]);
+        edit_partition_usage(state, disk, &disk->partitions[state->row]);
     } else if (key == 'f' || key == 'F' || key == '\n' || key == KEY_ENTER) {
-        edit_partition_format(state, &storage->partitions[state->row]);
+        edit_partition_format(state, &disk->partitions[state->row]);
     } else if (key == 'o' || key == 'O') {
-        edit_f2fs_mode(state, &storage->partitions[state->row]);
+        edit_f2fs_mode(state, &disk->partitions[state->row]);
     }
 }
 
@@ -967,8 +1064,8 @@ static void draw_review(UiState *state)
 {
     ValidationReport report;
     StoragePlan *storage = &state->plan->storage;
-    char lines[AI_MAX_PARTITIONS + AI_MAX_ISSUES + 20][256];
-    int colors[AI_MAX_PARTITIONS + AI_MAX_ISSUES + 20] = {0};
+    char lines[AI_MAX_PLAN_DISKS * (AI_MAX_PARTITIONS + 2) + AI_MAX_ISSUES + 20][256];
+    int colors[AI_MAX_PLAN_DISKS * (AI_MAX_PARTITIONS + 2) + AI_MAX_ISSUES + 20] = {0};
     size_t count = 0;
     int y = 4;
     validate_plan(state->plan, &report);
@@ -985,20 +1082,23 @@ static void draw_review(UiState *state)
     lines[count++][0] = '\0';
     copy_text(lines[count], sizeof(lines[count]), "DESTRUCTIVE AND STORAGE OPERATIONS");
     colors[count++] = COLOR_TITLE;
-    if (storage->mode != STORAGE_EXISTING) {
-        (void)snprintf(lines[count], sizeof(lines[count]), "ERASE   %.120s (%.100s)",
-                       storage->disk_path, storage->disk_model);
-        colors[count++] = COLOR_ERROR;
-    }
-    for (size_t index = 0; index < storage->partition_count; ++index) {
-        const PartitionPlan *part = &storage->partitions[index];
-        if (part->usage == PART_UNUSED || count >= sizeof(lines) / sizeof(lines[0])) continue;
-        (void)snprintf(lines[count], sizeof(lines[count]), "%-7s %-20.120s -> %-8.8s %.40s",
-                       part->action == ACTION_FORMAT ? (part->planned ? "CREATE" : "FORMAT") : "KEEP",
-                       part->device,
-                       part->action == ACTION_FORMAT ? filesystem_name(part->target_fs) : part->current_fs,
-                       partition_mountpoint(part->usage));
-        colors[count++] = part->action == ACTION_FORMAT ? COLOR_WARNING : 0;
+    for (size_t disk_index = 0; disk_index < storage->disk_count; ++disk_index) {
+        const DiskPlan *disk = &storage->disks[disk_index];
+        (void)snprintf(lines[count], sizeof(lines[count]), "%s %.120s (%.100s) — %s",
+                       disk->mode == STORAGE_EXISTING ? "DISK " : "ERASE",
+                       disk->path, disk->model, storage_mode_name(disk->mode));
+        colors[count++] = disk->mode == STORAGE_EXISTING ? COLOR_TITLE : COLOR_ERROR;
+        for (size_t index = 0; index < disk->partition_count; ++index) {
+            const PartitionPlan *part = &disk->partitions[index];
+            if ((part->usage == PART_UNUSED && part->action != ACTION_FORMAT && !part->planned) ||
+                count >= sizeof(lines) / sizeof(lines[0])) continue;
+            (void)snprintf(lines[count], sizeof(lines[count]), "  %-7s %-20.120s -> %-8.8s %.40s",
+                           part->action == ACTION_FORMAT ? (part->planned ? "CREATE" : "FORMAT") : "KEEP",
+                           part->device,
+                           part->action == ACTION_FORMAT ? filesystem_name(part->target_fs) : part->current_fs,
+                           partition_mountpoint(part->usage));
+            colors[count++] = part->action == ACTION_FORMAT ? COLOR_WARNING : 0;
+        }
     }
     lines[count++][0] = '\0';
     copy_text(lines[count], sizeof(lines[count]), "SYSTEM");
@@ -1014,7 +1114,7 @@ static void draw_review(UiState *state)
     colors[count++] = COLOR_TITLE;
     if (!state->target_identity_matches) {
         copy_text(lines[count], sizeof(lines[count]),
-                  "ERROR Target disk identity no longer matches the saved plan.");
+                  "ERROR One or more disk identities no longer match the saved plan.");
         colors[count++] = COLOR_ERROR;
     }
     for (size_t index = 0; index < report.count && count < sizeof(lines) / sizeof(lines[0]); ++index) {

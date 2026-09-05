@@ -68,6 +68,24 @@ static void make_partition(PartitionInfo *partition, unsigned number,
     partition->start_sector = UINT64_C(2048) + (uint64_t)(number - 1) * UINT64_C(2097152);
 }
 
+static void make_second_disk(DiskInfo *disk, size_t partition_count)
+{
+    make_disk(disk, partition_count);
+    copy_text(disk->name, sizeof(disk->name), "sdb");
+    copy_text(disk->path, sizeof(disk->path), "/dev/sdb");
+    copy_text(disk->model, sizeof(disk->model), "Test data disk");
+    copy_text(disk->serial, sizeof(disk->serial), "TEST-SERIAL-002");
+    for (size_t index = 0; index < partition_count; ++index) {
+        make_partition(&disk->partitions[index], (unsigned)index + 1,
+                       index == 0 ? UINT64_C(500) * GIB : UINT64_C(250) * GIB,
+                       "ext4");
+        (void)snprintf(disk->partitions[index].path,
+                       sizeof(disk->partitions[index].path), "/dev/sdb%zu", index + 1);
+        copy_text(disk->partitions[index].part_type,
+                  sizeof(disk->partitions[index].part_type), GPT_LINUX_TYPE);
+    }
+}
+
 static bool report_contains(const ValidationReport *report, IssueSeverity severity,
                             const char *text)
 {
@@ -143,9 +161,13 @@ static void mutate_boolean_to_string(struct json_object *root)
 static void mutate_disk_size_to_negative(struct json_object *root)
 {
     struct json_object *storage = NULL;
+    struct json_object *disks = NULL;
+    struct json_object *disk = NULL;
 
     (void)json_object_object_get_ex(root, "storage", &storage);
-    json_object_object_add(storage, "size_bytes", json_object_new_int64(-1));
+    (void)json_object_object_get_ex(storage, "disks", &disks);
+    disk = json_object_array_get_idx(disks, 0);
+    json_object_object_add(disk, "size_bytes", json_object_new_int64(-1));
 }
 
 static void mutate_to_incomplete_version_one(struct json_object *root)
@@ -154,7 +176,7 @@ static void mutate_to_incomplete_version_one(struct json_object *root)
 
     json_object_object_add(root, "version", json_object_new_int(1));
     (void)json_object_object_get_ex(root, "storage", &storage);
-    json_object_object_del(storage, "partition_table");
+    json_object_object_del(storage, "disks");
 }
 
 static bool test_default_plan_fails_validation(void)
@@ -166,8 +188,7 @@ static bool test_default_plan_fails_validation(void)
     validate_plan(&plan, &report);
 
     CHECK(report.error_count > 0);
-    CHECK(report_contains(&report, ISSUE_ERROR, "Select an installation disk"));
-    CHECK(report_contains(&report, ISSUE_ERROR, "Configure a partition layout"));
+    CHECK(report_contains(&report, ISSUE_ERROR, "Add at least one installation disk"));
     CHECK(report_contains(&report, ISSUE_ERROR, "Exactly one root"));
     CHECK(report_contains(&report, ISSUE_ERROR, "Exactly one EFI"));
     return true;
@@ -186,17 +207,17 @@ static bool test_valid_automatic_layout(void)
     validate_plan(&plan, &report);
 
     CHECK(report.error_count == 0);
-    CHECK(plan.storage.mode == STORAGE_AUTO_HOME_SWAP);
-    CHECK(plan.storage.partition_count == 4);
-    CHECK(strcmp(plan.storage.partitions[0].device, "/dev/nvme0n1p1") == 0);
-    CHECK(plan.storage.partitions[0].usage == PART_BOOT);
-    CHECK(plan.storage.partitions[0].target_fs == FS_VFAT);
-    CHECK(plan.storage.partitions[1].usage == PART_ROOT);
-    CHECK(plan.storage.partitions[1].size_bytes == UINT64_C(100) * GIB);
-    CHECK(plan.storage.partitions[2].usage == PART_HOME);
-    CHECK(plan.storage.partitions[2].size_bytes > 0);
-    CHECK(plan.storage.partitions[3].usage == PART_SWAP);
-    CHECK(plan.storage.partitions[3].target_fs == FS_SWAP);
+    CHECK(plan.storage.disks[0].mode == STORAGE_AUTO_HOME_SWAP);
+    CHECK(plan.storage.disks[0].partition_count == 4);
+    CHECK(strcmp(plan.storage.disks[0].partitions[0].device, "/dev/nvme0n1p1") == 0);
+    CHECK(plan.storage.disks[0].partitions[0].usage == PART_BOOT);
+    CHECK(plan.storage.disks[0].partitions[0].target_fs == FS_VFAT);
+    CHECK(plan.storage.disks[0].partitions[1].usage == PART_ROOT);
+    CHECK(plan.storage.disks[0].partitions[1].size_bytes == UINT64_C(100) * GIB);
+    CHECK(plan.storage.disks[0].partitions[2].usage == PART_HOME);
+    CHECK(plan.storage.disks[0].partitions[2].size_bytes > 0);
+    CHECK(plan.storage.disks[0].partitions[3].usage == PART_SWAP);
+    CHECK(plan.storage.disks[0].partitions[3].target_fs == FS_SWAP);
     return true;
 }
 
@@ -216,9 +237,9 @@ static bool test_existing_partitions_keep_and_format(void)
 
     plan_init(&plan);
     plan_select_disk(&plan, &disk);
-    boot = &plan.storage.partitions[0];
-    root = &plan.storage.partitions[1];
-    home = &plan.storage.partitions[2];
+    boot = &plan.storage.disks[0].partitions[0];
+    root = &plan.storage.disks[0].partitions[1];
+    home = &plan.storage.disks[0].partitions[2];
 
     boot->usage = PART_BOOT;
     CHECK(boot->action == ACTION_KEEP);
@@ -254,9 +275,9 @@ static bool test_duplicate_usage_is_rejected(void)
     plan_init(&plan);
     plan_select_disk(&plan, &disk);
 
-    plan.storage.partitions[0].usage = PART_BOOT;
-    plan.storage.partitions[1].usage = PART_ROOT;
-    plan.storage.partitions[2].usage = PART_ROOT;
+    plan.storage.disks[0].partitions[0].usage = PART_BOOT;
+    plan.storage.disks[0].partitions[1].usage = PART_ROOT;
+    plan.storage.disks[0].partitions[2].usage = PART_ROOT;
     validate_plan(&plan, &report);
 
     CHECK(report.error_count > 0);
@@ -312,23 +333,26 @@ static bool system_plans_equal(const SystemPlan *left, const SystemPlan *right)
 static bool plans_equal(const InstallPlan *left, const InstallPlan *right)
 {
     if (left->version != right->version ||
-        strcmp(left->storage.disk_path, right->storage.disk_path) != 0 ||
-        strcmp(left->storage.disk_model, right->storage.disk_model) != 0 ||
-        strcmp(left->storage.disk_serial, right->storage.disk_serial) != 0 ||
-        strcmp(left->storage.partition_table, right->storage.partition_table) != 0 ||
-        left->storage.disk_size_bytes != right->storage.disk_size_bytes ||
-        left->storage.disk_removable != right->storage.disk_removable ||
-        left->storage.disk_read_only != right->storage.disk_read_only ||
-        left->storage.disk_in_use != right->storage.disk_in_use ||
-        left->storage.mode != right->storage.mode ||
-        left->storage.partition_count != right->storage.partition_count ||
+        left->storage.disk_count != right->storage.disk_count ||
         !system_plans_equal(&left->system, &right->system)) {
         return false;
     }
-    for (size_t index = 0; index < left->storage.partition_count; ++index) {
-        if (!partitions_equal(&left->storage.partitions[index],
-                              &right->storage.partitions[index])) {
-            return false;
+    for (size_t disk_index = 0; disk_index < left->storage.disk_count; ++disk_index) {
+        const DiskPlan *left_disk = &left->storage.disks[disk_index];
+        const DiskPlan *right_disk = &right->storage.disks[disk_index];
+        if (strcmp(left_disk->path, right_disk->path) != 0 ||
+            strcmp(left_disk->model, right_disk->model) != 0 ||
+            strcmp(left_disk->serial, right_disk->serial) != 0 ||
+            strcmp(left_disk->partition_table, right_disk->partition_table) != 0 ||
+            left_disk->size_bytes != right_disk->size_bytes ||
+            left_disk->removable != right_disk->removable ||
+            left_disk->read_only != right_disk->read_only ||
+            left_disk->in_use != right_disk->in_use ||
+            left_disk->mode != right_disk->mode ||
+            left_disk->partition_count != right_disk->partition_count) return false;
+        for (size_t index = 0; index < left_disk->partition_count; ++index) {
+            if (!partitions_equal(&left_disk->partitions[index],
+                                  &right_disk->partitions[index])) return false;
         }
     }
     return true;
@@ -337,6 +361,7 @@ static bool plans_equal(const InstallPlan *left, const InstallPlan *right)
 static bool test_json_round_trip(void)
 {
     DiskInfo disk;
+    DiskInfo second_disk;
     InstallPlan source;
     InstallPlan loaded;
     char path[] = "/tmp/arch-install-plan-test-XXXXXX";
@@ -347,8 +372,11 @@ static bool test_json_round_trip(void)
     plan_init(&source);
     plan_select_disk(&source, &disk);
     plan_use_automatic(&source, &disk, STORAGE_AUTO_ROOT_SWAP);
-    source.storage.partitions[1].target_fs = FS_F2FS;
-    source.storage.partitions[1].f2fs_mode = F2FS_COMPRESSED;
+    make_second_disk(&second_disk, 0);
+    CHECK(plan_add_disk(&source, &second_disk));
+    disk_plan_use_automatic(&source.storage.disks[1], &second_disk, STORAGE_AUTO_DATA);
+    source.storage.disks[0].partitions[1].target_fs = FS_F2FS;
+    source.storage.disks[0].partitions[1].f2fs_mode = F2FS_COMPRESSED;
     source.system.platform = PLATFORM_AMD;
     source.system.kernel = KERNEL_ZEN;
     source.system.locale = LOCALE_ZH_CN;
@@ -391,6 +419,58 @@ static bool test_json_round_trip(void)
     return true;
 }
 
+static bool test_multi_disk_mounts_and_format_only(void)
+{
+    DiskInfo system_disk;
+    DiskInfo data_disk;
+    InstallPlan plan;
+    ValidationReport report;
+
+    make_disk(&system_disk, 2);
+    make_partition(&system_disk.partitions[0], 1, GIB, "vfat");
+    make_partition(&system_disk.partitions[1], 2, UINT64_C(100) * GIB, "ext4");
+    make_second_disk(&data_disk, 2);
+    plan_init(&plan);
+    plan_select_disk(&plan, &system_disk);
+    CHECK(plan_add_disk(&plan, &data_disk));
+    plan.storage.disks[0].partitions[0].usage = PART_BOOT;
+    plan.storage.disks[0].partitions[1].usage = PART_ROOT;
+    plan.storage.disks[0].partitions[1].action = ACTION_FORMAT;
+    plan.storage.disks[0].partitions[1].target_fs = FS_EXT4;
+    plan.storage.disks[1].partitions[0].usage = PART_HOME;
+    plan.storage.disks[1].partitions[1].usage = PART_UNUSED;
+    plan.storage.disks[1].partitions[1].action = ACTION_FORMAT;
+    plan.storage.disks[1].partitions[1].target_fs = FS_XFS;
+
+    validate_plan(&plan, &report);
+    CHECK(report.error_count == 0);
+    return true;
+}
+
+static bool test_root_and_boot_must_share_disk(void)
+{
+    DiskInfo system_disk;
+    DiskInfo data_disk;
+    InstallPlan plan;
+    ValidationReport report;
+
+    make_disk(&system_disk, 1);
+    make_partition(&system_disk.partitions[0], 1, GIB, "vfat");
+    make_second_disk(&data_disk, 1);
+    plan_init(&plan);
+    plan_select_disk(&plan, &system_disk);
+    CHECK(plan_add_disk(&plan, &data_disk));
+    plan.storage.disks[0].partitions[0].usage = PART_BOOT;
+    plan.storage.disks[1].partitions[0].usage = PART_ROOT;
+    plan.storage.disks[1].partitions[0].action = ACTION_FORMAT;
+    plan.storage.disks[1].partitions[0].target_fs = FS_EXT4;
+
+    validate_plan(&plan, &report);
+    CHECK(report_contains(&report, ISSUE_ERROR,
+                          "root (/) and EFI (/boot) partitions must be on the same disk"));
+    return true;
+}
+
 static bool test_json_boolean_string_is_rejected(void)
 {
     CHECK(expect_mutated_json_rejected(mutate_boolean_to_string,
@@ -401,7 +481,7 @@ static bool test_json_boolean_string_is_rejected(void)
 static bool test_json_negative_size_is_rejected(void)
 {
     CHECK(expect_mutated_json_rejected(mutate_disk_size_to_negative,
-                                       "storage.size_bytes must be a non-negative integer"));
+                                       "storage.disks[0].size_bytes must be a non-negative integer"));
     return true;
 }
 
@@ -422,19 +502,19 @@ static bool test_unsafe_device_paths_are_rejected(void)
     plan_init(&plan);
     plan_select_disk(&plan, &disk);
     plan_use_automatic(&plan, &disk, STORAGE_AUTO_ROOT_SWAP);
-    copy_text(plan.storage.disk_path, sizeof(plan.storage.disk_path),
+    copy_text(plan.storage.disks[0].path, sizeof(plan.storage.disks[0].path),
               "/dev/nvme0n1\nSFDISK");
     validate_plan(&plan, &report);
     CHECK(report_contains(&report, ISSUE_ERROR, "not a supported /dev device path"));
 
     plan_select_disk(&plan, &disk);
     plan_use_automatic(&plan, &disk, STORAGE_AUTO_ROOT_SWAP);
-    copy_text(plan.storage.partitions[0].device,
-              sizeof(plan.storage.partitions[0].device),
+    copy_text(plan.storage.disks[0].partitions[0].device,
+              sizeof(plan.storage.disks[0].partitions[0].device),
               "/dev/nvme0n1p1\nSFDISK");
     validate_plan(&plan, &report);
     CHECK(report_contains(&report, ISSUE_ERROR,
-                          "partition does not belong to the selected target disk"));
+                          "partition does not belong to its installation disk"));
     return true;
 }
 
@@ -448,19 +528,19 @@ static bool test_tampered_automatic_sizes_are_rejected(void)
     plan_init(&plan);
     plan_select_disk(&plan, &disk);
     plan_use_automatic(&plan, &disk, STORAGE_AUTO_ROOT_SWAP);
-    plan.storage.partitions[2].size_bytes = 1;
+    plan.storage.disks[0].partitions[2].size_bytes = 1;
     validate_plan(&plan, &report);
     CHECK(report_contains(&report, ISSUE_ERROR,
                           "automatic partition must be at least 1 MiB"));
 
     plan_use_automatic(&plan, &disk, STORAGE_AUTO_ROOT_SWAP);
-    plan.storage.partitions[1].size_bytes -= GIB;
+    plan.storage.disks[0].partitions[1].size_bytes -= GIB;
     validate_plan(&plan, &report);
     CHECK(report_contains(&report, ISSUE_ERROR,
-                          "must account for the entire target disk"));
+                          "must account for the entire installation disk"));
 
     plan_use_automatic(&plan, &disk, STORAGE_AUTO_HOME_SWAP);
-    plan.storage.partitions[2].size_bytes = MIB;
+    plan.storage.disks[0].partitions[2].size_bytes = MIB;
     validate_plan(&plan, &report);
     CHECK(report_contains(&report, ISSUE_ERROR,
                           "guided home partition must be at least 8 GiB"));
@@ -479,17 +559,17 @@ static bool test_var_and_usr_keep_are_rejected(void)
     make_partition(&disk.partitions[2], 3, UINT64_C(100) * GIB, "ext4");
     plan_init(&plan);
     plan_select_disk(&plan, &disk);
-    plan.storage.partitions[0].usage = PART_BOOT;
-    plan.storage.partitions[1].usage = PART_ROOT;
-    plan.storage.partitions[1].action = ACTION_FORMAT;
-    plan.storage.partitions[1].target_fs = FS_EXT4;
-    plan.storage.partitions[2].usage = PART_VAR;
+    plan.storage.disks[0].partitions[0].usage = PART_BOOT;
+    plan.storage.disks[0].partitions[1].usage = PART_ROOT;
+    plan.storage.disks[0].partitions[1].action = ACTION_FORMAT;
+    plan.storage.disks[0].partitions[1].target_fs = FS_EXT4;
+    plan.storage.disks[0].partitions[2].usage = PART_VAR;
 
     validate_plan(&plan, &report);
     CHECK(report_contains(&report, ISSUE_ERROR,
                           "Root, /var, and /usr partitions must be formatted"));
 
-    plan.storage.partitions[2].usage = PART_USR;
+    plan.storage.disks[0].partitions[2].usage = PART_USR;
     validate_plan(&plan, &report);
     CHECK(report_contains(&report, ISSUE_ERROR,
                           "Root, /var, and /usr partitions must be formatted"));
@@ -530,14 +610,14 @@ static bool test_tampered_automatic_layout_is_rejected(void)
     plan_init(&plan);
     plan_select_disk(&plan, &disk);
     plan_use_automatic(&plan, &disk, STORAGE_AUTO_HOME_SWAP);
-    plan.storage.partition_count = 3;
+    plan.storage.disks[0].partition_count = 3;
     validate_plan(&plan, &report);
     CHECK(report.error_count > 0);
     CHECK(report_contains(&report, ISSUE_ERROR, "fixed partition schema"));
 
     plan_use_automatic(&plan, &disk, STORAGE_AUTO_ROOT_SWAP);
-    plan.storage.partitions[0].number = 2;
-    plan.storage.partitions[1].number = 1;
+    plan.storage.disks[0].partitions[0].number = 2;
+    plan.storage.disks[0].partitions[1].number = 1;
     validate_plan(&plan, &report);
     CHECK(report.error_count > 0);
     CHECK(report_contains(&report, ISSUE_ERROR, "fixed partition schema"));
@@ -564,12 +644,12 @@ static bool test_kept_f2fs_requires_compatibility_profile(void)
     make_partition(&disk.partitions[2], 3, UINT64_C(500) * GIB, "f2fs");
     plan_init(&plan);
     plan_select_disk(&plan, &disk);
-    plan.storage.partitions[0].usage = PART_BOOT;
-    plan.storage.partitions[1].usage = PART_ROOT;
-    plan.storage.partitions[1].action = ACTION_FORMAT;
-    plan.storage.partitions[1].target_fs = FS_EXT4;
-    plan.storage.partitions[2].usage = PART_HOME;
-    plan.storage.partitions[2].f2fs_mode = F2FS_BALANCED;
+    plan.storage.disks[0].partitions[0].usage = PART_BOOT;
+    plan.storage.disks[0].partitions[1].usage = PART_ROOT;
+    plan.storage.disks[0].partitions[1].action = ACTION_FORMAT;
+    plan.storage.disks[0].partitions[1].target_fs = FS_EXT4;
+    plan.storage.disks[0].partitions[2].usage = PART_HOME;
+    plan.storage.disks[0].partitions[2].f2fs_mode = F2FS_BALANCED;
     validate_plan(&plan, &report);
     CHECK(report_contains(&report, ISSUE_ERROR,
                           "kept F2FS partition must use the compatibility mount profile"));
@@ -588,12 +668,12 @@ static bool test_kept_filesystem_requires_uuid(void)
     make_partition(&disk.partitions[2], 3, UINT64_C(500) * GIB, "xfs");
     plan_init(&plan);
     plan_select_disk(&plan, &disk);
-    plan.storage.partitions[0].usage = PART_BOOT;
-    plan.storage.partitions[1].usage = PART_ROOT;
-    plan.storage.partitions[1].action = ACTION_FORMAT;
-    plan.storage.partitions[1].target_fs = FS_EXT4;
-    plan.storage.partitions[2].usage = PART_HOME;
-    plan.storage.partitions[2].fs_uuid[0] = '\0';
+    plan.storage.disks[0].partitions[0].usage = PART_BOOT;
+    plan.storage.disks[0].partitions[1].usage = PART_ROOT;
+    plan.storage.disks[0].partitions[1].action = ACTION_FORMAT;
+    plan.storage.disks[0].partitions[1].target_fs = FS_EXT4;
+    plan.storage.disks[0].partitions[2].usage = PART_HOME;
+    plan.storage.disks[0].partitions[2].fs_uuid[0] = '\0';
     validate_plan(&plan, &report);
     CHECK(report_contains(&report, ISSUE_ERROR,
                           "kept filesystem is missing its UUID identity"));
@@ -606,7 +686,8 @@ static bool test_direct_partition_count_overflow_is_rejected(void)
     ValidationReport report;
 
     plan_init(&plan);
-    plan.storage.partition_count = AI_MAX_PARTITIONS + 1;
+    plan.storage.disk_count = 1;
+    plan.storage.disks[0].partition_count = AI_MAX_PARTITIONS + 1;
     validate_plan(&plan, &report);
     CHECK(report_contains(&report, ISSUE_ERROR,
                           "partition plan exceeds the supported limit"));
@@ -621,6 +702,9 @@ int main(void)
         {"existing partitions keep and format", test_existing_partitions_keep_and_format},
         {"duplicate usage is rejected", test_duplicate_usage_is_rejected},
         {"JSON round trip", test_json_round_trip},
+        {"multi-disk mounts and format-only partitions",
+         test_multi_disk_mounts_and_format_only},
+        {"root and boot must share one disk", test_root_and_boot_must_share_disk},
         {"JSON boolean strings are rejected", test_json_boolean_string_is_rejected},
         {"JSON negative sizes are rejected", test_json_negative_size_is_rejected},
         {"old versions are reported before schema errors",

@@ -20,6 +20,12 @@ typedef struct {
     bool ok;
 } ScriptWriter;
 
+typedef struct {
+    const DiskPlan *disk;
+    const PartitionPlan *partition;
+    size_t disk_index;
+} PartitionRef;
+
 typedef enum {
     FIELD_DEVICE,
     FIELD_USAGE,
@@ -85,55 +91,82 @@ static void emit_boolean(ScriptWriter *writer, const char *name, bool value)
 
 static const PartitionPlan *find_partition(const InstallPlan *plan, PartitionUsage usage)
 {
-    for (size_t index = 0; index < plan->storage.partition_count; ++index) {
-        const PartitionPlan *partition = &plan->storage.partitions[index];
-
-        if (partition->usage == usage) {
-            return partition;
+    for (size_t disk_index = 0; disk_index < plan->storage.disk_count; ++disk_index) {
+        const DiskPlan *disk = &plan->storage.disks[disk_index];
+        for (size_t index = 0; index < disk->partition_count; ++index) {
+            if (disk->partitions[index].usage == usage) {
+                return &disk->partitions[index];
+            }
         }
     }
     return NULL;
 }
 
-static int partition_order(const PartitionPlan *left, const PartitionPlan *right)
+static const DiskPlan *find_partition_disk(const InstallPlan *plan,
+                                           const PartitionPlan *partition)
+{
+    if (partition == NULL) return NULL;
+    for (size_t disk_index = 0; disk_index < plan->storage.disk_count; ++disk_index) {
+        const DiskPlan *disk = &plan->storage.disks[disk_index];
+        if (partition >= disk->partitions &&
+            partition < disk->partitions + disk->partition_count) return disk;
+    }
+    return NULL;
+}
+
+static int partition_order(const PartitionRef *left, const PartitionRef *right)
 {
     const char *left_mount;
     const char *right_mount;
+    const PartitionPlan *left_part = left->partition;
+    const PartitionPlan *right_part = right->partition;
 
-    if (left->usage == PART_ROOT && right->usage != PART_ROOT) {
+    if (left_part->usage == PART_ROOT && right_part->usage != PART_ROOT) {
         return -1;
     }
-    if (right->usage == PART_ROOT && left->usage != PART_ROOT) {
+    if (right_part->usage == PART_ROOT && left_part->usage != PART_ROOT) {
         return 1;
     }
-    if (left->usage == PART_SWAP && right->usage != PART_SWAP) {
+    if (left_part->usage == PART_UNUSED && right_part->usage != PART_UNUSED) {
         return 1;
     }
-    if (right->usage == PART_SWAP && left->usage != PART_SWAP) {
+    if (right_part->usage == PART_UNUSED && left_part->usage != PART_UNUSED) {
         return -1;
     }
-    left_mount = partition_mountpoint(left->usage);
-    right_mount = partition_mountpoint(right->usage);
+    if (left_part->usage == PART_SWAP && right_part->usage != PART_SWAP) {
+        return 1;
+    }
+    if (right_part->usage == PART_SWAP && left_part->usage != PART_SWAP) {
+        return -1;
+    }
+    left_mount = partition_mountpoint(left_part->usage);
+    right_mount = partition_mountpoint(right_part->usage);
     return strcmp(left_mount, right_mount);
 }
 
-static size_t collect_used_partitions(const InstallPlan *plan,
-                                      const PartitionPlan **partitions)
+static size_t collect_actionable_partitions(const InstallPlan *plan,
+                                            PartitionRef *partitions)
 {
     size_t count = 0;
 
-    for (size_t index = 0; index < plan->storage.partition_count; ++index) {
-        const PartitionPlan *partition = &plan->storage.partitions[index];
-
-        if (partition->usage != PART_UNUSED) {
+    for (size_t disk_index = 0; disk_index < plan->storage.disk_count; ++disk_index) {
+        const DiskPlan *disk = &plan->storage.disks[disk_index];
+        for (size_t index = 0; index < disk->partition_count; ++index) {
+            const PartitionPlan *partition = &disk->partitions[index];
+            PartitionRef entry;
+            if (partition->usage == PART_UNUSED && partition->action != ACTION_FORMAT &&
+                !partition->planned) continue;
+            entry.disk = disk;
+            entry.partition = partition;
+            entry.disk_index = disk_index;
             size_t position = count;
 
             while (position > 0 &&
-                   partition_order(partition, partitions[position - 1]) < 0) {
+                   partition_order(&entry, &partitions[position - 1]) < 0) {
                 partitions[position] = partitions[position - 1];
                 --position;
             }
-            partitions[position] = partition;
+            partitions[position] = entry;
             ++count;
         }
     }
@@ -171,7 +204,7 @@ static const char *partition_field(const PartitionPlan *partition, PartitionFiel
 }
 
 static void emit_partition_number_array(ScriptWriter *writer, const char *name,
-                                        const PartitionPlan *const *partitions,
+                                        const PartitionRef *partitions,
                                         size_t count, PartitionNumberField field)
 {
     writer_printf(writer, "%s=(\n", name);
@@ -179,13 +212,13 @@ static void emit_partition_number_array(ScriptWriter *writer, const char *name,
         uint64_t value;
         switch (field) {
         case NUMBER_PARTITION:
-            value = partitions[index]->number;
+            value = partitions[index].partition->number;
             break;
         case NUMBER_START_SECTOR:
-            value = partitions[index]->start_sector;
+            value = partitions[index].partition->start_sector;
             break;
         case NUMBER_SIZE_BYTES:
-            value = partitions[index]->size_bytes;
+            value = partitions[index].partition->size_bytes;
             break;
         default:
             value = 0;
@@ -294,12 +327,12 @@ static void emit_required_packages(ScriptWriter *writer, const InstallPlan *plan
 }
 
 static void emit_partition_array(ScriptWriter *writer, const char *name,
-                                 const PartitionPlan *const *partitions,
+                                 const PartitionRef *partitions,
                                  size_t count, PartitionField field)
 {
     writer_printf(writer, "%s=(\n", name);
     for (size_t index = 0; index < count; ++index) {
-        const char *value = partition_field(partitions[index], field);
+        const char *value = partition_field(partitions[index].partition, field);
         char *quoted = shell_quote(value);
 
         if (quoted == NULL) {
@@ -323,32 +356,86 @@ static const char *storage_mode_value(StorageMode mode)
         return "auto-home-swap";
     case STORAGE_AUTO_ROOT_ONLY:
         return "auto-root-only";
+    case STORAGE_AUTO_DATA:
+        return "auto-data";
     }
     return "invalid";
 }
 
-static uint64_t partition_size_mib(const InstallPlan *plan, PartitionUsage usage)
+static uint64_t disk_partition_size_mib(const DiskPlan *disk, PartitionUsage usage)
 {
-    const PartitionPlan *partition = find_partition(plan, usage);
-
-    return partition == NULL ? 0 : partition->size_bytes / MIB;
+    for (size_t index = 0; index < disk->partition_count; ++index) {
+        if (disk->partitions[index].usage == usage) {
+            return disk->partitions[index].size_bytes / MIB;
+        }
+    }
+    return 0;
 }
 
-static uint64_t flexible_size_mib(const InstallPlan *plan, PartitionUsage usage)
+static uint64_t flexible_size_mib(const DiskPlan *disk, PartitionUsage usage)
 {
-    uint64_t size = partition_size_mib(plan, usage);
+    uint64_t size = disk_partition_size_mib(disk, usage);
 
     /* Leave room for the aligned first sector and the backup GPT header. */
     return size > UINT64_C(2) ? size - UINT64_C(2) : 0;
 }
 
+static void emit_disk_string_array(ScriptWriter *writer, const char *name,
+                                   const InstallPlan *plan, unsigned field)
+{
+    writer_printf(writer, "%s=(\n", name);
+    for (size_t index = 0; index < plan->storage.disk_count; ++index) {
+        const DiskPlan *disk = &plan->storage.disks[index];
+        const char *value = field == 0 ? disk->path : field == 1 ? disk->model :
+                            field == 2 ? disk->serial : field == 3 ? disk->partition_table :
+                            storage_mode_value(disk->mode);
+        char *quoted = shell_quote(value);
+        if (quoted == NULL) { writer->ok = false; return; }
+        writer_printf(writer, "    %s\n", quoted);
+        free(quoted);
+    }
+    writer_puts(writer, ")\n");
+}
+
+static void emit_disk_number_array(ScriptWriter *writer, const char *name,
+                                   const InstallPlan *plan, unsigned field)
+{
+    writer_printf(writer, "%s=(\n", name);
+    for (size_t index = 0; index < plan->storage.disk_count; ++index) {
+        const DiskPlan *disk = &plan->storage.disks[index];
+        uint64_t value;
+        if (field == 0) value = disk->size_bytes;
+        else if (field == 1) value = disk_partition_size_mib(disk, PART_BOOT);
+        else if (field == 2) value = disk->mode == STORAGE_AUTO_ROOT_SWAP
+                                      ? flexible_size_mib(disk, PART_ROOT)
+                                      : disk_partition_size_mib(disk, PART_ROOT);
+        else if (field == 3) value = disk->mode == STORAGE_AUTO_HOME_SWAP
+                                      ? flexible_size_mib(disk, PART_HOME)
+                                      : disk_partition_size_mib(disk, PART_HOME);
+        else value = disk_partition_size_mib(disk, PART_SWAP);
+        writer_printf(writer, "    '%" PRIu64 "'\n", value);
+    }
+    writer_puts(writer, ")\n");
+}
+
+static void emit_partition_disk_indexes(ScriptWriter *writer,
+                                        const PartitionRef *partitions, size_t count)
+{
+    writer_puts(writer, "PART_DISK_INDEXES=(\n");
+    for (size_t index = 0; index < count; ++index) {
+        writer_printf(writer, "    '%zu'\n", partitions[index].disk_index);
+    }
+    writer_puts(writer, ")\n");
+}
+
 static bool emit_header_and_plan(ScriptWriter *writer, const InstallPlan *plan,
                                  const PackageConfig *packages)
 {
-    const PartitionPlan *used[AI_MAX_PARTITIONS];
+    PartitionRef used[AI_MAX_PLAN_DISKS * AI_MAX_PARTITIONS];
     const PartitionPlan *root = find_partition(plan, PART_ROOT);
     const PartitionPlan *boot = find_partition(plan, PART_BOOT);
-    size_t used_count = collect_used_partitions(plan, used);
+    const DiskPlan *root_disk = find_partition_disk(plan, root);
+    size_t used_count = collect_actionable_partitions(plan, used);
     const char *kernel = kernel_name(plan->system.kernel);
     char kernel_image[AI_TEXT_LEN];
     char initramfs_image[AI_TEXT_LEN];
@@ -370,12 +457,8 @@ static bool emit_header_and_plan(ScriptWriter *writer, const InstallPlan *plan,
                 "readonly ASSET_DIR=\"${ARCH_INSTALL_ASSET_DIR:-$SCRIPT_DIR/live}\"\n"
                 "readonly TARGET_ROOT='/mnt'\n"
                 "LOG_FILE=${ARCH_INSTALL_LOG:-}\n");
-    if (!emit_assignment(writer, "TARGET_DISK", plan->storage.disk_path) ||
-        !emit_assignment(writer, "EXPECTED_MODEL", plan->storage.disk_model) ||
-        !emit_assignment(writer, "EXPECTED_SERIAL", plan->storage.disk_serial) ||
-        !emit_assignment(writer, "EXPECTED_PTTYPE", plan->storage.partition_table) ||
+    if (!emit_assignment(writer, "TARGET_DISK", root_disk == NULL ? "" : root_disk->path) ||
         !emit_assignment(writer, "TARGET_TIMEZONE", plan->system.timezone) ||
-        !emit_assignment(writer, "STORAGE_MODE", storage_mode_value(plan->storage.mode)) ||
         !emit_assignment(writer, "ROOT_DEVICE", root == NULL ? "" : root->device) ||
         !emit_assignment(writer, "BOOT_DEVICE", boot == NULL ? "" : boot->device) ||
         !emit_assignment(writer, "KERNEL_IMAGE", kernel_image) ||
@@ -383,22 +466,19 @@ static bool emit_header_and_plan(ScriptWriter *writer, const InstallPlan *plan,
         !emit_assignment(writer, "FALLBACK_IMAGE", fallback_image)) {
         return false;
     }
-    writer_printf(writer, "readonly EXPECTED_SIZE=%" PRIu64 "\n",
-                  plan->storage.disk_size_bytes);
-    writer_printf(writer, "readonly AUTO_EFI_SIZE_MIB=%" PRIu64 "\n",
-                  partition_size_mib(plan, PART_BOOT));
-    writer_printf(writer, "readonly AUTO_ROOT_SIZE_MIB=%" PRIu64 "\n",
-                  plan->storage.mode == STORAGE_AUTO_ROOT_SWAP
-                      ? flexible_size_mib(plan, PART_ROOT)
-                      : partition_size_mib(plan, PART_ROOT));
-    writer_printf(writer, "readonly AUTO_HOME_SIZE_MIB=%" PRIu64 "\n",
-                  plan->storage.mode == STORAGE_AUTO_HOME_SWAP
-                      ? flexible_size_mib(plan, PART_HOME)
-                      : partition_size_mib(plan, PART_HOME));
-    writer_printf(writer, "readonly AUTO_SWAP_SIZE_MIB=%" PRIu64 "\n",
-                  partition_size_mib(plan, PART_SWAP));
+    emit_disk_string_array(writer, "INSTALL_DISKS", plan, 0);
+    emit_disk_string_array(writer, "DISK_MODELS", plan, 1);
+    emit_disk_string_array(writer, "DISK_SERIALS", plan, 2);
+    emit_disk_string_array(writer, "DISK_PTTYPES", plan, 3);
+    emit_disk_string_array(writer, "DISK_MODES", plan, 4);
+    emit_disk_number_array(writer, "DISK_SIZES", plan, 0);
+    emit_disk_number_array(writer, "DISK_EFI_SIZE_MIB", plan, 1);
+    emit_disk_number_array(writer, "DISK_ROOT_SIZE_MIB", plan, 2);
+    emit_disk_number_array(writer, "DISK_HOME_SIZE_MIB", plan, 3);
+    emit_disk_number_array(writer, "DISK_SWAP_SIZE_MIB", plan, 4);
     emit_boolean(writer, "USE_LOCAL_MIRROR", plan->system.local_mirror);
     emit_boolean(writer, "CREATE_EFI_ENTRY", plan->system.create_efi_entry);
+    emit_partition_disk_indexes(writer, used, used_count);
     emit_partition_array(writer, "PART_DEVICES", used, used_count, FIELD_DEVICE);
     emit_partition_array(writer, "PART_USAGES", used, used_count, FIELD_USAGE);
     emit_partition_array(writer, "PART_ACTIONS", used, used_count, FIELD_ACTION);
@@ -721,7 +801,7 @@ static void emit_outer_runtime(ScriptWriter *writer)
         "}\n\n");
     writer_puts(writer,
         "select_local_mirror_source() {\n"
-        "    local sources=() source_text source_status ancestors filesystem parent_type\n"
+        "    local sources=() source_text source_status ancestors filesystem parent_type disk\n"
         "    if source_text=$(blkid -t LABEL=F2FS-DATA -o device); then\n"
         "        [[ -z \"$source_text\" ]] || mapfile -t sources <<<\"$source_text\"\n"
         "    else\n"
@@ -750,9 +830,11 @@ static void emit_outer_runtime(ScriptWriter *writer)
         "        die 'Cannot determine the local mirror size.'\n"
         "    ancestors=$(lsblk -snrpo NAME -- \"$LOCAL_MIRROR_SOURCE\") ||\n"
         "        die 'Cannot inspect the local-mirror device ancestry.'\n"
-        "    if grep -Fxq -- \"$TARGET_DISK\" <<<\"$ancestors\"; then\n"
-        "        die 'The local mirror cannot reside on the installation disk.'\n"
-        "    fi\n"
+        "    for disk in \"${INSTALL_DISKS[@]}\"; do\n"
+        "        if grep -Fxq -- \"$disk\" <<<\"$ancestors\"; then\n"
+        "            die 'The local mirror cannot reside on an installation disk.'\n"
+        "        fi\n"
+        "    done\n"
         "    ensure_node_idle \"$LOCAL_MIRROR_SOURCE\"\n"
         "}\n\n"
         "verify_local_mirror_identity() {\n"
@@ -841,35 +923,39 @@ static void emit_outer_runtime(ScriptWriter *writer)
         "    done\n"
         "}\n\n");
     writer_puts(writer,
-        "verify_disk_identity() {\n"
-        "    local current_size current_model current_serial current_pttype current_type\n"
-        "    [[ -b \"$TARGET_DISK\" ]] || die \"Target disk is not a block device: $TARGET_DISK\"\n"
-        "    current_type=$(lsblk -dnro TYPE -- \"$TARGET_DISK\")\n"
-        "    [[ \"$current_type\" == disk ]] || die \"Target is not a whole disk: $TARGET_DISK\"\n"
-        "    [[ \"$(blockdev --getro \"$TARGET_DISK\")\" == 0 ]] || die \"Target disk is read-only: $TARGET_DISK\"\n"
-        "    current_size=$(blockdev --getsize64 \"$TARGET_DISK\")\n"
-        "    [[ \"$current_size\" == \"$EXPECTED_SIZE\" ]] ||\n"
-        "        die \"Target disk size changed (expected $EXPECTED_SIZE, got $current_size)\"\n"
-        "    current_model=$(lsblk -dno MODEL -- \"$TARGET_DISK\" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')\n"
-        "    current_serial=$(lsblk -dno SERIAL -- \"$TARGET_DISK\" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')\n"
-        "    current_pttype=$(lsblk -dnro PTTYPE -- \"$TARGET_DISK\")\n"
-        "    if [[ -n \"$EXPECTED_MODEL\" && \"$current_model\" != \"$EXPECTED_MODEL\" ]]; then\n"
-        "        die \"Target disk model changed (expected '$EXPECTED_MODEL', got '$current_model')\"\n"
-        "    fi\n"
-        "    if [[ -n \"$EXPECTED_SERIAL\" && \"$current_serial\" != \"$EXPECTED_SERIAL\" ]]; then\n"
-        "        die \"Target disk serial changed\"\n"
-        "    fi\n"
-        "    if [[ \"$STORAGE_MODE\" == existing && \"${current_pttype,,}\" != \"${EXPECTED_PTTYPE,,}\" ]]; then\n"
-        "        die \"Target disk partition-table type changed\"\n"
-        "    fi\n"
+        "verify_disk_identities() {\n"
+        "    local index disk current_size current_model current_serial current_pttype current_type\n"
+        "    for ((index=0; index<${#INSTALL_DISKS[@]}; ++index)); do\n"
+        "        disk=${INSTALL_DISKS[index]}\n"
+        "        [[ -b \"$disk\" ]] || die \"Installation disk is not a block device: $disk\"\n"
+        "        current_type=$(lsblk -dnro TYPE -- \"$disk\")\n"
+        "        [[ \"$current_type\" == disk ]] || die \"Installation target is not a whole disk: $disk\"\n"
+        "        [[ \"$(blockdev --getro \"$disk\")\" == 0 ]] || die \"Installation disk is read-only: $disk\"\n"
+        "        current_size=$(blockdev --getsize64 \"$disk\")\n"
+        "        [[ \"$current_size\" == \"${DISK_SIZES[index]}\" ]] ||\n"
+        "            die \"Installation disk size changed: $disk\"\n"
+        "        current_model=$(lsblk -dno MODEL -- \"$disk\" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')\n"
+        "        current_serial=$(lsblk -dno SERIAL -- \"$disk\" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')\n"
+        "        current_pttype=$(lsblk -dnro PTTYPE -- \"$disk\")\n"
+        "        if [[ -n \"${DISK_MODELS[index]}\" && \"$current_model\" != \"${DISK_MODELS[index]}\" ]]; then\n"
+        "            die \"Installation disk model changed: $disk\"\n"
+        "        fi\n"
+        "        if [[ -n \"${DISK_SERIALS[index]}\" && \"$current_serial\" != \"${DISK_SERIALS[index]}\" ]]; then\n"
+        "            die \"Installation disk serial changed: $disk\"\n"
+        "        fi\n"
+        "        if [[ \"${DISK_MODES[index]}\" == existing &&\n"
+        "              \"${current_pttype,,}\" != \"${DISK_PTTYPES[index],,}\" ]]; then\n"
+        "            die \"Installation disk partition-table type changed: $disk\"\n"
+        "        fi\n"
+        "    done\n"
         "}\n\n"
         "verify_existing_partition() {\n"
-        "    local device=$1 expected_number=$2 expected_uuid=$3 expected_start=$4 expected_size=$5 expected_type=$6\n"
+        "    local device=$1 expected_parent=$2 expected_number=$3 expected_uuid=$4 expected_start=$5 expected_size=$6 expected_type=$7\n"
         "    local parent actual_number actual_uuid actual_start actual_size actual_type\n"
         "    [[ -b \"$device\" ]] || die \"Configured partition is missing: $device\"\n"
         "    parent=$(lsblk -dnrpo PKNAME -- \"$device\")\n"
-        "    [[ \"$parent\" == \"$TARGET_DISK\" ]] ||\n"
-        "        die \"$device no longer belongs to $TARGET_DISK\"\n"
+        "    [[ \"$parent\" == \"$expected_parent\" ]] ||\n"
+        "        die \"$device no longer belongs to $expected_parent\"\n"
         "    actual_number=$(lsblk -dnro PARTN -- \"$device\")\n"
         "    actual_uuid=$(lsblk -dnro PARTUUID -- \"$device\")\n"
         "    actual_start=$(lsblk -dnro START -- \"$device\")\n"
@@ -886,7 +972,8 @@ static void emit_outer_runtime(ScriptWriter *writer)
         "}\n\n");
     writer_puts(writer,
         "verify_created_partition() {\n"
-        "    local device=$1 expected_number=$2 usage=$3 planned_size=$4\n"
+        "    local device=$1 expected_number=$2 usage=$3 planned_size=$4 disk_index=$5\n"
+        "    local target_disk=${INSTALL_DISKS[disk_index]} storage_mode=${DISK_MODES[disk_index]}\n"
         "    local parent actual_number actual_type actual_uuid expected_type disk_pttype\n"
         "    local actual_start actual_start_bytes actual_size expected_mib expected_size\n"
         "    local minimum_size remaining_bytes previous_device='' previous_start previous_size\n"
@@ -898,14 +985,15 @@ static void emit_outer_runtime(ScriptWriter *writer)
         "    actual_uuid=$(lsblk -dnro PARTUUID -- \"$device\")\n"
         "    actual_start=$(lsblk -dnro START -- \"$device\")\n"
         "    actual_size=$(blockdev --getsize64 \"$device\")\n"
-        "    disk_pttype=$(lsblk -dnro PTTYPE -- \"$TARGET_DISK\")\n"
-        "    [[ \"$parent\" == \"$TARGET_DISK\" && \"$actual_number\" == \"$expected_number\" ]] ||\n"
+        "    disk_pttype=$(lsblk -dnro PTTYPE -- \"$target_disk\")\n"
+        "    [[ \"$parent\" == \"$target_disk\" && \"$actual_number\" == \"$expected_number\" ]] ||\n"
         "        die \"Created partition identity mismatch for $device\"\n"
         "    [[ \"${disk_pttype,,}\" == gpt && -n \"$actual_uuid\" ]] ||\n"
         "        die \"Created partition has no stable GPT identity: $device\"\n"
-        "    case \"$usage\" in\n"
-        "        boot) expected_type='c12a7328-f81f-11d2-ba4b-00a0c93ec93b' ;;\n"
-        "        swap) expected_type='0657fd6d-a4ab-43c4-84e5-0933c84b4f4f' ;;\n"
+        "    case \"$storage_mode:$usage\" in\n"
+        "        auto-data:*) expected_type='0fc63daf-8483-4772-8e79-3d69d8477de4' ;;\n"
+        "        *:boot) expected_type='c12a7328-f81f-11d2-ba4b-00a0c93ec93b' ;;\n"
+        "        *:swap) expected_type='0657fd6d-a4ab-43c4-84e5-0933c84b4f4f' ;;\n"
         "        *) expected_type='0fc63daf-8483-4772-8e79-3d69d8477de4' ;;\n"
         "    esac\n"
         "    [[ \"${actual_type,,}\" == \"$expected_type\" ]] || die \"Unexpected GPT type for $device\"\n"
@@ -917,7 +1005,8 @@ static void emit_outer_runtime(ScriptWriter *writer)
         "            die \"Unexpected first-partition offset for $device\"\n"
         "    else\n"
         "        for candidate in \"${!PART_NUMBERS[@]}\"; do\n"
-        "            if [[ \"${PART_NUMBERS[candidate]}\" -eq $((expected_number - 1)) ]]; then\n"
+        "            if [[ \"${PART_DISK_INDEXES[candidate]}\" == \"$disk_index\" &&\n"
+        "                  \"${PART_NUMBERS[candidate]}\" -eq $((expected_number - 1)) ]]; then\n"
         "                previous_device=${PART_DEVICES[candidate]}\n"
         "                break\n"
         "            fi\n"
@@ -931,18 +1020,23 @@ static void emit_outer_runtime(ScriptWriter *writer)
         "        (( gap >= 0 && gap <= 64 * 1048576 )) ||\n"
         "            die \"Unexpected partition gap before $device\"\n"
         "    fi\n"
-        "    case \"$usage\" in\n"
-        "        boot) expected_mib=$AUTO_EFI_SIZE_MIB ;;\n"
-        "        root) [[ \"$STORAGE_MODE\" == auto-root-only ]] && expected_mib=0 || expected_mib=$AUTO_ROOT_SIZE_MIB ;;\n"
-        "        home) expected_mib=$AUTO_HOME_SIZE_MIB ;;\n"
-        "        swap) expected_mib=$AUTO_SWAP_SIZE_MIB ;;\n"
-        "    esac\n"
+        "    if [[ \"$storage_mode\" == auto-data ]]; then\n"
+        "        expected_mib=0\n"
+        "    else\n"
+        "        case \"$usage\" in\n"
+        "            boot) expected_mib=${DISK_EFI_SIZE_MIB[disk_index]} ;;\n"
+        "            root) [[ \"$storage_mode\" == auto-root-only ]] && expected_mib=0 || expected_mib=${DISK_ROOT_SIZE_MIB[disk_index]} ;;\n"
+        "            home) expected_mib=${DISK_HOME_SIZE_MIB[disk_index]} ;;\n"
+        "            swap) expected_mib=${DISK_SWAP_SIZE_MIB[disk_index]} ;;\n"
+        "            *) expected_mib=0 ;;\n"
+        "        esac\n"
+        "    fi\n"
         "    if (( expected_mib > 0 )); then\n"
         "        expected_size=$((expected_mib * 1048576))\n"
         "        [[ \"$actual_size\" == \"$expected_size\" ]] || die \"Unexpected size for $device\"\n"
         "    else\n"
         "        minimum_size=$((planned_size - 64 * 1048576))\n"
-        "        remaining_bytes=$((EXPECTED_SIZE - actual_start_bytes - actual_size))\n"
+        "        remaining_bytes=$((${DISK_SIZES[disk_index]} - actual_start_bytes - actual_size))\n"
         "        (( actual_size >= minimum_size && actual_size <= planned_size &&\n"
         "           remaining_bytes >= 0 && remaining_bytes <= 64 * 1048576 )) ||\n"
         "            die \"Unexpected fill-to-end size for $device\"\n"
@@ -951,30 +1045,38 @@ static void emit_outer_runtime(ScriptWriter *writer)
         "}\n\n");
     writer_puts(writer,
         "verify_storage_state() {\n"
-        "    local index node mounted_target action filesystem actual actual_uuid mount_targets disk_nodes\n"
+        "    local index disk_index disk mode node mounted_target action filesystem actual actual_uuid mount_targets disk_nodes\n"
         "    [[ -d \"$TARGET_ROOT\" && ! -L \"$TARGET_ROOT\" ]] ||\n"
         "        die \"Target mountpoint changed or became a symlink: $TARGET_ROOT\"\n"
-        "    verify_disk_identity\n"
+        "    verify_disk_identities\n"
         "    mount_targets=$(findmnt -rn -o TARGET) || die 'Cannot inspect active mounts.'\n"
         "    while IFS= read -r mounted_target; do\n"
         "        case \"$mounted_target\" in\n"
         "            \"$TARGET_ROOT\"|\"$TARGET_ROOT\"/*) die \"$mounted_target is mounted below $TARGET_ROOT\" ;;\n"
         "        esac\n"
         "    done <<<\"$mount_targets\"\n"
-        "    if [[ \"$STORAGE_MODE\" == existing ]]; then\n"
-        "        ensure_node_idle \"$TARGET_DISK\"\n"
-        "        for ((index=0; index<${#PART_DEVICES[@]}; ++index)); do\n"
-        "            verify_existing_partition \"${PART_DEVICES[index]}\" \"${PART_NUMBERS[index]}\" \\\n"
+        "    for ((disk_index=0; disk_index<${#INSTALL_DISKS[@]}; ++disk_index)); do\n"
+        "        disk=${INSTALL_DISKS[disk_index]}\n"
+        "        mode=${DISK_MODES[disk_index]}\n"
+        "        if [[ \"$mode\" == existing ]]; then\n"
+        "            ensure_node_idle \"$disk\"\n"
+        "        else\n"
+        "            disk_nodes=$(lsblk -nrpo NAME -- \"$disk\") ||\n"
+        "                die \"Cannot enumerate installation-disk nodes: $disk\"\n"
+        "            while IFS= read -r node; do\n"
+        "                [[ -n \"$node\" ]] && ensure_node_idle \"$node\"\n"
+        "            done <<<\"$disk_nodes\"\n"
+        "        fi\n"
+        "    done\n"
+        "    for ((index=0; index<${#PART_DEVICES[@]}; ++index)); do\n"
+        "        disk_index=${PART_DISK_INDEXES[index]}\n"
+        "        if [[ \"${DISK_MODES[disk_index]}\" == existing ]]; then\n"
+        "            verify_existing_partition \"${PART_DEVICES[index]}\" \\\n"
+        "                \"${INSTALL_DISKS[disk_index]}\" \"${PART_NUMBERS[index]}\" \\\n"
         "                \"${PART_UUIDS[index]}\" \"${PART_START_SECTORS[index]}\" \\\n"
         "                \"${PART_SIZES[index]}\" \"${PART_TYPES[index]}\"\n"
-        "        done\n"
-        "    else\n"
-        "        disk_nodes=$(lsblk -nrpo NAME -- \"$TARGET_DISK\") ||\n"
-        "            die 'Cannot enumerate target-disk nodes.'\n"
-        "        while IFS= read -r node; do\n"
-        "            [[ -n \"$node\" ]] && ensure_node_idle \"$node\"\n"
-        "        done <<<\"$disk_nodes\"\n"
-        "    fi\n"
+        "        fi\n"
+        "    done\n"
         "    for ((index=0; index<${#PART_DEVICES[@]}; ++index)); do\n"
         "        action=${PART_ACTIONS[index]}\n"
         "        filesystem=${PART_FILESYSTEMS[index]}\n"
@@ -1047,6 +1149,7 @@ static void emit_outer_runtime(ScriptWriter *writer)
         "    [[ -d \"$TARGET_ROOT\" ]] || die \"Target mountpoint is not a directory: $TARGET_ROOT\"\n"
         "    [[ -f \"/usr/share/zoneinfo/$TARGET_TIMEZONE\" ]] || die \"Timezone data is unavailable: $TARGET_TIMEZONE\"\n"
         "    [[ \"${#PART_DEVICES[@]}\" -eq \"${#PART_USAGES[@]}\" &&\n"
+        "       \"${#PART_DEVICES[@]}\" -eq \"${#PART_DISK_INDEXES[@]}\" &&\n"
         "       \"${#PART_DEVICES[@]}\" -eq \"${#PART_ACTIONS[@]}\" &&\n"
         "       \"${#PART_DEVICES[@]}\" -eq \"${#PART_FILESYSTEMS[@]}\" &&\n"
         "       \"${#PART_DEVICES[@]}\" -eq \"${#PART_F2FS_MODES[@]}\" &&\n"
@@ -1057,6 +1160,16 @@ static void emit_outer_runtime(ScriptWriter *writer)
         "       \"${#PART_DEVICES[@]}\" -eq \"${#PART_NUMBERS[@]}\" &&\n"
         "       \"${#PART_DEVICES[@]}\" -eq \"${#PART_START_SECTORS[@]}\" &&\n"
         "       \"${#PART_DEVICES[@]}\" -eq \"${#PART_SIZES[@]}\" ]] || die 'Partition plan arrays are inconsistent.'\n"
+        "    [[ \"${#INSTALL_DISKS[@]}\" -gt 0 &&\n"
+        "       \"${#INSTALL_DISKS[@]}\" -eq \"${#DISK_MODELS[@]}\" &&\n"
+        "       \"${#INSTALL_DISKS[@]}\" -eq \"${#DISK_SERIALS[@]}\" &&\n"
+        "       \"${#INSTALL_DISKS[@]}\" -eq \"${#DISK_PTTYPES[@]}\" &&\n"
+        "       \"${#INSTALL_DISKS[@]}\" -eq \"${#DISK_MODES[@]}\" &&\n"
+        "       \"${#INSTALL_DISKS[@]}\" -eq \"${#DISK_SIZES[@]}\" &&\n"
+        "       \"${#INSTALL_DISKS[@]}\" -eq \"${#DISK_EFI_SIZE_MIB[@]}\" &&\n"
+        "       \"${#INSTALL_DISKS[@]}\" -eq \"${#DISK_ROOT_SIZE_MIB[@]}\" &&\n"
+        "       \"${#INSTALL_DISKS[@]}\" -eq \"${#DISK_HOME_SIZE_MIB[@]}\" &&\n"
+        "       \"${#INSTALL_DISKS[@]}\" -eq \"${#DISK_SWAP_SIZE_MIB[@]}\" ]] || die 'Disk plan arrays are inconsistent.'\n"
         "    verify_storage_state\n"
         "    for ((index=0; index<${#PART_DEVICES[@]}; ++index)); do\n"
         "        [[ \"${PART_ACTIONS[index]}\" != keep ]] || continue\n"
@@ -1083,8 +1196,12 @@ static void emit_outer_runtime(ScriptWriter *writer)
     writer_puts(writer,
         "print_plan() {\n"
         "    local index\n"
-        "    printf 'Target: %s  (%s, %s bytes)\\n' \"$TARGET_DISK\" \"${EXPECTED_MODEL:-unknown model}\" \"$EXPECTED_SIZE\"\n"
-        "    printf 'Storage mode: %s\\n' \"$STORAGE_MODE\"\n"
+        "    printf 'Boot/root disk: %s\\n' \"$TARGET_DISK\"\n"
+        "    printf 'Participating disks:\\n'\n"
+        "    for ((index=0; index<${#INSTALL_DISKS[@]}; ++index)); do\n"
+        "        printf '  %-22s %-18s %s bytes  %s\\n' \"${INSTALL_DISKS[index]}\" \\\n"
+        "            \"${DISK_MODELS[index]:-unknown}\" \"${DISK_SIZES[index]}\" \"${DISK_MODES[index]}\"\n"
+        "    done\n"
         "    if [[ \"$USE_LOCAL_MIRROR\" == true ]]; then\n"
         "        printf 'Local mirror: %s  UUID=%s  parent=%s  serial=%s\\n' \\\n"
         "            \"$LOCAL_MIRROR_SOURCE\" \"$LOCAL_MIRROR_UUID\" \\\n"
@@ -1128,57 +1245,73 @@ static void emit_outer_runtime(ScriptWriter *writer)
         "}\n\n");
     writer_puts(writer,
         "partition_disk() {\n"
-        "    [[ \"$STORAGE_MODE\" != existing ]] || return 0\n"
-        "    case \"$STORAGE_MODE\" in\n"
+        "    local index disk mode efi_size root_size home_size swap_size\n"
+        "    for ((index=0; index<${#INSTALL_DISKS[@]}; ++index)); do\n"
+        "        disk=${INSTALL_DISKS[index]}\n"
+        "        mode=${DISK_MODES[index]}\n"
+        "        [[ \"$mode\" != existing ]] || continue\n"
+        "        efi_size=${DISK_EFI_SIZE_MIB[index]}\n"
+        "        root_size=${DISK_ROOT_SIZE_MIB[index]}\n"
+        "        home_size=${DISK_HOME_SIZE_MIB[index]}\n"
+        "        swap_size=${DISK_SWAP_SIZE_MIB[index]}\n"
+        "    case \"$mode\" in\n"
         "        auto-root-swap)\n"
-        "            (( AUTO_EFI_SIZE_MIB > 0 && AUTO_ROOT_SIZE_MIB > 0 && AUTO_SWAP_SIZE_MIB > 0 )) ||\n"
+        "            (( efi_size > 0 && root_size > 0 && swap_size > 0 )) ||\n"
         "                die 'Automatic partition sizes are invalid.'\n"
         "            ;;\n"
         "        auto-home-swap)\n"
-        "            (( AUTO_EFI_SIZE_MIB > 0 && AUTO_ROOT_SIZE_MIB > 0 && AUTO_HOME_SIZE_MIB > 0 && AUTO_SWAP_SIZE_MIB > 0 )) ||\n"
+        "            (( efi_size > 0 && root_size > 0 && home_size > 0 && swap_size > 0 )) ||\n"
         "                die 'Automatic partition sizes are invalid.'\n"
         "            ;;\n"
         "        auto-root-only)\n"
-        "            (( AUTO_EFI_SIZE_MIB > 0 && EXPECTED_SIZE > (AUTO_EFI_SIZE_MIB + 8192) * 1048576 )) ||\n"
+        "            (( efi_size > 0 && DISK_SIZES[index] > (efi_size + 8192) * 1048576 )) ||\n"
         "                die 'Automatic root-only sizes are invalid.'\n"
         "            ;;\n"
-        "        *) die \"Unknown storage mode: $STORAGE_MODE\" ;;\n"
+        "        auto-data) ;;\n"
+        "        *) die \"Unknown storage mode: $mode\" ;;\n"
         "    esac\n"
-        "    phase 'Rebuilding the GPT partition table'\n"
-        "    wipefs --all --force \"$TARGET_DISK\"\n"
-        "    case \"$STORAGE_MODE\" in\n"
+        "    phase \"Rebuilding the GPT partition table on $disk\"\n"
+        "    wipefs --all --force \"$disk\"\n"
+        "    case \"$mode\" in\n"
         "        auto-root-swap)\n"
-        "            sfdisk --wipe always --wipe-partitions always \"$TARGET_DISK\" <<SFDISK\n"
+        "            sfdisk --wipe always --wipe-partitions always \"$disk\" <<SFDISK\n"
         "label: gpt\n"
-        "size=${AUTO_EFI_SIZE_MIB}MiB,type=uefi,name=\"EFI System\"\n"
-        "size=${AUTO_ROOT_SIZE_MIB}MiB,type=linux,name=\"Arch Linux root\"\n"
-        "size=${AUTO_SWAP_SIZE_MIB}MiB,type=swap,name=\"Linux swap\"\n"
+        "size=${efi_size}MiB,type=uefi,name=\"EFI System\"\n"
+        "size=${root_size}MiB,type=linux,name=\"Arch Linux root\"\n"
+        "size=${swap_size}MiB,type=swap,name=\"Linux swap\"\n"
         "SFDISK\n"
         "            ;;\n"
         "        auto-home-swap)\n"
-        "            sfdisk --wipe always --wipe-partitions always \"$TARGET_DISK\" <<SFDISK\n"
+        "            sfdisk --wipe always --wipe-partitions always \"$disk\" <<SFDISK\n"
         "label: gpt\n"
-        "size=${AUTO_EFI_SIZE_MIB}MiB,type=uefi,name=\"EFI System\"\n"
-        "size=${AUTO_ROOT_SIZE_MIB}MiB,type=linux,name=\"Arch Linux root\"\n"
-        "size=${AUTO_HOME_SIZE_MIB}MiB,type=linux,name=\"Arch Linux home\"\n"
-        "size=${AUTO_SWAP_SIZE_MIB}MiB,type=swap,name=\"Linux swap\"\n"
+        "size=${efi_size}MiB,type=uefi,name=\"EFI System\"\n"
+        "size=${root_size}MiB,type=linux,name=\"Arch Linux root\"\n"
+        "size=${home_size}MiB,type=linux,name=\"Arch Linux home\"\n"
+        "size=${swap_size}MiB,type=swap,name=\"Linux swap\"\n"
         "SFDISK\n"
         "            ;;\n"
         "        auto-root-only)\n"
-        "            sfdisk --wipe always --wipe-partitions always \"$TARGET_DISK\" <<SFDISK\n"
+        "            sfdisk --wipe always --wipe-partitions always \"$disk\" <<SFDISK\n"
         "label: gpt\n"
-        "size=${AUTO_EFI_SIZE_MIB}MiB,type=uefi,name=\"EFI System\"\n"
+        "size=${efi_size}MiB,type=uefi,name=\"EFI System\"\n"
         "size=,type=linux,name=\"Arch Linux root\"\n"
         "SFDISK\n"
         "            ;;\n"
-        "        *) die \"Unknown storage mode: $STORAGE_MODE\" ;;\n"
+        "        auto-data)\n"
+        "            sfdisk --wipe always --wipe-partitions always \"$disk\" <<SFDISK\n"
+        "label: gpt\n"
+        "size=,type=linux,name=\"Linux data\"\n"
+        "SFDISK\n"
+        "            ;;\n"
+        "        *) die \"Unknown storage mode: $mode\" ;;\n"
         "    esac\n"
         "    if command -v partprobe >/dev/null 2>&1; then\n"
-        "        partprobe \"$TARGET_DISK\"\n"
+        "        partprobe \"$disk\"\n"
         "    else\n"
-        "        blockdev --rereadpt \"$TARGET_DISK\"\n"
+        "        blockdev --rereadpt \"$disk\"\n"
         "    fi\n"
         "    if command -v udevadm >/dev/null 2>&1; then udevadm settle; fi\n"
+        "    done\n"
         "}\n\n"
         "wait_for_partitions() {\n"
         "    local index device attempt\n"
@@ -1189,9 +1322,10 @@ static void emit_outer_runtime(ScriptWriter *writer)
         "            sleep 0.1\n"
         "        done\n"
         "        [[ -b \"$device\" ]] || die \"Partition did not appear: $device\"\n"
-        "        if [[ \"$STORAGE_MODE\" != existing ]]; then\n"
+        "        if [[ \"${DISK_MODES[PART_DISK_INDEXES[index]]}\" != existing ]]; then\n"
         "            verify_created_partition \"$device\" \"${PART_NUMBERS[index]}\" \\\n"
-        "                \"${PART_USAGES[index]}\" \"${PART_SIZES[index]}\"\n"
+        "                \"${PART_USAGES[index]}\" \"${PART_SIZES[index]}\" \\\n"
+        "                \"${PART_DISK_INDEXES[index]}\"\n"
         "        fi\n"
         "    done\n"
         "}\n\n");
@@ -1234,7 +1368,7 @@ static void emit_outer_runtime(ScriptWriter *writer)
         "    for ((index=0; index<${#PART_DEVICES[@]}; ++index)); do\n"
         "        device=${PART_DEVICES[index]}\n"
         "        usage=${PART_USAGES[index]}\n"
-        "        [[ \"$usage\" != swap ]] || continue\n"
+        "        [[ \"$usage\" != swap && \"$usage\" != unused ]] || continue\n"
         "        filesystem=${PART_FILESYSTEMS[index]}\n"
         "        mode=${PART_F2FS_MODES[index]}\n"
         "        mountpoint=${PART_MOUNTPOINTS[index]}\n"
@@ -1920,13 +2054,6 @@ bool generate_install_script(const InstallPlan *plan, const PackageConfig *packa
         }
         return false;
     }
-    if (plan->storage.disk_size_bytes == 0) {
-        if (error != NULL && error_size > 0) {
-            (void)snprintf(error, error_size, "cannot generate script: target disk size is unknown");
-        }
-        return false;
-    }
-
     path_result = lstat(path, &path_status);
     if (path_result == 0) {
         if (S_ISREG(path_status.st_mode)) {

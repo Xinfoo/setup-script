@@ -5,14 +5,14 @@
 C 程序是配置前端，不在编辑方案时格式化分区或写入分区表。真正的安装操作由生成的 Shell 脚本完成；用户可以先预览脚本、保存后退出，也可以在 TUI 中选择生成后立即运行。
 
 > [!CAUTION]
-> 生成的安装脚本可以执行 `wipefs`、`sfdisk`、`mkfs.*` 和 `mkswap`。引导式整盘方案会清除目标磁盘的现有分区表与全部数据。本项目不备份、不回滚；在真实磁盘上使用前，请先在虚拟机或可丢弃磁盘上验证生成的脚本。
+> 生成的安装脚本可以执行 `wipefs`、`sfdisk`、`mkfs.*` 和 `mkswap`。引导式整盘方案会清除对应磁盘的现有分区表与全部数据。本项目不备份、不回滚；在真实磁盘上使用前，请先在虚拟机或可丢弃磁盘上验证生成的脚本。
 
 ## 当前范围
 
 当前实现面向 UEFI 启动的 Arch Linux Live 环境，目标系统使用 GPT、systemd 和 systemd-boot。构造器目前支持：
 
-- 一块目标磁盘；
-- 三种引导式整盘布局，或复用已有分区；
+- 最多八块参与安装的磁盘，分区按磁盘分组管理；
+- 三种系统盘布局、单分区数据盘布局，或复用已有分区；
 - Ext4、XFS、F2FS、FAT32 和 Swap；
 - `/`、`/boot`、`/home`、`/var`、`/usr`、`/opt` 和 Swap 用途；
 - Intel、AMD 和虚拟机平台；
@@ -164,7 +164,7 @@ CMake 还提供：
 
 界面需要至少 `80x24` 的终端。主页将方案拆成六个可随时返回修改的章节：
 
-1. `Storage`：目标磁盘、布局、文件系统和挂载用途；
+1. `Storage`：参与安装的磁盘、各盘布局、文件系统和挂载用途；
 2. `Base system`：CPU 平台、内核、设备类型、Locale 和镜像；
 3. `Hardware`：Intel GPU、NVIDIA 和蓝牙；
 4. `Desktop & software`：桌面环境和可选软件组；
@@ -186,11 +186,12 @@ CMake 还提供：
 
 | 按键 | 作用 |
 | --- | --- |
-| `D` | 选择目标磁盘 |
-| `A` | 选择引导式整盘布局 |
-| `E` | 重新读取目标盘的现有分区 |
+| `D` | 添加磁盘，或切换当前正在编辑的磁盘组 |
+| `X` | 从方案中移除当前磁盘组，不修改真实设备 |
+| `A` | 为当前磁盘选择引导式整盘布局 |
+| `E` | 重新读取当前磁盘的现有分区 |
 | `U` / `Space` | 打开用途选择框，直接指定 `/`、`/boot`、`/home`、`/var`、`/usr`、`/opt`、Swap 或忽略 |
-| `F` / `Enter` | 打开操作选择框，明确选择 `KEEP` 或 `FORMAT` 及文件系统 |
+| `F` / `Enter` | 打开操作选择框，明确选择 `KEEP` 或 `FORMAT` 及文件系统；未分配挂载点时也可格式化 |
 | `O` | 打开 F2FS 挂载配置选择框 |
 | `R` | 重新调用 `lsblk` 刷新设备列表 |
 
@@ -199,6 +200,7 @@ CMake 还提供：
 1. EFI 1 GiB + ROOT + 推荐 Swap；
 2. EFI 1 GiB + ROOT 100 GiB + HOME + 推荐 Swap；
 3. EFI 1 GiB + ROOT，不创建 Swap。
+4. 使用整个磁盘创建一个数据分区，默认格式化为 Ext4，但不分配挂载点。
 
 推荐 Swap 依照旧安装脚本的习惯计算：8 GiB 及以下内存使用两倍内存，大于 8 GiB 且不超过 64 GiB 时使用与内存相同的容量，超过 64 GiB 则使用 8 GiB。
 
@@ -209,6 +211,8 @@ CMake 还提供：
 - `KEEP`：不重新创建文件系统，执行时会再次核对类型和文件系统 UUID；安装过程仍可能在该挂载点内新增或覆盖文件；
 - `FORMAT`：生成脚本会对该分区创建新文件系统；
 - `IGNORE`：不格式化、不挂载。
+
+`unused` 与 `FORMAT` 可以同时存在，表示只创建或格式化文件系统，不挂载、不写入 fstab。多个磁盘的挂载点会合并为一棵目标文件系统树；`/boot` 和 `/` 必须位于同一块磁盘上。
 
 只有当前模型能识别的 vfat、Ext4、XFS、F2FS 和 Swap 可用于 `KEEP`。构造器不会在 TUI 中创建任意手动分区表，也不会调整已有分区大小。
 新安装中 `/`、`/var` 和 `/usr` 必须选择 `FORMAT`，避免把旧系统的包数据库或二进制文件混入新系统。
@@ -225,6 +229,7 @@ F2FS 可选择：
 
 - 已选择磁盘和分区方案；
 - 恰好一个 `/` 和一个 EFI `/boot`；
+- `/` 和 `/boot` 位于同一块磁盘；
 - 每个挂载用途不重复；
 - `/boot` 使用 FAT32/vfat；
 - Swap 用途和文件系统一致；
@@ -246,21 +251,22 @@ Shell 预览页可用方向键、`Page Up` 和 `Page Down` 滚动，`G` 重新�
 
 ## 方案 JSON
 
-JSON 是 TUI 和 Shell 生成器之间的配置交换格式。当前格式版本为 `2`，顶层包含：
+JSON 是 TUI 和 Shell 生成器之间的配置交换格式。当前格式版本为 `3`，顶层包含：
 
 ```text
 version
 storage
-  disk, model, serial, size_bytes, partition_table
-  removable, read_only, in_use_when_detected, mode
-  partitions[]
+  disks[]
+    disk, model, serial, size_bytes, partition_table
+    removable, read_only, in_use_when_detected, mode
+    partitions[]
 system
   platform, kernel, locale, desktop
   timezone, hostname, username
   hardware, software, mirror and boot switches
 ```
 
-每个分区保存设备路径、编号、容量、起始扇区、文件系统 UUID、PARTUUID、GPT 类型、当前文件系统、是否为引导式新分区、用途、`KEEP/FORMAT`、目标文件系统和 F2FS 配置。
+每块磁盘独立保存身份、分区模式和分区数组。每个分区保存设备路径、编号、容量、起始扇区、文件系统 UUID、PARTUUID、GPT 类型、当前文件系统、是否为引导式新分区、用途、`KEEP/FORMAT`、目标文件系统和 F2FS 配置。
 
 枚举在 JSON 中使用数字值保存，因此建议使用 TUI 编辑，而不是手工修改。加载后生成脚本前仍会执行方案验证。不支持的 `version` 会被拒绝。
 
@@ -279,11 +285,11 @@ system
 执行流程为：
 
 1. 检查 root、UEFI、命令依赖和 EFI variables；
-2. 核对目标是整块磁盘，并比较容量、型号、非空序列号与 GPT 类型；
+2. 核对每个参与安装的目标都是整块磁盘，并比较容量、型号、非空序列号与 GPT 类型；
 3. 核对现有分区的父磁盘、编号、起始扇区、容量、PARTUUID 和 GPT 类型；`KEEP` 还会核对文件系统 UUID 并做只读挂载探测；
 4. 显示存储表；网络源要求输入 `PREPARE`，本地源要求精确输入设备和 UUID，然后才刷新 Live 包数据库并预先解析完整软件包集；
-5. 软件源就绪后，要求从交互式终端输入完整目标磁盘路径，然后立即再做一次存储身份核对；
-6. 引导式方案重建 GPT 并核对新分区；现有分区方案不写分区表；
+5. 软件源就绪后，要求从交互式终端输入包含 `/boot` 和 `/` 的磁盘路径，然后立即再做一次所有参与磁盘的身份核对；
+6. 分别在选择了引导式布局的磁盘上重建 GPT 并核对新分区；现有分区模式不写对应磁盘的分区表；
 7. 只格式化 `FORMAT`，随后按挂载路径顺序挂载到 `/mnt` 并启用指定 Swap；
 8. 运行 `pacstrap`，并只为 `/mnt` 树和方案中的 Swap 生成 UUID fstab；
 9. 生成临时 chroot 脚本并用 `arch-chroot` 自动运行；
@@ -319,7 +325,7 @@ sudo ./install.sh
 ```
 
 > [!IMPORTANT]
-> 生成的脚本会在预检查和输出方案后，要求输入完整目标磁盘路径（例如 `/dev/nvme0n1`）。输入完全一致后才会进入分区和格式化阶段；该检查需要交互式 TTY。
+> 生成的脚本会在预检查和输出方案后，要求输入包含 `/boot` 和 `/` 的完整磁盘路径（例如 `/dev/nvme0n1`）。输入完全一致后才会进入分区和格式化阶段；该检查需要交互式 TTY。
 
 TUI 中的 `X` 会先显示一次默认为 `No` 的运行确认，然后使用当前身份运行 `/usr/bin/bash <output>`，不会自动调用 `sudo`。因此要从 `X` 直接开始安装，应在 Arch Live 的 root shell 中启动构造器。
 
@@ -364,7 +370,7 @@ explicit execution
 
 使用现有分区时，`KEEP`、`FORMAT` 和 `IGNORE` 在审阅页中分开显示。默认安全动作是 `KEEP`；只有用户显式切换为 `FORMAT` 的现有分区才会出现在格式化命令中。
 
-执行脚本会核对磁盘容量、型号和非空序列号，并检查现有分区仍属于选定磁盘。它还会拒绝已挂载的目标节点、活动 Swap 和有 holder 的设备，并在任何目标磁盘写入前要求手工输入完整磁盘路径。
+执行脚本会逐块核对磁盘容量、型号和非空序列号，并检查现有分区仍属于各自磁盘。它还会拒绝已挂载的目标节点、活动 Swap 和有 holder 的设备，并在写入前要求手工输入包含 `/boot` 和 `/` 的磁盘路径。
 
 仍需注意：
 
@@ -377,7 +383,7 @@ explicit execution
 
 ### 本地镜像的恢复
 
-本地镜像模式要求恰好一个标签为 `F2FS-DATA` 的分区，其中包含 `repo/archlinux`。脚本会拒绝使用目标安装盘上的分区作为本地镜像。
+本地镜像模式要求恰好一个标签为 `F2FS-DATA` 的分区，其中包含 `repo/archlinux`。脚本会拒绝使用任意参与安装磁盘上的分区作为本地镜像。
 
 确认文本必须精确输入 `UNSIGNED <device> <UUID>`。脚本会确认该分区是目标盘之外、未使用的 F2FS，然后以 `ro,nodev,nosuid,noexec` 挂载。`pacstrap` 完成且 `genfstab` 生成后，仓库目录才会临时 bind 到目标系统的 `/var/cache/arch-install-repo`，供 chroot 内的 `file://` 源使用；该挂载不会写入 fstab。这个兼容模式会临时设置 `SigLevel = Never`，因此仓库内容将被视为可以以 root 权限安装的可信输入。成功后目标系统改用选定的永久镜像。
 
@@ -466,7 +472,7 @@ Secure Boot 可以与临时本地镜像同时启用。本地镜像模式会临�
 ## 已知限制
 
 - 只支持 UEFI + GPT + systemd-boot；
-- 只能配置一块目标磁盘；
+- 最多允许八块磁盘参与同一安装方案；
 - 不支持加密、LVM、RAID 和 Btrfs 格式化；
 - 不提供任意分区表编辑器或分区缩放；
 - 现有文件系统只识别 vfat、Ext4、XFS、F2FS 和 Swap；

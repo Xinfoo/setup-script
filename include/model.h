@@ -6,6 +6,7 @@
 #include <stdint.h>
 
 #define AI_MAX_DISKS 32
+#define AI_MAX_PLAN_DISKS 8
 #define AI_MAX_PARTITIONS 128
 #define AI_MAX_ISSUES 32
 #define AI_PATH_LEN 256
@@ -40,7 +41,8 @@ typedef enum {
     STORAGE_EXISTING,
     STORAGE_AUTO_ROOT_SWAP,
     STORAGE_AUTO_HOME_SWAP,
-    STORAGE_AUTO_ROOT_ONLY
+    STORAGE_AUTO_ROOT_ONLY,
+    STORAGE_AUTO_DATA
 } StorageMode;
 
 typedef enum { PLATFORM_INTEL, PLATFORM_AMD, PLATFORM_VM } Platform;
@@ -99,17 +101,22 @@ typedef struct {
 } PartitionPlan;
 
 typedef struct {
-    char disk_path[AI_PATH_LEN];
-    char disk_model[AI_TEXT_LEN];
-    char disk_serial[AI_TEXT_LEN];
+    char path[AI_PATH_LEN];
+    char model[AI_TEXT_LEN];
+    char serial[AI_TEXT_LEN];
     char partition_table[32];
-    uint64_t disk_size_bytes;
-    bool disk_removable;
-    bool disk_read_only;
-    bool disk_in_use;
+    uint64_t size_bytes;
+    bool removable;
+    bool read_only;
+    bool in_use;
     StorageMode mode;
     PartitionPlan partitions[AI_MAX_PARTITIONS];
     size_t partition_count;
+} DiskPlan;
+
+typedef struct {
+    DiskPlan disks[AI_MAX_PLAN_DISKS];
+    size_t disk_count;
 } StoragePlan;
 
 typedef struct {
@@ -159,6 +166,10 @@ typedef struct {
 
 void plan_init(InstallPlan *plan);
 void plan_select_disk(InstallPlan *plan, const DiskInfo *disk);
+bool plan_add_disk(InstallPlan *plan, const DiskInfo *disk);
+DiskPlan *plan_find_disk(InstallPlan *plan, const char *path);
+void disk_plan_use_existing(DiskPlan *plan, const DiskInfo *disk);
+void disk_plan_use_automatic(DiskPlan *plan, const DiskInfo *disk, StorageMode mode);
 void plan_use_existing(InstallPlan *plan, const DiskInfo *disk);
 void plan_use_automatic(InstallPlan *plan, const DiskInfo *disk, StorageMode mode);
 void plan_cycle_usage(PartitionPlan *partition);
