@@ -634,26 +634,33 @@ static void remove_active_disk(UiState *state)
 static void draw_storage(UiState *state)
 {
     StoragePlan *storage = &state->plan->storage;
+    const char *keys;
     int available = LINES - 10;
     int selected_line = 0;
     int visual_line = 0;
     int offset;
 
-    draw_shell(state, "Storage plan - editing changes only the generated plan",
-               "Up/Down move   D add disk   X remove   A layout   E existing   U mount   F format   O F2FS   R refresh   Esc back");
+    if (storage->disk_count == 0) {
+        keys = "Up/Down move   D add disk   R refresh   Esc back";
+    } else {
+        if (state->active_disk >= storage->disk_count) state->active_disk = 0;
+        if (state->row < -1) state->row = -1;
+        if (state->row >= 0 &&
+            (size_t)state->row >= storage->disks[state->active_disk].partition_count) {
+            size_t count = storage->disks[state->active_disk].partition_count;
+            state->row = count == 0 ? -1 : (int)count - 1;
+        }
+        keys = state->row < 0 ?
+               "Up/Down move   D add disk   X remove   A layout   E existing   R refresh   Esc back" :
+               "Up/Down move   D add disk   U/Space mount   F/Enter format   O F2FS   R refresh   Esc back";
+    }
+    draw_shell(state, "Storage plan - editing changes only the generated plan", keys);
     if (storage->disk_count == 0) {
         attron(COLOR_PAIR(COLOR_WARNING));
         mvaddstr(5, 4, "No installation disk added.");
         attroff(COLOR_PAIR(COLOR_WARNING));
         mvaddstr(7, 4, "Press D to add a disk. This program only edits the generated plan.");
         return;
-    }
-    if (state->active_disk >= storage->disk_count) state->active_disk = 0;
-    if (state->row < -1) state->row = -1;
-    if (state->row >= 0 &&
-        (size_t)state->row >= storage->disks[state->active_disk].partition_count) {
-        size_t count = storage->disks[state->active_disk].partition_count;
-        state->row = count == 0 ? -1 : (int)count - 1;
     }
     mvprintw(4, 2, "%zu disk(s); Up/Down moves across disk groups. FORMAT needs no mount point.",
              storage->disk_count);
@@ -923,9 +930,6 @@ static void handle_storage(UiState *state, int key)
     DiskPlan *disk;
     if (key == 27) { state->screen = SCREEN_HOME; state->row = 0; return; }
     if (key == 'd' || key == 'D') { add_disk(state); return; }
-    if (key == 'x' || key == 'X') { remove_active_disk(state); return; }
-    if (key == 'a' || key == 'A') { choose_layout(state); return; }
-    if (key == 'e' || key == 'E') { use_existing(state); return; }
     if (key == 'r' || key == 'R') { refresh_disks(state); return; }
     if (state->active_disk >= storage->disk_count) return;
     disk = &storage->disks[state->active_disk];
@@ -952,10 +956,18 @@ static void handle_storage(UiState *state, int key)
         return;
     }
     if (state->row < 0) {
+        if (key == 'x' || key == 'X') { remove_active_disk(state); return; }
+        if (key == 'a' || key == 'A') { choose_layout(state); return; }
+        if (key == 'e' || key == 'E') { use_existing(state); return; }
         if (key == 'u' || key == 'U' || key == ' ' || key == 'f' || key == 'F' ||
             key == '\n' || key == KEY_ENTER || key == 'o' || key == 'O') {
             set_status(state, "Select a partition with Up/Down before editing it.");
         }
+        return;
+    }
+    if (key == 'x' || key == 'X' || key == 'a' || key == 'A' ||
+        key == 'e' || key == 'E') {
+        set_status(state, "Select the disk header with Up/Down for disk-level actions.");
         return;
     }
     if (key == 'u' || key == 'U' || key == ' ') {
