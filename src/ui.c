@@ -268,6 +268,12 @@ static bool confirm_dialog(const char *title, const char *message)
     }
 }
 
+static void quit_builder(UiState *state)
+{
+    state->quit = !state->dirty ||
+        confirm_dialog("Quit builder", "Unsaved changes will be lost. Quit now?");
+}
+
 static bool text_dialog(const char *title, char *value, size_t size)
 {
     int width = 68;
@@ -443,7 +449,7 @@ static void handle_home(UiState *state, int key)
             SCREEN_STORAGE, SCREEN_SYSTEM, SCREEN_HARDWARE, SCREEN_SOFTWARE,
             SCREEN_IDENTITY, SCREEN_REVIEW, SCREEN_HOME
         };
-        if (state->row == 6) state->quit = confirm_dialog("Quit builder", "Unsaved changes will be lost. Quit now?");
+        if (state->row == 6) quit_builder(state);
         else {
             state->screen = screens[state->row];
             state->row = 0;
@@ -1118,7 +1124,7 @@ static void handle_key(UiState *state, int key)
     if (key == KEY_F(2)) { save_plan(state); return; }
     if (key == KEY_F(5)) { state->screen = SCREEN_REVIEW; state->row = 0; return; }
     if (key == KEY_F(10)) {
-        state->quit = !state->dirty || confirm_dialog("Quit builder", "Unsaved changes will be lost. Quit now?");
+        quit_builder(state);
         return;
     }
     switch (state->screen) {
