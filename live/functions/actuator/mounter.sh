@@ -12,7 +12,8 @@ mounter() {
     local file_system="${file_system_choices["$1"]}"
     local PS3="Select mount options: "
     local -a options=(
-        "Optimized mount options(recommended)"
+        "Optimized mount options(read only)"
+        "Optimized mount options(normal use)"
         "Default mount options")
 
     # 启动swap
@@ -34,6 +35,10 @@ mounter() {
                         return 0
                         ;;
                     2)
+                        mount -o noatime,lazytime,gc_merge,atgc,nodiscard,fsync_mode=nobarrier,compress_algorithm=zstd:6,compress_chksum "$1" "/mnt"
+                        return 0
+                        ;;
+                    3)
                         mount "$1" "/mnt"
                         return 0
                         ;;
@@ -45,6 +50,10 @@ mounter() {
                         return 0
                         ;;
                     2)
+                        mount --mkdir -o noatime,lazytime,gc_merge,atgc,nodiscard,fsync_mode=nobarrier,compress_algorithm=zstd:6,compress_chksum "$1" "/mnt$mount_point"
+                        return 0
+                        ;;
+                    3)
                         mount --mkdir "$1" "/mnt$mount_point"
                         return 0
                         ;;
