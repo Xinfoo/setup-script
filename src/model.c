@@ -648,10 +648,6 @@ void validate_plan(const InstallPlan *plan, ValidationReport *report)
         add_issue(report, ISSUE_WARNING,
                   "Secure Boot does not sign NVIDIA DKMS modules automatically.");
     }
-    if (plan->system.secure_boot && plan->system.local_mirror) {
-        add_issue(report, ISSUE_ERROR,
-                  "Secure Boot cannot use the unsigned temporary local mirror.");
-    }
     if (!plan->system.create_efi_entry) {
         add_issue(report, ISSUE_WARNING, "No EFI NVRAM entry will be created.");
     }

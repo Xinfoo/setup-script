@@ -552,24 +552,6 @@ static bool test_reserved_username_is_rejected(void)
     return true;
 }
 
-static bool test_secure_boot_local_mirror_is_rejected(void)
-{
-    DiskInfo disk;
-    InstallPlan plan;
-    ValidationReport report;
-
-    make_disk(&disk, 0);
-    plan_init(&plan);
-    plan_select_disk(&plan, &disk);
-    plan_use_automatic(&plan, &disk, STORAGE_AUTO_ROOT_ONLY);
-    plan.system.secure_boot = true;
-    plan.system.local_mirror = true;
-    validate_plan(&plan, &report);
-    CHECK(report_contains(&report, ISSUE_ERROR,
-                          "Secure Boot cannot use the unsigned temporary local mirror"));
-    return true;
-}
-
 static bool test_kept_f2fs_requires_compatibility_profile(void)
 {
     DiskInfo disk;
@@ -649,8 +631,6 @@ int main(void)
         {"shell quoting", test_shell_quote},
         {"tampered automatic layout is rejected", test_tampered_automatic_layout_is_rejected},
         {"reserved username is rejected", test_reserved_username_is_rejected},
-        {"Secure Boot rejects the unsigned local mirror",
-         test_secure_boot_local_mirror_is_rejected},
         {"kept F2FS requires the compatibility profile",
          test_kept_f2fs_requires_compatibility_profile},
         {"kept filesystems require a UUID", test_kept_filesystem_requires_uuid},

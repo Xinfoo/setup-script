@@ -410,9 +410,9 @@ sudo ARCH_INSTALL_ASSET_DIR=/path/to/assets ./install.sh
 > [!IMPORTANT]
 > `MOK.key` 是可以签署启动代码的私钥。不要将 `secure-boot/`、shim 软件包或其中的密钥提交到 Git，也不要将它们嵌入方案 JSON。
 
-材料目录、shim 包和三个 MOK 文件必须是真实文件，不接受符号链接。开启后，脚本会从已签名的官方仓库安装 `sbsigntools`，在私有 tmpfs 中校验并仅解包 shim 包中所需的 EFI 文件，不安装该 AUR 包、也不执行其 hook。完成 chroot 配置后再由 Live 环境签名。`MOK.key` 不会被复制或 bind 到目标文件系统；最终只有公开的 `MOK.cer` 会被复制到 EFI 分区。首次启动仍需在 MokManager 中手工注册证书。
+材料目录、shim 包和三个 MOK 文件必须是真实文件，不接受符号链接。开启后，脚本会从当前选定的软件源安装 `sbsigntools`，在私有 tmpfs 中校验并仅解包 shim 包中所需的 EFI 文件，不安装该 AUR 包、也不执行其 hook。完成 chroot 配置后再由 Live 环境签名。`MOK.key` 不会被复制或 bind 到目标文件系统；最终只有公开的 `MOK.cer` 会被复制到 EFI 分区。首次启动仍需在 MokManager 中手工注册证书。
 
-Secure Boot 不允许与临时本地镜像同时启用，因为该兼容模式会临时关闭 pacman 包签名校验，不适合处理长期私钥。
+Secure Boot 可以与临时本地镜像同时启用。本地镜像模式会临时关闭 pacman 包签名校验，其仓库内容与 `sbsigntools` 的可信性由用户负责。
 
 该模式签名 EFI 可执行文件和内核，但 systemd-boot 配置中的外置 initramfs 未被这条 shim/MOK 链验证；需要完整验证启动时应改用 UKI，当前不在范围内。内核或 systemd-boot 更新后会覆盖已签署的文件，需要使用在安全外部位置保留的 MOK 重新签署。NVIDIA DKMS 模块签名也不在当前构造器的配置范围内。
 

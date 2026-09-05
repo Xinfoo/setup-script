@@ -1389,7 +1389,7 @@ static void emit_outer_runtime(ScriptWriter *writer)
         "        pacman -Syy --noconfirm\n"
         "    fi\n"
         "    if [[ \"$ENABLE_SECURE_BOOT\" == true ]]; then\n"
-        "        phase 'Installing the trusted Live signing tool'\n"
+        "        phase 'Installing the Live signing tool'\n"
         "        pacman -S --needed --noconfirm sbsigntools\n"
         "        require_command sbsign\n"
         "        require_command sbverify\n"
