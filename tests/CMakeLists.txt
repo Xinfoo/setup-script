@@ -8,10 +8,15 @@ add_executable(
 add_executable(
     arch-install-builder-generator-tests
     test_generator.c
-    "${PROJECT_SOURCE_DIR}/src/generator.c"
+    ${GENERATOR_SOURCES}
     "${PROJECT_SOURCE_DIR}/src/packages.c"
     "${PROJECT_SOURCE_DIR}/src/model.c"
     "${PROJECT_SOURCE_DIR}/src/util.c"
+)
+
+add_dependencies(
+    arch-install-builder-generator-tests
+    arch-install-builder-generator-templates
 )
 
 add_executable(
@@ -31,6 +36,7 @@ target_include_directories(
     arch-install-builder-generator-tests
     PRIVATE
         "${PROJECT_SOURCE_DIR}/include"
+        "${PROJECT_BINARY_DIR}"
 )
 
 target_include_directories(

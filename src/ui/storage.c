@@ -1,6 +1,6 @@
 #define _POSIX_C_SOURCE 200809L
 
-#include "internal.h"
+#include "private.h"
 
 #include "detect.h"
 #include "util.h"
@@ -655,4 +655,3 @@ void handle_storage(UiState *state, int key)
         edit_f2fs_mode(state, &disk->partitions[state->row]);
     }
 }
-

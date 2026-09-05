@@ -22,6 +22,67 @@ find_package(PkgConfig REQUIRED)
 pkg_check_modules(NCURSESW REQUIRED IMPORTED_TARGET ncursesw)
 pkg_check_modules(JSONC REQUIRED IMPORTED_TARGET json-c)
 
+set(
+    GENERATOR_SOURCES
+    "${PROJECT_SOURCE_DIR}/src/generator/generator.c"
+    "${PROJECT_SOURCE_DIR}/src/generator/writer.c"
+    "${PROJECT_SOURCE_DIR}/src/generator/plan.c"
+    "${PROJECT_SOURCE_DIR}/src/generator/runtime.c"
+    "${PROJECT_SOURCE_DIR}/src/generator/chroot.c"
+    "${PROJECT_SOURCE_DIR}/src/generator/finish.c"
+)
+
+set(GENERATOR_TEMPLATE_OUTPUTS)
+function(embed_generator_template output_name source_name)
+    set(source "${PROJECT_SOURCE_DIR}/src/generator/templates/${source_name}.sh")
+    set(output "${CMAKE_CURRENT_BINARY_DIR}/generated/generator/${output_name}.inc")
+    add_custom_command(
+        OUTPUT "${output}"
+        COMMAND
+            "${CMAKE_COMMAND}"
+            "-DINPUT=${source}"
+            "-DOUTPUT=${output}"
+            -P "${PROJECT_SOURCE_DIR}/cmake/embed_file.cmake"
+        DEPENDS
+            "${source}"
+            "${PROJECT_SOURCE_DIR}/cmake/embed_file.cmake"
+        COMMENT "Embedding generator template ${source_name}.sh"
+        VERBATIM
+    )
+    list(APPEND GENERATOR_TEMPLATE_OUTPUTS "${output}")
+    set(GENERATOR_TEMPLATE_OUTPUTS "${GENERATOR_TEMPLATE_OUTPUTS}" PARENT_SCOPE)
+endfunction()
+
+embed_generator_template(preamble preamble)
+embed_generator_template(runtime_state runtime-state)
+embed_generator_template(runtime_cleanup runtime-cleanup)
+embed_generator_template(runtime_logging runtime-logging)
+embed_generator_template(runtime_local_mirror runtime-local-mirror)
+embed_generator_template(runtime_secure_boot_input runtime-secure-boot-input)
+embed_generator_template(runtime_storage_validation runtime-storage-validation)
+embed_generator_template(runtime_keep_probe runtime-keep-probe)
+embed_generator_template(runtime_preflight runtime-preflight)
+embed_generator_template(runtime_plan_confirmation runtime-plan-confirmation)
+embed_generator_template(runtime_partitioning runtime-partitioning)
+embed_generator_template(runtime_filesystems runtime-filesystems)
+embed_generator_template(runtime_target_mirror runtime-target-mirror)
+embed_generator_template(runtime_package_source runtime-package-source)
+embed_generator_template(chroot_preamble chroot-preamble)
+embed_generator_template(chroot_base chroot-base)
+embed_generator_template(chroot_desktop chroot-desktop)
+embed_generator_template(chroot_optional_software chroot-optional-software)
+embed_generator_template(chroot_bootloader chroot-bootloader)
+embed_generator_template(chroot_system chroot-system)
+embed_generator_template(finish_secure_boot finish-secure-boot)
+embed_generator_template(finish_target_package finish-target-package)
+embed_generator_template(finish_firmware finish-firmware)
+embed_generator_template(finish_main finish-main)
+
+add_custom_target(
+    arch-install-builder-generator-templates
+    DEPENDS ${GENERATOR_TEMPLATE_OUTPUTS}
+)
+
 add_executable(
     arch-install-builder
     src/main.c
@@ -33,13 +94,19 @@ add_executable(
     src/ui/dialogs.c
     src/ui/storage.c
     src/ui/screens.c
-    src/generator.c
+    ${GENERATOR_SOURCES}
+)
+
+add_dependencies(
+    arch-install-builder
+    arch-install-builder-generator-templates
 )
 
 target_include_directories(
     arch-install-builder
     PRIVATE
         "${PROJECT_SOURCE_DIR}/include"
+        "${PROJECT_BINARY_DIR}"
 )
 
 target_link_libraries(

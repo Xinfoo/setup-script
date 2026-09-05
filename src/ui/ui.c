@@ -1,6 +1,6 @@
 #define _POSIX_C_SOURCE 200809L
 
-#include "internal.h"
+#include "private.h"
 
 #include "generator.h"
 #include "util.h"

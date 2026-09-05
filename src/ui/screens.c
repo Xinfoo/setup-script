@@ -1,6 +1,6 @@
 #define _POSIX_C_SOURCE 200809L
 
-#include "internal.h"
+#include "private.h"
 
 #include "util.h"
 
@@ -356,4 +356,3 @@ void handle_preview(UiState *state, int key)
     else if (key == 'g' || key == 'G') (void)generate(state);
     if (state->preview_offset < 0) state->preview_offset = 0;
 }
-

@@ -1,6 +1,6 @@
 #define _POSIX_C_SOURCE 200809L
 
-#include "internal.h"
+#include "private.h"
 
 #include "util.h"
 
@@ -263,4 +263,3 @@ bool text_dialog(const char *title, char *value, size_t size)
     copy_text(value, size, buffer);
     return true;
 }
-

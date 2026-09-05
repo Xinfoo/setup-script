@@ -461,8 +461,16 @@ Secure Boot 可以与临时本地镜像同时启用。本地镜像模式会临�
 │   │   ├── dialogs.c          # 选择、确认和文本输入窗口
 │   │   ├── storage.c          # Storage 页面与 cfdisk 集成
 │   │   ├── screens.c          # 其他配置、审阅和预览页面
-│   │   └── internal.h         # TUI 私有状态和模块接口
-│   ├── generator.c            # Bash 生成器
+│   │   └── private.h          # TUI 私有状态和模块接口
+│   ├── generator/             # Bash 安装脚本生成器
+│   │   ├── generator.c        # 原子化生成入口
+│   │   ├── plan.c             # 安装方案与软件包变量
+│   │   ├── runtime.c          # Live 环境安装流程
+│   │   ├── chroot.c           # 目标系统配置流程
+│   │   ├── finish.c           # Secure Boot、固件与收尾
+│   │   ├── writer.c           # 生成器输出工具
+│   │   ├── private.h          # 生成器内部接口
+│   │   └── templates/         # 按职责拆分的 Bash 模板
 │   └── util.c                 # 子进程、验证与 Shell 转义
 ├── tests/                   # CTest 模型与生成器测试
 ├── .vscode/                 # CMake 构建和 GDB 调试配置
