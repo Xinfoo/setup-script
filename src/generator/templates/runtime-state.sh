@@ -1,0 +1,39 @@
+# =============================================================================
+# Runtime state and common helpers / 运行时状态与通用辅助函数
+# =============================================================================
+
+WORK_DIR=''
+TARGET_MOUNTED=false
+LOCAL_MIRROR_MOUNTED=false
+TARGET_LOCAL_MIRROR_MOUNTED=false
+readonly TARGET_LOCAL_MIRROR="$TARGET_ROOT/var/cache/arch-install-repo"
+HOST_PACMAN_CHANGED=false
+TARGET_CONFIG_FINALIZED=false
+INSTALL_SUCCEEDED=false
+LOCAL_MIRROR_SOURCE=''
+LOCAL_MIRROR_UUID=''
+LOCAL_MIRROR_PARENT=''
+LOCAL_MIRROR_PARENT_SERIAL=''
+LOCAL_MIRROR_SIZE=''
+KEEP_PROBE_MOUNT=''
+KEEP_PROBE_SOURCE=''
+KEEP_PROBE_ACTIVE=false
+SECURE_BOOT_ASSET_SNAPSHOT=''
+SECURE_BOOT_SNAPSHOT_MOUNTED=false
+SECURE_BOOT_SIGNING_COMPLETE=false
+CONSOLE_FD=''
+LOG_FD=''
+LOG_TEE_PID=''
+SWAPS_TO_DISABLE=()
+SECURE_BOOT_STAGED_FILES=()
+
+# Stop immediately with a consistent error message. / 使用统一错误信息立即终止。
+die() {
+    printf 'ERROR: %s\n' "$*" >&2
+    exit 1
+}
+
+# Print a visible installation phase marker. / 输出醒目的安装阶段标记。
+phase() {
+    printf '\n==> %s\n' "$*"
+}

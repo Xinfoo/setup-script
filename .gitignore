@@ -1,0 +1,7 @@
+build/
+install-plan.json
+config/install-plan.json
+config/packages.json
+install.sh
+live/secure-boot/
+live/shim-signed.pkg.tar.zst
