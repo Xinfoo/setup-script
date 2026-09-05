@@ -1,0 +1,383 @@
+#define _POSIX_C_SOURCE 200809L
+
+#include "model.h"
+
+#include "private.h"
+#include "util.h"
+
+#include <stdio.h>
+#include <string.h>
+
+#define MIB (UINT64_C(1024) * UINT64_C(1024))
+#define GIB (UINT64_C(1024) * UINT64_C(1024) * UINT64_C(1024))
+
+void model_partition_device(char *output, size_t size, const char *disk, unsigned number)
+{
+    char suffix[32];
+    size_t disk_length;
+    size_t output_length;
+    bool needs_p;
+
+    if (size == 0) return;
+    disk_length = strlen(disk);
+    needs_p = disk_length > 0 && disk[disk_length - 1] >= '0' && disk[disk_length - 1] <= '9';
+    (void)snprintf(suffix, sizeof(suffix), "%s%u", needs_p ? "p" : "", number);
+    output_length = disk_length < size - 1 ? disk_length : size - 1;
+    memmove(output, disk, output_length);
+    output[output_length] = '\0';
+    copy_text(output + output_length, size - output_length, suffix);
+}
+
+void plan_init(InstallPlan *plan)
+{
+    memset(plan, 0, sizeof(*plan));
+    plan->version = 3;
+    plan->system.platform = PLATFORM_INTEL;
+    plan->system.kernel = KERNEL_LINUX;
+    plan->system.locale = LOCALE_EN_US;
+    plan->system.desktop = DESKTOP_KDE;
+    copy_text(plan->system.timezone, sizeof(plan->system.timezone), "Asia/Shanghai");
+    copy_text(plan->system.hostname, sizeof(plan->system.hostname), "ARCH-LINUX");
+    copy_text(plan->system.username, sizeof(plan->system.username), "user");
+    plan->system.desktop_recommended = true;
+    plan->system.archive_tools = true;
+    plan->system.terminal_tools = true;
+    plan->system.china_mirrors = true;
+    plan->system.create_efi_entry = true;
+}
+
+void plan_select_disk(InstallPlan *plan, const DiskInfo *disk)
+{
+    memset(&plan->storage, 0, sizeof(plan->storage));
+    (void)plan_add_disk(plan, disk);
+}
+
+DiskPlan *plan_find_disk(InstallPlan *plan, const char *path)
+{
+    for (size_t index = 0; index < plan->storage.disk_count; ++index) {
+        if (strcmp(plan->storage.disks[index].path, path) == 0) {
+            return &plan->storage.disks[index];
+        }
+    }
+    return NULL;
+}
+
+void disk_plan_use_existing(DiskPlan *plan, const DiskInfo *disk)
+{
+    plan->mode = STORAGE_EXISTING;
+    plan->partition_count = disk->partition_count;
+    if (plan->partition_count > AI_MAX_PARTITIONS) {
+        plan->partition_count = AI_MAX_PARTITIONS;
+    }
+    for (size_t index = 0; index < plan->partition_count; ++index) {
+        const PartitionInfo *source = &disk->partitions[index];
+        PartitionPlan *target = &plan->partitions[index];
+        memset(target, 0, sizeof(*target));
+        copy_text(target->device, sizeof(target->device), source->path);
+        copy_text(target->current_fs, sizeof(target->current_fs), source->current_fs);
+        copy_text(target->fs_uuid, sizeof(target->fs_uuid), source->fs_uuid);
+        copy_text(target->part_uuid, sizeof(target->part_uuid), source->part_uuid);
+        copy_text(target->part_type, sizeof(target->part_type), source->part_type);
+        target->size_bytes = source->size_bytes;
+        target->start_sector = source->start_sector;
+        target->number = source->number;
+        target->usage = PART_UNUSED;
+        target->action = ACTION_KEEP;
+        target->target_fs = FS_NONE;
+        target->f2fs_mode = F2FS_DEFAULT;
+    }
+}
+
+bool plan_add_disk(InstallPlan *plan, const DiskInfo *disk)
+{
+    DiskPlan *target;
+
+    if (plan_find_disk(plan, disk->path) != NULL) return true;
+    if (plan->storage.disk_count >= AI_MAX_PLAN_DISKS) return false;
+    target = &plan->storage.disks[plan->storage.disk_count++];
+    memset(target, 0, sizeof(*target));
+    copy_text(target->path, sizeof(target->path), disk->path);
+    copy_text(target->model, sizeof(target->model), disk->model);
+    copy_text(target->serial, sizeof(target->serial), disk->serial);
+    copy_text(target->partition_table, sizeof(target->partition_table), disk->partition_table);
+    target->size_bytes = disk->size_bytes;
+    target->removable = disk->removable;
+    target->read_only = disk->read_only;
+    target->in_use = disk->in_use;
+    disk_plan_use_existing(target, disk);
+    return true;
+}
+
+void plan_use_existing(InstallPlan *plan, const DiskInfo *disk)
+{
+    DiskPlan *target = plan_find_disk(plan, disk->path);
+    if (target == NULL && plan_add_disk(plan, disk)) target = plan_find_disk(plan, disk->path);
+    if (target != NULL) disk_plan_use_existing(target, disk);
+}
+
+uint64_t recommended_swap_bytes(void)
+{
+    FILE *file = fopen("/proc/meminfo", "r");
+    unsigned long long kib = 0;
+    uint64_t memory;
+    if (file != NULL) {
+        if (fscanf(file, "MemTotal: %llu kB", &kib) != 1) {
+            kib = 0;
+        }
+        (void)fclose(file);
+    }
+    memory = (uint64_t)kib * UINT64_C(1024);
+    if (memory == 0) {
+        return UINT64_C(8) * GIB;
+    }
+    if (memory <= UINT64_C(8) * GIB) {
+        return memory * 2;
+    }
+    if (memory <= UINT64_C(64) * GIB) {
+        return memory;
+    }
+    return UINT64_C(8) * GIB;
+}
+
+static void auto_partition(DiskPlan *storage, size_t index, unsigned number,
+                           uint64_t bytes, PartitionUsage usage, Filesystem filesystem)
+{
+    PartitionPlan *partition = &storage->partitions[index];
+    memset(partition, 0, sizeof(*partition));
+    model_partition_device(partition->device, sizeof(partition->device), storage->path, number);
+    partition->number = number;
+    partition->size_bytes = bytes;
+    partition->planned = true;
+    partition->usage = usage;
+    partition->action = ACTION_FORMAT;
+    partition->target_fs = filesystem;
+    partition->f2fs_mode = F2FS_BALANCED;
+}
+
+void disk_plan_use_automatic(DiskPlan *storage, const DiskInfo *disk, StorageMode mode)
+{
+    uint64_t efi = GIB;
+    uint64_t swap = recommended_swap_bytes();
+    uint64_t remaining = disk->size_bytes > efi ? disk->size_bytes - efi : 0;
+
+    storage->mode = mode;
+    storage->partition_count = 0;
+    if (mode == STORAGE_AUTO_DATA) {
+        auto_partition(storage, storage->partition_count++, 1, disk->size_bytes,
+                       PART_UNUSED, FS_EXT4);
+        return;
+    }
+
+    auto_partition(storage, storage->partition_count++, 1, efi, PART_BOOT, FS_VFAT);
+
+    if (mode == STORAGE_AUTO_ROOT_ONLY) {
+        auto_partition(storage, storage->partition_count++, 2, remaining, PART_ROOT, FS_EXT4);
+        return;
+    }
+    if (remaining > swap) {
+        remaining -= swap;
+    } else {
+        remaining = 0;
+    }
+    if (mode == STORAGE_AUTO_HOME_SWAP) {
+        uint64_t root = UINT64_C(100) * GIB;
+        uint64_t home = remaining > root ? remaining - root : 0;
+        auto_partition(storage, storage->partition_count++, 2, root, PART_ROOT, FS_EXT4);
+        auto_partition(storage, storage->partition_count++, 3, home, PART_HOME, FS_EXT4);
+        auto_partition(storage, storage->partition_count++, 4, swap, PART_SWAP, FS_SWAP);
+    } else {
+        auto_partition(storage, storage->partition_count++, 2, remaining, PART_ROOT, FS_EXT4);
+        auto_partition(storage, storage->partition_count++, 3, swap, PART_SWAP, FS_SWAP);
+    }
+}
+
+void plan_use_automatic(InstallPlan *plan, const DiskInfo *disk, StorageMode mode)
+{
+    DiskPlan *target = plan_find_disk(plan, disk->path);
+    if (target == NULL && plan_add_disk(plan, disk)) target = plan_find_disk(plan, disk->path);
+    if (target != NULL) disk_plan_use_automatic(target, disk, mode);
+}
+
+const char *filesystem_name(Filesystem value)
+{
+    static const char *const names[] = {"none", "vfat", "ext4", "xfs", "f2fs", "swap"};
+    return value >= FS_NONE && value <= FS_SWAP ? names[value] : "unknown";
+}
+
+const char *usage_name(PartitionUsage value)
+{
+    static const char *const names[] = {
+        "unused", "root", "boot", "home", "var", "usr", "opt", "swap"
+    };
+    return value >= PART_UNUSED && value <= PART_SWAP ? names[value] : "unknown";
+}
+
+const char *partition_mountpoint(PartitionUsage value)
+{
+    static const char *const names[] = {"-", "/", "/boot", "/home", "/var", "/usr", "/opt", "[swap]"};
+    return value >= PART_UNUSED && value <= PART_SWAP ? names[value] : "-";
+}
+
+const char *action_name(PartitionAction value)
+{
+    return value == ACTION_FORMAT ? "format" : "keep";
+}
+
+const char *storage_mode_name(StorageMode value)
+{
+    static const char *const names[] = {
+        "Use existing partitions", "Automatic: root + swap",
+        "Automatic: root + home + swap", "Automatic: root only",
+        "Automatic: single data partition"
+    };
+    return value >= STORAGE_EXISTING && value <= STORAGE_AUTO_DATA ? names[value] : "unknown";
+}
+
+const char *platform_name(Platform value)
+{
+    static const char *const names[] = {"Intel", "AMD", "Virtual machine"};
+    return value >= PLATFORM_INTEL && value <= PLATFORM_VM ? names[value] : "unknown";
+}
+
+const char *kernel_name(Kernel value)
+{
+    static const char *const names[] = {"linux", "linux-lts", "linux-zen", "linux-hardened"};
+    return value >= KERNEL_LINUX && value <= KERNEL_HARDENED ? names[value] : "unknown";
+}
+
+const char *desktop_name(Desktop value)
+{
+    static const char *const names[] = {"KDE Plasma", "GNOME", "Hyprland (experimental)", "None"};
+    return value >= DESKTOP_KDE && value <= DESKTOP_NONE ? names[value] : "unknown";
+}
+
+const char *locale_name(LocaleChoice value)
+{
+    return value == LOCALE_ZH_CN ? "zh_CN.UTF-8" : "en_US.UTF-8";
+}
+
+const char *f2fs_mode_name(F2fsMountMode value)
+{
+    static const char *const names[] = {"default", "balanced", "compressed"};
+    return value >= F2FS_DEFAULT && value <= F2FS_COMPRESSED ? names[value] : "default";
+}
+
+Filesystem filesystem_from_name(const char *name)
+{
+    if (name == NULL || name[0] == '\0') return FS_NONE;
+    if (strcmp(name, "vfat") == 0 || strcmp(name, "fat32") == 0) return FS_VFAT;
+    if (strcmp(name, "ext4") == 0) return FS_EXT4;
+    if (strcmp(name, "xfs") == 0) return FS_XFS;
+    if (strcmp(name, "f2fs") == 0) return FS_F2FS;
+    if (strcmp(name, "swap") == 0) return FS_SWAP;
+    return FS_NONE;
+}
+
+void plan_cycle_usage(PartitionPlan *partition)
+{
+    partition->usage = (PartitionUsage)(((int)partition->usage + 1) % ((int)PART_SWAP + 1));
+    if (partition->planned && partition->usage != PART_UNUSED) {
+        partition->action = ACTION_FORMAT;
+    }
+    if (partition->usage == PART_SWAP) {
+        partition->action = ACTION_FORMAT;
+        partition->target_fs = FS_SWAP;
+    } else if (partition->usage == PART_BOOT && partition->action == ACTION_FORMAT) {
+        partition->target_fs = FS_VFAT;
+    } else if (partition->usage == PART_UNUSED) {
+        partition->action = partition->planned ? ACTION_FORMAT : ACTION_KEEP;
+        if (partition->planned) {
+            if (partition->target_fs == FS_NONE) partition->target_fs = FS_EXT4;
+        } else {
+            partition->target_fs = FS_NONE;
+        }
+    } else if (partition->action == ACTION_FORMAT &&
+               (partition->target_fs == FS_NONE || partition->target_fs == FS_SWAP ||
+                partition->target_fs == FS_VFAT)) {
+        partition->target_fs = FS_EXT4;
+    }
+}
+
+void plan_cycle_format(PartitionPlan *partition)
+{
+    if (partition->usage == PART_UNUSED) {
+        if (partition->action == ACTION_KEEP) {
+            partition->action = ACTION_FORMAT;
+            partition->target_fs = FS_EXT4;
+            return;
+        }
+        switch (partition->target_fs) {
+        case FS_EXT4: partition->target_fs = FS_XFS; break;
+        case FS_XFS: partition->target_fs = FS_F2FS; break;
+        case FS_F2FS: partition->target_fs = FS_VFAT; break;
+        case FS_VFAT: partition->target_fs = FS_SWAP; break;
+        default:
+            if (partition->planned) {
+                partition->target_fs = FS_EXT4;
+            } else {
+                partition->action = ACTION_KEEP;
+                partition->target_fs = FS_NONE;
+            }
+            break;
+        }
+        return;
+    }
+    if (partition->planned) {
+        if (partition->usage == PART_BOOT) {
+            partition->target_fs = FS_VFAT;
+            return;
+        }
+        if (partition->usage == PART_SWAP) {
+            partition->target_fs = FS_SWAP;
+            return;
+        }
+        switch (partition->target_fs) {
+        case FS_EXT4: partition->target_fs = FS_XFS; break;
+        case FS_XFS: partition->target_fs = FS_F2FS; break;
+        default: partition->target_fs = FS_EXT4; break;
+        }
+        partition->action = ACTION_FORMAT;
+        return;
+    }
+    if (partition->action == ACTION_KEEP) {
+        partition->action = ACTION_FORMAT;
+        partition->target_fs = partition->usage == PART_BOOT ? FS_VFAT :
+                               partition->usage == PART_SWAP ? FS_SWAP : FS_EXT4;
+        return;
+    }
+    if (partition->usage == PART_BOOT) {
+        partition->action = ACTION_KEEP;
+        partition->target_fs = FS_NONE;
+        return;
+    }
+    if (partition->usage == PART_SWAP) {
+        partition->action = ACTION_KEEP;
+        partition->target_fs = FS_NONE;
+        return;
+    }
+    switch (partition->target_fs) {
+    case FS_EXT4: partition->target_fs = FS_XFS; break;
+    case FS_XFS: partition->target_fs = FS_F2FS; break;
+    default:
+        partition->action = ACTION_KEEP;
+        partition->target_fs = FS_NONE;
+        break;
+    }
+}
+
+void format_size(uint64_t bytes, char *buffer, size_t size)
+{
+    const char *unit = "B";
+    double value = (double)bytes;
+    if (bytes >= GIB) {
+        value /= (double)GIB;
+        unit = "GiB";
+    } else if (bytes >= MIB) {
+        value /= (double)MIB;
+        unit = "MiB";
+    } else if (bytes >= 1024) {
+        value /= 1024.0;
+        unit = "KiB";
+    }
+    (void)snprintf(buffer, size, value >= 10.0 ? "%.0f %s" : "%.1f %s", value, unit);
+}

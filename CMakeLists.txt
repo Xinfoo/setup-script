@@ -23,6 +23,13 @@ pkg_check_modules(NCURSESW REQUIRED IMPORTED_TARGET ncursesw)
 pkg_check_modules(JSONC REQUIRED IMPORTED_TARGET json-c)
 
 set(
+    MODEL_SOURCES
+    "${PROJECT_SOURCE_DIR}/src/model/model.c"
+    "${PROJECT_SOURCE_DIR}/src/model/validation.c"
+    "${PROJECT_SOURCE_DIR}/src/model/json.c"
+)
+
+set(
     GENERATOR_SOURCES
     "${PROJECT_SOURCE_DIR}/src/generator/generator.c"
     "${PROJECT_SOURCE_DIR}/src/generator/writer.c"
@@ -87,7 +94,7 @@ add_executable(
     arch-install-builder
     src/main.c
     src/util.c
-    src/model.c
+    ${MODEL_SOURCES}
     src/packages.c
     src/detect.c
     src/ui/ui.c

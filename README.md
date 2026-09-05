@@ -448,7 +448,11 @@ Secure Boot 可以与临时本地镜像同时启用。本地镜像模式会临�
 ├── src/
 │   ├── main.c                 # CLI 与入口
 │   ├── detect.c               # lsblk JSON 探测
-│   ├── model.c                # 方案、验证和 JSON
+│   ├── model/                 # 安装方案模型
+│   │   ├── model.c            # 方案构造、编辑和名称转换
+│   │   ├── validation.c       # 方案一致性验证
+│   │   ├── json.c             # 方案 JSON 保存、校验和加载
+│   │   └── private.h          # 模型内部接口
 │   ├── packages.c             # 软件包默认值与 packages.json
 │   ├── ui/                    # ncursesw TUI
 │   │   ├── ui.c               # 主循环与公共界面框架

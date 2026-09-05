@@ -1,7 +1,7 @@
 add_executable(
     arch-install-builder-model-tests
     test_model.c
-    "${PROJECT_SOURCE_DIR}/src/model.c"
+    ${MODEL_SOURCES}
     "${PROJECT_SOURCE_DIR}/src/util.c"
 )
 
@@ -10,7 +10,7 @@ add_executable(
     test_generator.c
     ${GENERATOR_SOURCES}
     "${PROJECT_SOURCE_DIR}/src/packages.c"
-    "${PROJECT_SOURCE_DIR}/src/model.c"
+    ${MODEL_SOURCES}
     "${PROJECT_SOURCE_DIR}/src/util.c"
 )
 

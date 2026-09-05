@@ -1,0 +1,376 @@
+#include "model.h"
+
+#include "private.h"
+#include "util.h"
+
+#include <ctype.h>
+#include <stdio.h>
+#include <string.h>
+#include <strings.h>
+
+#define MIB (UINT64_C(1024) * UINT64_C(1024))
+#define GIB (UINT64_C(1024) * UINT64_C(1024) * UINT64_C(1024))
+#define GPT_ESP_TYPE "c12a7328-f81f-11d2-ba4b-00a0c93ec93b"
+
+static bool valid_block_device_path(const char *value)
+{
+    const unsigned char *cursor;
+
+    if (value == NULL || strncmp(value, "/dev/", 5) != 0 || value[5] == '\0') {
+        return false;
+    }
+    for (cursor = (const unsigned char *)value + 5; *cursor != '\0'; ++cursor) {
+        if (!isalnum(*cursor) && *cursor != '_' && *cursor != '-' && *cursor != '.') {
+            return false;
+        }
+    }
+    return true;
+}
+
+static void add_issue(ValidationReport *report, IssueSeverity severity, const char *message)
+{
+    ValidationIssue *issue;
+    if (severity == ISSUE_ERROR) ++report->error_count;
+    if (report->count >= AI_MAX_ISSUES) return;
+    issue = &report->issues[report->count++];
+    issue->severity = severity;
+    copy_text(issue->message, sizeof(issue->message), message);
+}
+
+static Filesystem effective_filesystem(const PartitionPlan *partition)
+{
+    return partition->action == ACTION_FORMAT ? partition->target_fs :
+           filesystem_from_name(partition->current_fs);
+}
+
+static bool is_regular_mount_filesystem(Filesystem filesystem)
+{
+    return filesystem == FS_EXT4 || filesystem == FS_XFS || filesystem == FS_F2FS;
+}
+
+static bool has_automatic_role(const DiskPlan *storage, PartitionUsage usage,
+                               unsigned number)
+{
+    for (size_t index = 0; index < storage->partition_count; ++index) {
+        const PartitionPlan *partition = &storage->partitions[index];
+        if (partition->usage == usage && partition->number == number &&
+            partition->planned && partition->action == ACTION_FORMAT) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool automatic_layout_matches_mode(const DiskPlan *storage)
+{
+    switch (storage->mode) {
+    case STORAGE_AUTO_ROOT_SWAP:
+        return storage->partition_count == 3 &&
+               has_automatic_role(storage, PART_BOOT, 1) &&
+               has_automatic_role(storage, PART_ROOT, 2) &&
+               has_automatic_role(storage, PART_SWAP, 3);
+    case STORAGE_AUTO_HOME_SWAP:
+        return storage->partition_count == 4 &&
+               has_automatic_role(storage, PART_BOOT, 1) &&
+               has_automatic_role(storage, PART_ROOT, 2) &&
+               has_automatic_role(storage, PART_HOME, 3) &&
+               has_automatic_role(storage, PART_SWAP, 4);
+    case STORAGE_AUTO_ROOT_ONLY:
+        return storage->partition_count == 2 &&
+               has_automatic_role(storage, PART_BOOT, 1) &&
+               has_automatic_role(storage, PART_ROOT, 2);
+    case STORAGE_AUTO_DATA:
+        return storage->partition_count == 1 &&
+               storage->partitions[0].number == 1 &&
+               storage->partitions[0].planned &&
+               storage->partitions[0].action == ACTION_FORMAT &&
+               storage->partitions[0].target_fs != FS_NONE;
+    case STORAGE_EXISTING:
+        return false;
+    }
+    return false;
+}
+
+void validate_plan(const InstallPlan *plan, ValidationReport *report)
+{
+    size_t roots = 0;
+    size_t boots = 0;
+    size_t swaps = 0;
+    bool used[PART_SWAP + 1] = {false};
+    const DiskPlan *root_disk = NULL;
+    const DiskPlan *boot_disk = NULL;
+    size_t disk_count = plan->storage.disk_count;
+
+    memset(report, 0, sizeof(*report));
+    if (plan->system.platform < PLATFORM_INTEL || plan->system.platform > PLATFORM_VM) {
+        add_issue(report, ISSUE_ERROR, "The CPU platform value is invalid.");
+    }
+    if (plan->system.kernel < KERNEL_LINUX || plan->system.kernel > KERNEL_HARDENED) {
+        add_issue(report, ISSUE_ERROR, "The kernel value is invalid.");
+    }
+    if (plan->system.locale < LOCALE_EN_US || plan->system.locale > LOCALE_ZH_CN) {
+        add_issue(report, ISSUE_ERROR, "The locale value is invalid.");
+    }
+    if (plan->system.desktop < DESKTOP_KDE || plan->system.desktop > DESKTOP_NONE) {
+        add_issue(report, ISSUE_ERROR, "The desktop value is invalid.");
+    }
+    if (disk_count == 0) {
+        add_issue(report, ISSUE_ERROR, "Add at least one installation disk.");
+    } else if (disk_count > AI_MAX_PLAN_DISKS) {
+        add_issue(report, ISSUE_ERROR, "The installation disk list exceeds the supported limit.");
+        disk_count = AI_MAX_PLAN_DISKS;
+    }
+
+    for (size_t disk_index = 0; disk_index < disk_count; ++disk_index) {
+        const DiskPlan *disk = &plan->storage.disks[disk_index];
+        size_t partition_count = disk->partition_count;
+        uint64_t planned_bytes = 0;
+        char message[256];
+
+        if (disk->mode < STORAGE_EXISTING || disk->mode > STORAGE_AUTO_DATA) {
+            add_issue(report, ISSUE_ERROR, "A storage disk has an invalid mode.");
+        }
+        if (!valid_block_device_path(disk->path)) {
+            add_issue(report, ISSUE_ERROR, "An installation disk path is not a supported /dev device path.");
+        }
+        if (disk->size_bytes == 0) {
+            add_issue(report, ISSUE_ERROR, "An installation disk has an unknown size.");
+        }
+        for (size_t previous = 0; previous < disk_index; ++previous) {
+            if (strcmp(plan->storage.disks[previous].path, disk->path) == 0) {
+                add_issue(report, ISSUE_ERROR, "The same installation disk is referenced more than once.");
+                break;
+            }
+        }
+        if (partition_count > AI_MAX_PARTITIONS) {
+            add_issue(report, ISSUE_ERROR, "A disk partition plan exceeds the supported limit.");
+            partition_count = AI_MAX_PARTITIONS;
+        }
+        if (disk->removable) {
+            (void)snprintf(message, sizeof(message), "Installation disk %.180s is removable.", disk->path);
+            add_issue(report, ISSUE_WARNING, message);
+        }
+        if (disk->read_only) {
+            (void)snprintf(message, sizeof(message), "Installation disk %.180s is read-only.", disk->path);
+            add_issue(report, ISSUE_ERROR, message);
+        }
+        if (disk->in_use) {
+            (void)snprintf(message, sizeof(message), "Installation disk %.170s currently has mounted partitions.", disk->path);
+            add_issue(report, ISSUE_WARNING, message);
+        }
+        if (disk->path[0] != '\0' && disk->serial[0] == '\0') {
+            (void)snprintf(message, sizeof(message), "Installation disk %.150s has no serial number; identity checks are weaker.", disk->path);
+            add_issue(report, ISSUE_WARNING, message);
+        }
+        if (disk->mode != STORAGE_EXISTING) {
+            (void)snprintf(message, sizeof(message), "The generated script will erase the partition table on %.170s.", disk->path);
+            add_issue(report, ISSUE_WARNING, message);
+            if (!automatic_layout_matches_mode(disk)) {
+                add_issue(report, ISSUE_ERROR,
+                          "An automatic layout no longer matches its fixed partition schema.");
+            }
+        } else if (disk->path[0] != '\0' && strcasecmp(disk->partition_table, "gpt") != 0) {
+            add_issue(report, ISSUE_ERROR,
+                      "Using existing partitions requires a GPT partition table on every participating disk.");
+        }
+
+        for (size_t index = 0; index < partition_count; ++index) {
+            const PartitionPlan *part = &disk->partitions[index];
+            Filesystem fs;
+            bool actionable;
+
+            if (part->usage < PART_UNUSED || part->usage > PART_SWAP) {
+                add_issue(report, ISSUE_ERROR, "A partition has an invalid purpose value.");
+                continue;
+            }
+            if (part->action < ACTION_KEEP || part->action > ACTION_FORMAT) {
+                add_issue(report, ISSUE_ERROR, "A partition has an invalid action value.");
+                continue;
+            }
+            if (part->target_fs < FS_NONE || part->target_fs > FS_SWAP) {
+                add_issue(report, ISSUE_ERROR, "A partition has an invalid target filesystem value.");
+                continue;
+            }
+            if (part->f2fs_mode < F2FS_DEFAULT || part->f2fs_mode > F2FS_COMPRESSED) {
+                add_issue(report, ISSUE_ERROR, "A partition has an invalid F2FS profile value.");
+                continue;
+            }
+            actionable = part->usage != PART_UNUSED || part->action == ACTION_FORMAT || part->planned;
+            if (!actionable) continue;
+            if (disk->mode == STORAGE_EXISTING && part->planned) {
+                add_issue(report, ISSUE_ERROR,
+                          "An existing-partition plan cannot contain newly planned partitions.");
+            }
+            if (part->number == 0) {
+                add_issue(report, ISSUE_ERROR, "An active partition has no valid partition number.");
+            } else {
+                char expected[AI_PATH_LEN];
+                model_partition_device(expected, sizeof(expected), disk->path, part->number);
+                if (!valid_block_device_path(part->device) || strcmp(expected, part->device) != 0) {
+                    add_issue(report, ISSUE_ERROR, "A partition does not belong to its installation disk.");
+                }
+            }
+            for (size_t other = 0; other < index; ++other) {
+                const PartitionPlan *previous = &disk->partitions[other];
+                bool previous_active = previous->usage != PART_UNUSED ||
+                                       previous->action == ACTION_FORMAT || previous->planned;
+                if (!previous_active) continue;
+                if (strcmp(previous->device, part->device) == 0 || previous->number == part->number) {
+                    add_issue(report, ISSUE_ERROR, "The same partition is referenced more than once.");
+                    break;
+                }
+            }
+            if (part->usage == PART_ROOT) { ++roots; root_disk = disk; }
+            if (part->usage == PART_BOOT) { ++boots; boot_disk = disk; }
+            if (part->usage == PART_SWAP) ++swaps;
+            if (part->usage != PART_UNUSED) {
+                if (used[part->usage]) {
+                    (void)snprintf(message, sizeof(message), "Mount target %s is assigned more than once.",
+                                   partition_mountpoint(part->usage));
+                    add_issue(report, ISSUE_ERROR, message);
+                }
+                used[part->usage] = true;
+            }
+            fs = effective_filesystem(part);
+            if (part->action == ACTION_KEEP && fs == FS_NONE) {
+                add_issue(report, ISSUE_ERROR, "A kept partition has no recognized filesystem.");
+            }
+            if (part->action == ACTION_KEEP && part->fs_uuid[0] == '\0') {
+                add_issue(report, ISSUE_ERROR, "A kept filesystem is missing its UUID identity.");
+            }
+            if (part->action == ACTION_KEEP && fs == FS_F2FS &&
+                part->f2fs_mode != F2FS_DEFAULT) {
+                add_issue(report, ISSUE_ERROR,
+                          "A kept F2FS partition must use the compatibility mount profile.");
+            }
+            if (disk->mode == STORAGE_EXISTING) {
+                if (part->size_bytes == 0 || part->start_sector == 0) {
+                    add_issue(report, ISSUE_ERROR,
+                              "An existing partition is missing its size or start-sector identity.");
+                }
+                if (part->part_uuid[0] == '\0') {
+                    add_issue(report, ISSUE_ERROR,
+                              "An existing GPT partition is missing its PARTUUID identity.");
+                }
+                if (part->part_type[0] == '\0') {
+                    add_issue(report, ISSUE_ERROR,
+                              "An existing GPT partition is missing its partition type identity.");
+                }
+            }
+            if (part->action == ACTION_FORMAT && part->target_fs == FS_NONE) {
+                add_issue(report, ISSUE_ERROR, "A formatted partition has no target filesystem.");
+            }
+            if (part->planned && part->action != ACTION_FORMAT) {
+                add_issue(report, ISSUE_ERROR, "A newly planned partition must be formatted.");
+            }
+            if (part->size_bytes == 0) {
+                add_issue(report, ISSUE_ERROR, "An active partition has no usable space.");
+            }
+            if (disk->mode != STORAGE_EXISTING && part->planned && part->size_bytes / MIB == 0) {
+                add_issue(report, ISSUE_ERROR, "Every automatic partition must be at least 1 MiB.");
+            }
+            if (part->planned) {
+                if (UINT64_MAX - planned_bytes < part->size_bytes) {
+                    add_issue(report, ISSUE_ERROR, "Planned partition sizes overflow their supported range.");
+                } else {
+                    planned_bytes += part->size_bytes;
+                }
+            }
+            if (part->usage == PART_BOOT && fs != FS_VFAT) {
+                add_issue(report, ISSUE_ERROR, "The /boot partition must use FAT32/vfat.");
+            }
+            if (disk->mode == STORAGE_EXISTING && part->usage == PART_BOOT &&
+                strcasecmp(part->part_type, GPT_ESP_TYPE) != 0) {
+                add_issue(report, ISSUE_ERROR,
+                          "The existing /boot partition must have the GPT EFI System type.");
+            }
+            if (part->usage == PART_SWAP && fs != FS_SWAP) {
+                add_issue(report, ISSUE_ERROR, "A swap target must use the swap filesystem.");
+            }
+            if (part->usage != PART_UNUSED && part->usage != PART_SWAP && fs == FS_SWAP) {
+                add_issue(report, ISSUE_ERROR, "A mounted filesystem cannot be swap.");
+            }
+            if (part->usage != PART_UNUSED && part->usage != PART_BOOT &&
+                part->usage != PART_SWAP && !is_regular_mount_filesystem(fs)) {
+                add_issue(report, ISSUE_ERROR,
+                          "Mounted system partitions must use ext4, XFS, or F2FS.");
+            }
+            if ((part->usage == PART_ROOT || part->usage == PART_VAR ||
+                 part->usage == PART_USR) && part->action != ACTION_FORMAT) {
+                add_issue(report, ISSUE_ERROR,
+                          "Root, /var, and /usr partitions must be formatted for a new installation.");
+            }
+            if (part->action == ACTION_KEEP && part->usage != PART_HOME) {
+                add_issue(report, ISSUE_WARNING,
+                          "KEEP avoids mkfs, but installation can overwrite files under that mount target.");
+            }
+            if (part->usage == PART_ROOT && part->size_bytes < UINT64_C(8) * GIB) {
+                add_issue(report, ISSUE_ERROR, "The root partition must be at least 8 GiB.");
+            } else if (part->usage == PART_ROOT && part->size_bytes < UINT64_C(20) * GIB) {
+                add_issue(report, ISSUE_WARNING, "The root partition is smaller than 20 GiB.");
+            }
+            if (part->usage == PART_BOOT && part->size_bytes < UINT64_C(256) * MIB) {
+                add_issue(report, ISSUE_ERROR, "The EFI partition must be at least 256 MiB.");
+            } else if (part->usage == PART_BOOT && part->size_bytes < UINT64_C(512) * MIB) {
+                add_issue(report, ISSUE_WARNING, "The EFI partition is smaller than 512 MiB.");
+            }
+            if (disk->mode != STORAGE_EXISTING && disk->mode != STORAGE_AUTO_DATA &&
+                part->usage == PART_BOOT && part->size_bytes != GIB) {
+                add_issue(report, ISSUE_ERROR,
+                          "Guided layouts require the fixed 1 GiB EFI partition.");
+            }
+            if (disk->mode == STORAGE_AUTO_HOME_SWAP && part->usage == PART_ROOT &&
+                part->size_bytes != UINT64_C(100) * GIB) {
+                add_issue(report, ISSUE_ERROR,
+                          "The guided root + home layout requires a 100 GiB root partition.");
+            }
+            if (disk->mode == STORAGE_AUTO_HOME_SWAP && part->usage == PART_HOME &&
+                part->size_bytes < UINT64_C(8) * GIB) {
+                add_issue(report, ISSUE_ERROR,
+                          "The guided home partition must be at least 8 GiB.");
+            }
+        }
+        if (disk->mode == STORAGE_AUTO_HOME_SWAP &&
+            disk->size_bytes < UINT64_C(110) * GIB + recommended_swap_bytes()) {
+            add_issue(report, ISSUE_ERROR, "A disk is too small for the 100 GiB root + home layout.");
+        }
+        if (disk->mode != STORAGE_EXISTING && planned_bytes > disk->size_bytes) {
+            add_issue(report, ISSUE_ERROR, "Planned partitions exceed an installation disk's capacity.");
+        } else if (disk->mode != STORAGE_EXISTING && planned_bytes != disk->size_bytes) {
+            add_issue(report, ISSUE_ERROR,
+                      "Automatic partition sizes must account for the entire installation disk.");
+        }
+    }
+    if (roots != 1) add_issue(report, ISSUE_ERROR, "Exactly one root (/) partition is required.");
+    if (boots != 1) add_issue(report, ISSUE_ERROR, "Exactly one EFI (/boot) partition is required.");
+    if (roots == 1 && boots == 1 && root_disk != boot_disk) {
+        add_issue(report, ISSUE_ERROR, "The root (/) and EFI (/boot) partitions must be on the same disk.");
+    }
+    if (swaps == 0) add_issue(report, ISSUE_WARNING, "No swap partition is configured.");
+    if (!valid_hostname(plan->system.hostname)) {
+        add_issue(report, ISSUE_ERROR, "Hostname is empty or contains unsupported characters.");
+    }
+    if (!valid_username(plan->system.username)) {
+        add_issue(report, ISSUE_ERROR, "Username is not a valid Linux account name.");
+    }
+    if (!valid_timezone(plan->system.timezone)) {
+        add_issue(report, ISSUE_ERROR, "Timezone must name an available zoneinfo file.");
+    }
+    if (plan->system.secure_boot) {
+        add_issue(report, ISSUE_WARNING,
+                  "Secure Boot requires shim-signed.pkg.tar.zst and secure-boot/ beside the builder.");
+        add_issue(report, ISSUE_WARNING,
+                  "The shim/MOK mode signs EFI binaries and the kernel, not the external initramfs.");
+    }
+    if (plan->system.secure_boot && plan->system.nvidia_graphics) {
+        add_issue(report, ISSUE_WARNING,
+                  "Secure Boot does not sign NVIDIA DKMS modules automatically.");
+    }
+    if (!plan->system.create_efi_entry) {
+        add_issue(report, ISSUE_WARNING, "No EFI NVRAM entry will be created.");
+    }
+    if (plan->system.local_mirror && !plan->system.china_mirrors) {
+        add_issue(report, ISSUE_ERROR,
+                  "Select a permanent target mirror when using the temporary local mirror.");
+    }
+}
