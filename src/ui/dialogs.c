@@ -7,6 +7,93 @@
 #include <ctype.h>
 #include <string.h>
 
+/* 将若干软件包组视为一个连续列表，弹窗无需复制或改写配置内容。 */
+static size_t package_item_count(const PackageConfig *packages,
+                                 const PackageGroup groups[], size_t group_count)
+{
+    size_t count = 0;
+
+    for (size_t index = 0; index < group_count; ++index) {
+        const PackageList *list = packages_get(packages, groups[index]);
+        if (list != NULL) count += list->count;
+    }
+    return count;
+}
+
+static const char *package_item_at(const PackageConfig *packages,
+                                   const PackageGroup groups[], size_t group_count,
+                                   size_t position)
+{
+    for (size_t index = 0; index < group_count; ++index) {
+        const PackageList *list = packages_get(packages, groups[index]);
+        if (list == NULL) continue;
+        if (position < list->count) return list->values[position];
+        position -= list->count;
+    }
+    return NULL;
+}
+
+/* 只读软件包列表支持滚动，Enter 和 Esc 都会关闭并恢复底层页面。 */
+void packages_dialog(const char *title, const PackageConfig *packages,
+                     const PackageGroup groups[], size_t group_count)
+{
+    size_t count = package_item_count(packages, groups, group_count);
+    size_t offset = 0;
+    int width = COLS - 4;
+    int height = LINES - 4;
+    WINDOW *window;
+
+    if (width > 88) width = 88;
+    if (height > 24) height = 24;
+    window = newwin(height, width, (LINES - height) / 2, (COLS - width) / 2);
+    if (window == NULL) return;
+    keypad(window, TRUE);
+    wtimeout(window, 200);
+    for (;;) {
+        int visible = height - 6;
+
+        werase(window);
+        box(window, 0, 0);
+        wattron(window, A_BOLD | COLOR_PAIR(COLOR_TITLE));
+        mvwaddnstr(window, 1, 2, title, width - 4);
+        wattroff(window, A_BOLD | COLOR_PAIR(COLOR_TITLE));
+        if (count == 0) {
+            mvwaddnstr(window, 3, 2,
+                       "No additional Pacman packages for this selection.", width - 4);
+        } else {
+            mvwprintw(window, 2, 2, "%zu package(s) from config/packages.json", count);
+            for (int line = 0; line < visible && offset + (size_t)line < count; ++line) {
+                size_t position = offset + (size_t)line;
+                const char *package = package_item_at(packages, groups, group_count, position);
+                mvwprintw(window, line + 4, 2, "%3zu  ", position + 1);
+                mvwaddnstr(window, line + 4, 7, package != NULL ? package : "", width - 9);
+            }
+        }
+        mvwaddnstr(window, height - 2, 2,
+                   "Up/Down/PgUp/PgDn scroll   Enter close   Esc close", width - 4);
+        wrefresh(window);
+        {
+            int key = wgetch(window);
+            size_t page = visible > 0 ? (size_t)visible : 1;
+
+            if (stop_requested || key == KEY_RESIZE) break;
+            if (key == ERR) continue;
+            if (key == '\n' || key == KEY_ENTER || key == 27) break;
+            if (key == KEY_UP && offset > 0) --offset;
+            else if (key == KEY_DOWN && offset + page < count) ++offset;
+            else if (key == KEY_PPAGE) offset = offset > page ? offset - page : 0;
+            else if (key == KEY_NPAGE && count > page) {
+                size_t maximum = count - page;
+                offset = offset + page < maximum ? offset + page : maximum;
+            } else if (key == KEY_HOME) offset = 0;
+            else if (key == KEY_END && count > page) offset = count - page;
+        }
+    }
+    delwin(window);
+    touchwin(stdscr);
+    (void)refresh();
+}
+
 /* 通用单选列表：负责滚动可见区域，并在关闭后恢复底层 stdscr。 */
 int choose_dialog(const char *title, const char *const options[], size_t count, int current)
 {

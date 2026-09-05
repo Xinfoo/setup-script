@@ -68,6 +68,8 @@ int choose_dialog(const char *title, const char *const options[],
                   size_t count, int current);
 bool confirm_dialog(const char *title, const char *message);
 bool text_dialog(const char *title, char *value, size_t size);
+void packages_dialog(const char *title, const PackageConfig *packages,
+                     const PackageGroup groups[], size_t group_count);
 
 void quit_builder(UiState *state);
 bool generate(UiState *state);

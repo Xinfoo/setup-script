@@ -97,11 +97,64 @@ static void property_row(int y, int index, int selected, const char *name, const
     put_clipped(y, 36, COLS - 39, value);
 }
 
+static bool enter_pressed(int key)
+{
+    return key == '\n' || key == KEY_ENTER;
+}
+
+/* 软件包弹窗只接收组编号，实际名称始终来自本次加载的 packages.json。 */
+static void show_packages(UiState *state, const char *title,
+                          const PackageGroup groups[], size_t group_count)
+{
+    packages_dialog(title, state->packages, groups, group_count);
+}
+
+static PackageGroup kernel_package_group(Kernel kernel)
+{
+    switch (kernel) {
+    case KERNEL_LINUX: return PKG_KERNEL_LINUX;
+    case KERNEL_LTS: return PKG_KERNEL_LTS;
+    case KERNEL_ZEN: return PKG_KERNEL_ZEN;
+    case KERNEL_HARDENED: return PKG_KERNEL_HARDENED;
+    }
+    return PKG_KERNEL_LINUX;
+}
+
+/* 基础系统前三项会改变软件包集合，Enter 展示包名，Space 保留原修改动作。 */
+static bool inspect_system_packages(UiState *state)
+{
+    SystemPlan *system = &state->plan->system;
+    PackageGroup groups[3];
+    size_t count = 0;
+    const char *title;
+
+    if (state->row == 0) {
+        title = "Pacman packages - CPU platform";
+        if (system->platform == PLATFORM_INTEL) groups[count++] = PKG_PLATFORM_INTEL;
+        else if (system->platform == PLATFORM_AMD) groups[count++] = PKG_PLATFORM_AMD;
+    } else if (state->row == 1) {
+        title = "Pacman packages - selected kernel";
+        groups[count++] = kernel_package_group(system->kernel);
+    } else if (state->row == 2) {
+        title = "Pacman packages - Laptop mode";
+        groups[count++] = PKG_LAPTOP_FIRMWARE;
+        groups[count++] = PKG_LAPTOP_TOOLS;
+        if (system->desktop == DESKTOP_GNOME) groups[count++] = PKG_GNOME_LAPTOP;
+    } else {
+        return false;
+    }
+    show_packages(state, title, groups, count);
+    return true;
+}
+
 /* 基础系统页面：平台、内核、设备类型、区域和软件源。 */
 void draw_system(UiState *state)
 {
     SystemPlan *system = &state->plan->system;
-    draw_shell(state, "Base system", "Up/Down move   Enter/Space change   Esc back");
+    const char *keys = state->row <= 2
+        ? "Up/Down move   Enter packages   Space/Left/Right change   Esc back"
+        : "Up/Down move   Enter/Space/Left/Right change   Esc back";
+    draw_shell(state, "Base system", keys);
     property_row(5, 0, state->row, "CPU platform", platform_name(system->platform));
     property_row(7, 1, state->row, "Kernel", kernel_name(system->kernel));
     property_row(9, 2, state->row, "Device type", system->laptop ? "Laptop (TLP enabled)" : "Desktop");
@@ -116,7 +169,8 @@ void handle_system(UiState *state, int key)
     if (key == 27) { state->screen = SCREEN_HOME; state->row = 1; return; }
     if (key == KEY_UP && state->row > 0) --state->row;
     else if (key == KEY_DOWN && state->row < 5) ++state->row;
-    else if (key == ' ' || key == '\n' || key == KEY_ENTER || key == KEY_LEFT || key == KEY_RIGHT) {
+    else if (enter_pressed(key) && inspect_system_packages(state)) return;
+    else if (key == ' ' || key == KEY_LEFT || key == KEY_RIGHT || enter_pressed(key)) {
         switch (state->row) {
         case 0: system->platform = (Platform)(((int)system->platform + 1) % 3); break;
         case 1: system->kernel = (Kernel)(((int)system->kernel + 1) % 4); break;
@@ -133,7 +187,7 @@ void handle_system(UiState *state, int key)
 void draw_hardware(UiState *state)
 {
     SystemPlan *system = &state->plan->system;
-    draw_shell(state, "Hardware support", "Up/Down move   Enter/Space toggle   Esc back");
+    draw_shell(state, "Hardware support", "Up/Down move   Enter packages   Space toggle   Esc back");
     property_row(6, 0, state->row, "Intel integrated graphics", system->intel_graphics ? "Install" : "Skip");
     property_row(8, 1, state->row, "NVIDIA graphics", system->nvidia_graphics ? "Install nvidia-open-dkms" : "Skip");
     property_row(10, 2, state->row, "Bluetooth", system->bluetooth ? "Install and enable" : "Skip");
@@ -142,12 +196,21 @@ void draw_hardware(UiState *state)
 
 void handle_hardware(UiState *state, int key)
 {
+    static const PackageGroup groups[] = {
+        PKG_INTEL_GRAPHICS, PKG_NVIDIA_GRAPHICS, PKG_BLUETOOTH
+    };
     bool *values[] = {&state->plan->system.intel_graphics, &state->plan->system.nvidia_graphics,
                      &state->plan->system.bluetooth};
     if (key == 27) { state->screen = SCREEN_HOME; state->row = 2; return; }
     if (key == KEY_UP && state->row > 0) --state->row;
     else if (key == KEY_DOWN && state->row < 2) ++state->row;
-    else if (key == ' ' || key == '\n' || key == KEY_ENTER) {
+    else if (enter_pressed(key)) {
+        static const char *const titles[] = {
+            "Pacman packages - Intel graphics", "Pacman packages - NVIDIA graphics",
+            "Pacman packages - Bluetooth"
+        };
+        show_packages(state, titles[state->row], &groups[state->row], 1);
+    } else if (key == ' ') {
         *values[state->row] = !*values[state->row];
         state->dirty = true;
     }
@@ -169,7 +232,7 @@ void draw_software(UiState *state)
         "Firewall", "Printer support", "Archive tools", "Terminal tools",
         "Additional tools", "Desktop applications"
     };
-    draw_shell(state, "Desktop and software groups", "Up/Down move   Enter/Space change   Esc back");
+    draw_shell(state, "Desktop and software groups", "Up/Down move   Enter packages   Space change   Esc back");
     for (int index = 0; index < 9; ++index) property_row(4 + index * 2, index, state->row, names[index], values[index]);
 }
 
@@ -181,7 +244,46 @@ void handle_software(UiState *state, int key)
     if (key == 27) { state->screen = SCREEN_HOME; state->row = 3; return; }
     if (key == KEY_UP && state->row > 0) --state->row;
     else if (key == KEY_DOWN && state->row < 8) ++state->row;
-    else if (key == ' ' || key == '\n' || key == KEY_ENTER) {
+    else if (enter_pressed(key)) {
+        PackageGroup group;
+        bool available = true;
+        static const char *const titles[] = {
+            "Pacman packages - Desktop environment",
+            "Pacman packages - Desktop recommended",
+            "Pacman packages - Chinese input method",
+            "Pacman packages - Firewall", "Pacman packages - Printer support",
+            "Pacman packages - Archive tools", "Pacman packages - Terminal tools",
+            "Pacman packages - Additional tools", "Pacman packages - Desktop applications"
+        };
+
+        switch (state->row) {
+        case 0:
+            if (s->desktop == DESKTOP_KDE) group = PKG_KDE;
+            else if (s->desktop == DESKTOP_GNOME) group = PKG_GNOME;
+            else if (s->desktop == DESKTOP_HYPRLAND) group = PKG_HYPRLAND;
+            else available = false;
+            break;
+        case 1:
+            if (s->desktop == DESKTOP_KDE) group = PKG_KDE_RECOMMENDED;
+            else if (s->desktop == DESKTOP_GNOME) group = PKG_GNOME_RECOMMENDED;
+            else available = false;
+            break;
+        case 2:
+            if (s->desktop == DESKTOP_GNOME) group = PKG_IBUS;
+            else if (s->desktop == DESKTOP_KDE || s->desktop == DESKTOP_HYPRLAND)
+                group = PKG_FCITX;
+            else available = false;
+            break;
+        case 3: group = PKG_FIREWALL; break;
+        case 4: group = PKG_PRINTER; break;
+        case 5: group = PKG_ARCHIVE_TOOLS; break;
+        case 6: group = PKG_TERMINAL_TOOLS; break;
+        case 7: group = PKG_EXTRA_TOOLS; break;
+        default: group = PKG_DESKTOP_APPS; break;
+        }
+        show_packages(state, titles[state->row], available ? &group : NULL,
+                      available ? 1 : 0);
+    } else if (key == ' ') {
         if (state->row == 0) s->desktop = (Desktop)(((int)s->desktop + 1) % 4);
         else *toggles[state->row - 1] = !*toggles[state->row - 1];
         state->dirty = true;
@@ -192,7 +294,10 @@ void handle_software(UiState *state, int key)
 void draw_identity(UiState *state)
 {
     SystemPlan *s = &state->plan->system;
-    draw_shell(state, "Identity and boot", "Up/Down move   Enter edit/toggle   Esc back");
+    const char *keys = state->row == 7
+        ? "Up/Down move   Enter packages   Space toggle   Esc back"
+        : "Up/Down move   Enter/Space edit or toggle   Esc back";
+    draw_shell(state, "Identity and boot", keys);
     property_row(5, 0, state->row, "Hostname", s->hostname);
     property_row(7, 1, state->row, "Username", s->username);
     property_row(9, 2, state->row, "Timezone", s->timezone);
@@ -209,6 +314,10 @@ void handle_identity(UiState *state, int key)
     if (key == 27) { state->screen = SCREEN_HOME; state->row = 4; return; }
     if (key == KEY_UP && state->row > 0) --state->row;
     else if (key == KEY_DOWN && state->row < 7) ++state->row;
+    else if (enter_pressed(key) && state->row == 7) {
+        PackageGroup group = PKG_SECURE_BOOT_LIVE;
+        show_packages(state, "Pacman packages - Secure Boot", &group, 1);
+    }
     else if (key == ' ' || key == '\n' || key == KEY_ENTER) {
         bool changed = false;
         if (state->row == 0) changed = text_dialog("Hostname", s->hostname, sizeof(s->hostname));
