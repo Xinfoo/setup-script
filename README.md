@@ -47,7 +47,7 @@ VS Code 调试配置默认使用 GDB：
 sudo pacman -S --needed gdb
 ```
 
-运行 TUI 时需要 `lsblk`（由 `util-linux` 提供）。生成的脚本面向 Arch Linux Live ISO，并使用该环境中的 `pacstrap`、`arch-chroot`、`sfdisk`、文件系统工具和 systemd-boot 等命令。本地镜像模式直接使用只读的 `F2FS-DATA` 仓库，不需要 nginx。
+运行 TUI 时需要 `lsblk`（由 `util-linux` 提供）；从 Storage 页面启动手动分区器还需要同属 `util-linux` 的 `cfdisk`。生成的脚本面向 Arch Linux Live ISO，并使用该环境中的 `pacstrap`、`arch-chroot`、`sfdisk`、文件系统工具和 systemd-boot 等命令。本地镜像模式直接使用只读的 `F2FS-DATA` 仓库，不需要 nginx。
 
 ## 使用 CMake 构建
 
@@ -192,6 +192,7 @@ CMake 还提供：
 | `X` | 选中磁盘表头时，从方案中移除该磁盘，不修改真实设备 |
 | `A` | 选中磁盘表头时，为该磁盘选择引导式整盘布局 |
 | `E` | 选中磁盘表头时，重新读取该磁盘的现有分区 |
+| `C` | 选中非自动布局的磁盘表头时，以 root 身份启动 `cfdisk`；确认后直接修改磁盘，退出时自动刷新分区列表 |
 | `U` / `Space` | 选中分区时打开用途选择框，指定 `/`、`/boot`、`/home`、`/var`、`/usr`、`/opt`、Swap 或忽略 |
 | `F` / `Enter` | 选中分区时选择 `KEEP` 或 `FORMAT` 及文件系统；未分配挂载点时也可格式化 |
 | `O` | 选中分区时打开 F2FS 挂载配置选择框 |

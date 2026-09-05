@@ -16,6 +16,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
+#include <sys/types.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
 typedef enum {
@@ -588,18 +590,18 @@ static void use_existing(UiState *state)
     set_status(state, "Existing partitions loaded. KEEP never formats a filesystem.");
 }
 
-static void refresh_disks(UiState *state)
+static bool refresh_disks(UiState *state)
 {
     HardwareInventory *inventory = calloc(1, sizeof(*inventory));
     char error[512] = {0};
     if (inventory == NULL) {
         set_status(state, "Refresh failed: out of memory.");
-        return;
+        return false;
     }
     if (!detect_hardware(inventory, error, sizeof(error))) {
         (void)snprintf(state->status, sizeof(state->status), "Refresh failed: %.190s", error);
         free(inventory);
-        return;
+        return false;
     }
     *state->inventory = *inventory;
     free(inventory);
@@ -608,6 +610,96 @@ static void refresh_disks(UiState *state)
         set_status(state, "Warning: target path now refers to a missing or different disk.");
     } else {
         set_status(state, "Block device inventory refreshed.");
+    }
+    return true;
+}
+
+static int run_cfdisk_process(const char *device, char *error, size_t error_size)
+{
+    pid_t child;
+    int wait_status = 0;
+
+    (void)def_prog_mode();
+    (void)endwin();
+    child = fork();
+    if (child == 0) {
+        execl("/usr/bin/cfdisk", "cfdisk", device, (char *)NULL);
+        _exit(127);
+    }
+    if (child < 0) {
+        (void)snprintf(error, error_size, "cannot start cfdisk: %s", strerror(errno));
+    } else {
+        while (waitpid(child, &wait_status, 0) < 0) {
+            if (errno == EINTR) continue;
+            (void)snprintf(error, error_size, "cannot wait for cfdisk: %s", strerror(errno));
+            child = -1;
+            break;
+        }
+    }
+    (void)reset_prog_mode();
+    (void)curs_set(0);
+    clearok(stdscr, TRUE);
+    touchwin(stdscr);
+
+    if (child < 0) return -1;
+    if (WIFEXITED(wait_status)) return WEXITSTATUS(wait_status);
+    if (WIFSIGNALED(wait_status)) return 128 + WTERMSIG(wait_status);
+    return 1;
+}
+
+static void launch_cfdisk(UiState *state)
+{
+    StoragePlan *storage = &state->plan->storage;
+    DiskPlan *planned_disk;
+    const DiskInfo *detected_disk;
+    char title[96];
+    char warning[256];
+    char error[256] = {0};
+    int status;
+
+    if (state->active_disk >= storage->disk_count || state->row >= 0) return;
+    planned_disk = &storage->disks[state->active_disk];
+    if (geteuid() != 0) {
+        set_status(state, "cfdisk requires the builder to be running as root.");
+        return;
+    }
+    if (planned_disk->mode != STORAGE_EXISTING) {
+        set_status(state, "cfdisk is unavailable while this disk uses an automatic layout.");
+        return;
+    }
+    if (access("/usr/bin/cfdisk", X_OK) != 0) {
+        set_status(state, "Cannot start cfdisk: /usr/bin/cfdisk is not available.");
+        return;
+    }
+    (void)snprintf(title, sizeof(title), "Run cfdisk on %.64s", planned_disk->path);
+    (void)snprintf(warning, sizeof(warning),
+                   "cfdisk edits %.100s directly and may destroy data. After it exits, this disk's partition assignments will be reloaded. Continue?",
+                   planned_disk->path);
+    if (!confirm_dialog(title, warning)) return;
+
+    status = run_cfdisk_process(planned_disk->path, error, sizeof(error));
+    if (!refresh_disks(state)) return;
+    detected_disk = inventory_find_disk(state->inventory, planned_disk->path);
+    if (detected_disk == NULL) {
+        set_status(state, "cfdisk exited, but the edited disk was not found during refresh.");
+        state->target_identity_matches = false;
+        return;
+    }
+    copy_text(planned_disk->partition_table, sizeof(planned_disk->partition_table),
+              detected_disk->partition_table);
+    planned_disk->in_use = detected_disk->in_use;
+    disk_plan_use_existing(planned_disk, detected_disk);
+    state->row = -1;
+    state->dirty = true;
+    state->target_identity_matches = disk_identity_matches(state->plan, state->inventory);
+    if (status < 0) {
+        (void)snprintf(state->status, sizeof(state->status),
+                       "%.150s; disk list refreshed.", error);
+    } else if (status == 0) {
+        set_status(state, "cfdisk exited; the disk and partition list was refreshed.");
+    } else {
+        (void)snprintf(state->status, sizeof(state->status),
+                       "cfdisk exited with status %d; disk list refreshed.", status);
     }
 }
 
@@ -650,9 +742,13 @@ static void draw_storage(UiState *state)
             size_t count = storage->disks[state->active_disk].partition_count;
             state->row = count == 0 ? -1 : (int)count - 1;
         }
-        keys = state->row < 0 ?
-               "Up/Down move   D add disk   X remove   A layout   E existing   R refresh   Esc back" :
-               "Up/Down move   D add disk   U/Space mount   F/Enter format   O F2FS   R refresh   Esc back";
+        if (state->row < 0) {
+            keys = storage->disks[state->active_disk].mode == STORAGE_EXISTING ?
+                   "Up/Down move   D add disk   C cfdisk   X remove   A layout   E existing   R refresh   Esc back" :
+                   "Up/Down move   D add disk   X remove   A layout   E existing   R refresh   Esc back";
+        } else {
+            keys = "Up/Down move   D add disk   U/Space mount   F/Enter format   O F2FS   R refresh   Esc back";
+        }
     }
     draw_shell(state, "Storage plan - editing changes only the generated plan", keys);
     if (storage->disk_count == 0) {
@@ -930,7 +1026,7 @@ static void handle_storage(UiState *state, int key)
     DiskPlan *disk;
     if (key == 27) { state->screen = SCREEN_HOME; state->row = 0; return; }
     if (key == 'd' || key == 'D') { add_disk(state); return; }
-    if (key == 'r' || key == 'R') { refresh_disks(state); return; }
+    if (key == 'r' || key == 'R') { (void)refresh_disks(state); return; }
     if (state->active_disk >= storage->disk_count) return;
     disk = &storage->disks[state->active_disk];
     if (state->row < -1) state->row = -1;
@@ -956,6 +1052,7 @@ static void handle_storage(UiState *state, int key)
         return;
     }
     if (state->row < 0) {
+        if (key == 'c' || key == 'C') { launch_cfdisk(state); return; }
         if (key == 'x' || key == 'X') { remove_active_disk(state); return; }
         if (key == 'a' || key == 'A') { choose_layout(state); return; }
         if (key == 'e' || key == 'E') { use_existing(state); return; }
@@ -966,7 +1063,7 @@ static void handle_storage(UiState *state, int key)
         return;
     }
     if (key == 'x' || key == 'X' || key == 'a' || key == 'A' ||
-        key == 'e' || key == 'E') {
+        key == 'c' || key == 'C' || key == 'e' || key == 'E') {
         set_status(state, "Select the disk header with Up/Down for disk-level actions.");
         return;
     }
