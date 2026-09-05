@@ -136,10 +136,14 @@ static bool inspect_system_packages(UiState *state)
         title = "Pacman packages - selected kernel";
         groups[count++] = kernel_package_group(system->kernel);
     } else if (state->row == 2) {
-        title = "Pacman packages - Laptop mode";
-        groups[count++] = PKG_LAPTOP_FIRMWARE;
-        groups[count++] = PKG_LAPTOP_TOOLS;
-        if (system->desktop == DESKTOP_GNOME) groups[count++] = PKG_GNOME_LAPTOP;
+        title = system->laptop
+            ? "Pacman packages - Laptop mode"
+            : "Pacman packages - Desktop mode";
+        if (system->laptop) {
+            groups[count++] = PKG_LAPTOP_FIRMWARE;
+            groups[count++] = PKG_LAPTOP_TOOLS;
+            if (system->desktop == DESKTOP_GNOME) groups[count++] = PKG_GNOME_LAPTOP;
+        }
     } else {
         return false;
     }
