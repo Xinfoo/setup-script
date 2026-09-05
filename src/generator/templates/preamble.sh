@@ -6,6 +6,6 @@ readonly PATH
 umask 022
 
 readonly SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
-readonly ASSET_DIR="${ARCH_INSTALL_ASSET_DIR:-$SCRIPT_DIR/live}"
+readonly ASSET_DIR="$SCRIPT_DIR"
 readonly TARGET_ROOT='/mnt'
 LOG_FILE=${ARCH_INSTALL_LOG:-}

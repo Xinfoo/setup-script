@@ -260,6 +260,15 @@ static bool test_automatic_script(void)
                                "mount -t tmpfs -o nodev,nosuid,noexec,mode=0700,size=64M tmpfs",
                                "a private tmpfs Secure Boot snapshot");
     passed &= require_fragment(&script,
+                               "readonly ASSET_DIR=\"$SCRIPT_DIR\"",
+                               "Secure Boot assets beside the builder script");
+    passed &= forbid_fragment(&script,
+                              "ARCH_INSTALL_ASSET_DIR",
+                              "an alternate Secure Boot asset directory");
+    passed &= forbid_fragment(&script,
+                              "$SCRIPT_DIR/live",
+                              "the legacy live asset subdirectory");
+    passed &= require_fragment(&script,
                                "pacman -S --needed --noconfirm \"${LIVE_SIGNING_PACKAGES[@]}\"",
                                "Live signing tools installed before disk writes");
     passed &= require_fragment(&script,

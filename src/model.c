@@ -739,7 +739,7 @@ void validate_plan(const InstallPlan *plan, ValidationReport *report)
     }
     if (plan->system.secure_boot) {
         add_issue(report, ISSUE_WARNING,
-                  "Secure Boot requires live/shim-signed.pkg.tar.zst and live/secure-boot/.");
+                  "Secure Boot requires shim-signed.pkg.tar.zst and secure-boot/ beside the builder.");
         add_issue(report, ISSUE_WARNING,
                   "The shim/MOK mode signs EFI binaries and the kernel, not the external initramfs.");
     }

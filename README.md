@@ -391,17 +391,17 @@ explicit execution
 
 ## Secure Boot
 
-Secure Boot 选项使用 shim + MOK。生成的脚本默认从自己所在目录下的 `live/` 查找材料：
+Secure Boot 选项使用 shim + MOK。builder、生成的脚本和 Secure Boot 材料应放在同一目录：
 
 ```text
-output-directory/
+builder-directory/
+├── arch-install-builder
 ├── install.sh
-└── live/
-    ├── shim-signed.pkg.tar.zst
-    └── secure-boot/
-        ├── MOK.key
-        ├── MOK.crt
-        └── MOK.cer
+├── shim-signed.pkg.tar.zst
+└── secure-boot/
+    ├── MOK.key
+    ├── MOK.crt
+    └── MOK.cer
 ```
 
 - `shim-signed.pkg.tar.zst`：预先构建的 `shim-signed` 软件包；
@@ -409,32 +409,26 @@ output-directory/
 - `MOK.crt`：PEM 证书；
 - `MOK.cer`：同一证书的 DER 版本，供 MokManager 或 `mokutil` 注册。
 
-例如，使用默认的仓库根目录 `install.sh` 时，可以直接沿用仓库中的 `live/` 材料布局：
+例如，在 builder 所在目录准备 MOK 材料：
 
 ```bash
-mkdir -p live/secure-boot
+mkdir -p secure-boot
 
 openssl req -new -x509 -newkey rsa:2048 -sha256 -nodes \
     -days 3650 \
     -subj "/CN=Arch Linux Secure Boot/" \
-    -keyout live/secure-boot/MOK.key \
-    -out live/secure-boot/MOK.crt
+    -keyout secure-boot/MOK.key \
+    -out secure-boot/MOK.crt
 
 openssl x509 -outform DER \
-    -in live/secure-boot/MOK.crt \
-    -out live/secure-boot/MOK.cer
+    -in secure-boot/MOK.crt \
+    -out secure-boot/MOK.cer
 
-chmod 600 live/secure-boot/MOK.key
-chmod 644 live/secure-boot/MOK.crt live/secure-boot/MOK.cer
+chmod 600 secure-boot/MOK.key
+chmod 644 secure-boot/MOK.crt secure-boot/MOK.cer
 ```
 
 `shim-signed` 来自 AUR，应在一套已安装的 Arch Linux 中以普通用户运行 `makepkg`，然后将生成的包重命名为 `shim-signed.pkg.tar.zst` 并放入材料目录。
-
-如果材料不在 `<script-directory>/live/`，可在运行前通过 `ARCH_INSTALL_ASSET_DIR` 指定：
-
-```bash
-sudo ARCH_INSTALL_ASSET_DIR=/path/to/assets ./install.sh
-```
 
 > [!IMPORTANT]
 > `MOK.key` 是可以签署启动代码的私钥。不要将 `secure-boot/`、shim 软件包或其中的密钥提交到 Git，也不要将它们嵌入方案 JSON。
