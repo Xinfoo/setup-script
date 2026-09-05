@@ -27,6 +27,7 @@ add_executable(
     src/main.c
     src/util.c
     src/model.c
+    src/packages.c
     src/detect.c
     src/ui.c
     src/generator.c

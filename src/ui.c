@@ -32,6 +32,7 @@ typedef enum {
 typedef struct {
     InstallPlan *plan;
     HardwareInventory *inventory;
+    const PackageConfig *packages;
     const char *plan_path;
     const char *script_path;
     Screen screen;
@@ -376,7 +377,8 @@ static bool generate(UiState *state)
         (void)snprintf(state->status, sizeof(state->status), "Save failed: %.190s", error);
         return false;
     }
-    if (!generate_install_script(state->plan, state->script_path, error, sizeof(error))) {
+    if (!generate_install_script(state->plan, state->packages, state->script_path,
+                                 error, sizeof(error))) {
         (void)snprintf(state->status, sizeof(state->status), "Generation failed: %.180s", error);
         return false;
     }
@@ -1132,12 +1134,14 @@ static void handle_key(UiState *state, int key)
 }
 
 int run_tui(InstallPlan *plan, HardwareInventory *inventory,
-            const char *plan_path, const char *script_path)
+            const PackageConfig *packages, const char *plan_path,
+            const char *script_path)
 {
     struct sigaction action;
     UiState state = {
         .plan = plan,
         .inventory = inventory,
+        .packages = packages,
         .plan_path = plan_path,
         .script_path = script_path,
         .screen = SCREEN_HOME,

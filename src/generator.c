@@ -196,10 +196,10 @@ static void emit_partition_number_array(ScriptWriter *writer, const char *name,
     writer_puts(writer, ")\n");
 }
 
-static void emit_package_values(ScriptWriter *writer, const char *const packages[], size_t count)
+static void emit_package_values(ScriptWriter *writer, const PackageList *packages)
 {
-    for (size_t index = 0; index < count; ++index) {
-        char *quoted = shell_quote(packages[index]);
+    for (size_t index = 0; index < packages->count; ++index) {
+        char *quoted = shell_quote(packages->values[index]);
         if (quoted == NULL) {
             writer->ok = false;
             return;
@@ -209,130 +209,89 @@ static void emit_package_values(ScriptWriter *writer, const char *const packages
     }
 }
 
-#define EMIT_PACKAGES(writer, values) \
-    emit_package_values((writer), (values), sizeof(values) / sizeof((values)[0]))
-
-static void emit_required_packages(ScriptWriter *writer, const InstallPlan *plan)
+static void emit_package_group(ScriptWriter *writer, const PackageConfig *config,
+                               PackageGroup group)
 {
-    static const char *const base[] = {
-        "base", "base-devel", "linux-firmware", "dosfstools", "xfsprogs",
-        "f2fs-tools", "exfatprogs", "btrfs-progs", "ntfsprogs", "nano", "vi",
-        "man-db", "man-pages", "texinfo", "zsh", "zsh-completions",
-        "zsh-autosuggestions", "zsh-syntax-highlighting", "grml-zsh-config",
-        "networkmanager", "iwd", "dhcpcd", "dhclient", "efivar", "efitools",
-        "efibootmgr", "sbsigntools", "mokutil"
-    };
-    static const char *const intel_graphics[] = {
-        "vulkan-intel", "intel-media-driver", "intel-gpu-tools"
-    };
-    static const char *const nvidia_graphics[] = {
-        "nvidia-open-dkms", "nvidia-utils", "vdpauinfo"
-    };
-    static const char *const bluetooth[] = {"bluez", "bluez-utils", "wireless-regdb"};
-    static const char *const kde[] = {"plasma", "sddm-kcm"};
-    static const char *const kde_recommended[] = {
-        "konsole", "dolphin", "ark", "kate", "partitionmanager", "filelight",
-        "kcalc", "gwenview", "okular", "kcharselect", "ksystemlog", "kompare",
-        "kid3", "haruna"
-    };
-    static const char *const fcitx[] = {"fcitx5-im", "fcitx5-chinese-addons"};
-    static const char *const gnome[] = {"gnome", "gdm"};
-    static const char *const gnome_recommended[] = {
-        "dconf-editor", "gnome-tweaks", "file-roller", "gnome-shell-extension-appindicator"
-    };
-    static const char *const ibus[] = {"ibus", "ibus-libpinyin"};
-    static const char *const hyprland[] = {
-        "uwsm", "greetd", "greetd-regreet", "hyprland", "hyprpolkitagent",
-        "hyprpaper", "hyprpicker", "hyprshutdown", "waybar", "cliphist", "wofi",
-        "playerctl", "brightnessctl", "libnotify", "pavucontrol",
-        "network-manager-applet", "blueman", "mako", "pipewire", "pipewire-jack",
-        "pipewire-alsa", "pipewire-pulse", "wireplumber", "xdg-desktop-portal",
-        "xdg-desktop-portal-hyprland", "xdg-desktop-portal-gtk", "xdg-user-dirs",
-        "wl-clipboard", "grim", "slurp", "swayimg", "kvantum", "kvantum-qt5",
-        "nwg-look", "qt5-wayland", "qt6-wayland", "qt5ct", "qt6ct", "thunar",
-        "gvfs", "gvfs-smb", "gvfs-mtp", "tumbler", "ffmpegthumbnailer",
-        "file-roller", "thunar-archive-plugin", "thunar-media-tags-plugin",
-        "papirus-icon-theme", "materia-gtk-theme", "kvantum-theme-materia"
-    };
-    static const char *const fonts[] = {
-        "noto-fonts", "noto-fonts-cjk", "noto-fonts-emoji", "noto-fonts-extra",
-        "ttf-sarasa-gothic", "ttf-jetbrains-mono", "ttf-dejavu",
-        "ttf-nerd-fonts-symbols", "ttf-nerd-fonts-symbols-mono"
-    };
-    static const char *const archive_tools[] = {"unrar", "7zip", "zip", "unzip"};
-    static const char *const terminal_tools[] = {
-        "git", "openssh", "htop", "nvtop", "tmux", "lynx", "wget", "aria2",
-        "rsync", "usbutils", "cmus"
-    };
-    static const char *const extra_tools[] = {
-        "kitty", "neovim", "neovide", "lua51", "luarocks", "fd", "ripgrep",
-        "wl-clipboard", "npm", "vim", "mpv"
-    };
-    static const char *const desktop_apps[] = {
-        "chromium", "thunderbird", "libreoffice-fresh", "gimp"
-    };
-    const char *kernel_values[2];
-    char headers[AI_TEXT_LEN];
+    const PackageList *packages = packages_get(config, group);
 
-    (void)snprintf(headers, sizeof(headers), "%s-headers", kernel_name(plan->system.kernel));
-    kernel_values[0] = kernel_name(plan->system.kernel);
-    kernel_values[1] = headers;
+    if (packages == NULL) {
+        writer->ok = false;
+        return;
+    }
+    emit_package_values(writer, packages);
+}
+
+static PackageGroup selected_kernel_group(Kernel kernel)
+{
+    switch (kernel) {
+    case KERNEL_LINUX: return PKG_KERNEL_LINUX;
+    case KERNEL_LTS: return PKG_KERNEL_LTS;
+    case KERNEL_ZEN: return PKG_KERNEL_ZEN;
+    case KERNEL_HARDENED: return PKG_KERNEL_HARDENED;
+    }
+    return PKG_KERNEL_LINUX;
+}
+
+static void emit_package_array(ScriptWriter *writer, const char *name,
+                               const PackageConfig *config, PackageGroup group)
+{
+    writer_printf(writer, "%s=(\n", name);
+    emit_package_group(writer, config, group);
+    writer_puts(writer, ")\n");
+}
+
+static void emit_required_packages(ScriptWriter *writer, const InstallPlan *plan,
+                                   const PackageConfig *config)
+{
+    PackageGroup kernel_group = selected_kernel_group(plan->system.kernel);
+
     writer_puts(writer, "REQUIRED_PACKAGES=(\n");
-    EMIT_PACKAGES(writer, base);
-    emit_package_values(writer, kernel_values, 2);
+    emit_package_group(writer, config, PKG_BOOTSTRAP);
+    emit_package_group(writer, config, PKG_CORE);
+    emit_package_group(writer, config, kernel_group);
     if (plan->system.platform == PLATFORM_INTEL) {
-        static const char *const values[] = {"intel-ucode"};
-        EMIT_PACKAGES(writer, values);
+        emit_package_group(writer, config, PKG_PLATFORM_INTEL);
     } else if (plan->system.platform == PLATFORM_AMD) {
-        static const char *const values[] = {"amd-ucode"};
-        EMIT_PACKAGES(writer, values);
+        emit_package_group(writer, config, PKG_PLATFORM_AMD);
     }
     if (plan->system.laptop) {
-        static const char *const values[] = {"sof-firmware", "tlp"};
-        EMIT_PACKAGES(writer, values);
+        emit_package_group(writer, config, PKG_LAPTOP_FIRMWARE);
+        emit_package_group(writer, config, PKG_LAPTOP_TOOLS);
     }
-    if (plan->system.intel_graphics) EMIT_PACKAGES(writer, intel_graphics);
-    if (plan->system.nvidia_graphics) EMIT_PACKAGES(writer, nvidia_graphics);
-    if (plan->system.bluetooth) EMIT_PACKAGES(writer, bluetooth);
+    if (plan->system.intel_graphics) emit_package_group(writer, config, PKG_INTEL_GRAPHICS);
+    if (plan->system.nvidia_graphics) emit_package_group(writer, config, PKG_NVIDIA_GRAPHICS);
+    if (plan->system.bluetooth) emit_package_group(writer, config, PKG_BLUETOOTH);
     switch (plan->system.desktop) {
     case DESKTOP_KDE:
-        EMIT_PACKAGES(writer, kde);
-        if (plan->system.desktop_recommended) EMIT_PACKAGES(writer, kde_recommended);
-        if (plan->system.chinese_input) EMIT_PACKAGES(writer, fcitx);
+        emit_package_group(writer, config, PKG_KDE);
+        if (plan->system.desktop_recommended)
+            emit_package_group(writer, config, PKG_KDE_RECOMMENDED);
+        if (plan->system.chinese_input) emit_package_group(writer, config, PKG_FCITX);
         break;
     case DESKTOP_GNOME:
-        EMIT_PACKAGES(writer, gnome);
-        if (plan->system.laptop) {
-            static const char *const values[] = {"tlp-pd"};
-            EMIT_PACKAGES(writer, values);
-        }
-        if (plan->system.desktop_recommended) EMIT_PACKAGES(writer, gnome_recommended);
-        if (plan->system.chinese_input) EMIT_PACKAGES(writer, ibus);
+        emit_package_group(writer, config, PKG_GNOME);
+        if (plan->system.laptop) emit_package_group(writer, config, PKG_GNOME_LAPTOP);
+        if (plan->system.desktop_recommended)
+            emit_package_group(writer, config, PKG_GNOME_RECOMMENDED);
+        if (plan->system.chinese_input) emit_package_group(writer, config, PKG_IBUS);
         break;
     case DESKTOP_HYPRLAND:
-        EMIT_PACKAGES(writer, hyprland);
-        if (plan->system.chinese_input) EMIT_PACKAGES(writer, fcitx);
+        emit_package_group(writer, config, PKG_HYPRLAND);
+        if (plan->system.chinese_input) emit_package_group(writer, config, PKG_FCITX);
         break;
     case DESKTOP_NONE:
         break;
     }
-    EMIT_PACKAGES(writer, fonts);
-    if (plan->system.firewall) {
-        static const char *const values[] = {"firewalld"};
-        EMIT_PACKAGES(writer, values);
-    }
-    if (plan->system.printer) {
-        static const char *const values[] = {"cups", "system-config-printer"};
-        EMIT_PACKAGES(writer, values);
-    }
-    if (plan->system.archive_tools) EMIT_PACKAGES(writer, archive_tools);
-    if (plan->system.terminal_tools) EMIT_PACKAGES(writer, terminal_tools);
-    if (plan->system.extra_tools) EMIT_PACKAGES(writer, extra_tools);
-    if (plan->system.desktop_apps) EMIT_PACKAGES(writer, desktop_apps);
+    emit_package_group(writer, config, PKG_FONTS);
+    if (plan->system.firewall) emit_package_group(writer, config, PKG_FIREWALL);
+    if (plan->system.printer) emit_package_group(writer, config, PKG_PRINTER);
+    if (plan->system.archive_tools) emit_package_group(writer, config, PKG_ARCHIVE_TOOLS);
+    if (plan->system.terminal_tools) emit_package_group(writer, config, PKG_TERMINAL_TOOLS);
+    if (plan->system.extra_tools) emit_package_group(writer, config, PKG_EXTRA_TOOLS);
+    if (plan->system.desktop_apps) emit_package_group(writer, config, PKG_DESKTOP_APPS);
+    if (plan->system.secure_boot) emit_package_group(writer, config, PKG_SECURE_BOOT_LIVE);
     writer_puts(writer, ")\n");
 }
-
-#undef EMIT_PACKAGES
 
 static void emit_partition_array(ScriptWriter *writer, const char *name,
                                  const PartitionPlan *const *partitions,
@@ -383,23 +342,17 @@ static uint64_t flexible_size_mib(const InstallPlan *plan, PartitionUsage usage)
     return size > UINT64_C(2) ? size - UINT64_C(2) : 0;
 }
 
-static bool emit_header_and_plan(ScriptWriter *writer, const InstallPlan *plan)
+static bool emit_header_and_plan(ScriptWriter *writer, const InstallPlan *plan,
+                                 const PackageConfig *packages)
 {
     const PartitionPlan *used[AI_MAX_PARTITIONS];
     const PartitionPlan *root = find_partition(plan, PART_ROOT);
     const PartitionPlan *boot = find_partition(plan, PART_BOOT);
     size_t used_count = collect_used_partitions(plan, used);
     const char *kernel = kernel_name(plan->system.kernel);
-    const char *microcode = "";
     char kernel_image[AI_TEXT_LEN];
     char initramfs_image[AI_TEXT_LEN];
     char fallback_image[AI_TEXT_LEN];
-
-    if (plan->system.platform == PLATFORM_INTEL) {
-        microcode = "intel-ucode";
-    } else if (plan->system.platform == PLATFORM_AMD) {
-        microcode = "amd-ucode";
-    }
 
     (void)snprintf(kernel_image, sizeof(kernel_image), "vmlinuz-%s", kernel);
     (void)snprintf(initramfs_image, sizeof(initramfs_image), "initramfs-%s.img", kernel);
@@ -425,11 +378,9 @@ static bool emit_header_and_plan(ScriptWriter *writer, const InstallPlan *plan)
         !emit_assignment(writer, "STORAGE_MODE", storage_mode_value(plan->storage.mode)) ||
         !emit_assignment(writer, "ROOT_DEVICE", root == NULL ? "" : root->device) ||
         !emit_assignment(writer, "BOOT_DEVICE", boot == NULL ? "" : boot->device) ||
-        !emit_assignment(writer, "KERNEL_PACKAGE", kernel) ||
         !emit_assignment(writer, "KERNEL_IMAGE", kernel_image) ||
         !emit_assignment(writer, "INITRAMFS_IMAGE", initramfs_image) ||
-        !emit_assignment(writer, "FALLBACK_IMAGE", fallback_image) ||
-        !emit_assignment(writer, "MICROCODE_PACKAGE", microcode)) {
+        !emit_assignment(writer, "FALLBACK_IMAGE", fallback_image)) {
         return false;
     }
     writer_printf(writer, "readonly EXPECTED_SIZE=%" PRIu64 "\n",
@@ -461,7 +412,21 @@ static bool emit_header_and_plan(ScriptWriter *writer, const InstallPlan *plan)
     emit_partition_number_array(writer, "PART_START_SECTORS", used, used_count,
                                 NUMBER_START_SECTOR);
     emit_partition_number_array(writer, "PART_SIZES", used, used_count, NUMBER_SIZE_BYTES);
-    emit_required_packages(writer, plan);
+    emit_package_array(writer, "BOOTSTRAP_PACKAGES", packages, PKG_BOOTSTRAP);
+    emit_package_array(writer, "KERNEL_PACKAGES", packages,
+                       selected_kernel_group(plan->system.kernel));
+    if (plan->system.platform == PLATFORM_INTEL) {
+        emit_package_array(writer, "PLATFORM_PACKAGES", packages, PKG_PLATFORM_INTEL);
+    } else if (plan->system.platform == PLATFORM_AMD) {
+        emit_package_array(writer, "PLATFORM_PACKAGES", packages, PKG_PLATFORM_AMD);
+    } else {
+        writer_puts(writer, "PLATFORM_PACKAGES=(\n)\n");
+    }
+    emit_package_array(writer, "LAPTOP_FIRMWARE_PACKAGES", packages,
+                       PKG_LAPTOP_FIRMWARE);
+    emit_package_array(writer, "LIVE_SIGNING_PACKAGES", packages,
+                       PKG_SECURE_BOOT_LIVE);
+    emit_required_packages(writer, plan, packages);
     writer_puts(writer, "\n");
     return writer->ok;
 }
@@ -1390,7 +1355,9 @@ static void emit_outer_runtime(ScriptWriter *writer)
         "    fi\n"
         "    if [[ \"$ENABLE_SECURE_BOOT\" == true ]]; then\n"
         "        phase 'Installing the Live signing tool'\n"
-        "        pacman -S --needed --noconfirm sbsigntools\n"
+        "        (( ${#LIVE_SIGNING_PACKAGES[@]} > 0 )) ||\n"
+        "            die 'The Secure Boot Live package group is empty.'\n"
+        "        pacman -S --needed --noconfirm \"${LIVE_SIGNING_PACKAGES[@]}\"\n"
         "        require_command sbsign\n"
         "        require_command sbverify\n"
         "        require_command bsdtar\n"
@@ -1400,13 +1367,9 @@ static void emit_outer_runtime(ScriptWriter *writer)
         "        die 'One or more selected packages cannot be resolved before installation.'\n"
         "}\n\n"
         "install_base_system() {\n"
-        "    local index uuid packages=(\n"
-        "        base base-devel linux-firmware dosfstools xfsprogs f2fs-tools\n"
-        "        exfatprogs btrfs-progs ntfsprogs nano vi man-db man-pages texinfo\n"
-        "        \"$KERNEL_PACKAGE\" \"$KERNEL_PACKAGE-headers\"\n"
-        "    )\n"
-        "    [[ -z \"$MICROCODE_PACKAGE\" ]] || packages+=(\"$MICROCODE_PACKAGE\")\n"
-        "    [[ \"$IS_LAPTOP\" != true ]] || packages+=(sof-firmware)\n"
+        "    local index uuid packages=(\"${BOOTSTRAP_PACKAGES[@]}\" \"${KERNEL_PACKAGES[@]}\" \"${PLATFORM_PACKAGES[@]}\")\n"
+        "    [[ \"$IS_LAPTOP\" != true ]] || packages+=(\"${LAPTOP_FIRMWARE_PACKAGES[@]}\")\n"
+        "    (( ${#packages[@]} > 0 )) || die 'The bootstrap package selection is empty.'\n"
         "    phase 'Installing the base system'\n"
         "    pacstrap -K \"$TARGET_ROOT\" \"${packages[@]}\"\n"
         "    genfstab -U -f \"$TARGET_ROOT\" \"$TARGET_ROOT\" > \"$TARGET_ROOT/etc/fstab\"\n"
@@ -1426,7 +1389,8 @@ static void emit_outer_runtime(ScriptWriter *writer)
         "}\n\n");
 }
 
-static bool emit_chroot_configuration(ScriptWriter *writer, const InstallPlan *plan)
+static bool emit_chroot_configuration(ScriptWriter *writer, const InstallPlan *plan,
+                                      const PackageConfig *packages)
 {
     const char *desktop;
 
@@ -1484,6 +1448,26 @@ static bool emit_chroot_configuration(ScriptWriter *writer, const InstallPlan *p
     emit_boolean(writer, "INSTALL_DESKTOP_APPS", plan->system.desktop_apps);
     emit_boolean(writer, "USE_CHINA_MIRRORS", plan->system.china_mirrors);
     emit_boolean(writer, "ENABLE_SECURE_BOOT", plan->system.secure_boot);
+    emit_package_array(writer, "PKG_CORE", packages, PKG_CORE);
+    emit_package_array(writer, "PKG_LAPTOP_TOOLS", packages, PKG_LAPTOP_TOOLS);
+    emit_package_array(writer, "PKG_GNOME_LAPTOP", packages, PKG_GNOME_LAPTOP);
+    emit_package_array(writer, "PKG_INTEL_GRAPHICS", packages, PKG_INTEL_GRAPHICS);
+    emit_package_array(writer, "PKG_NVIDIA_GRAPHICS", packages, PKG_NVIDIA_GRAPHICS);
+    emit_package_array(writer, "PKG_BLUETOOTH", packages, PKG_BLUETOOTH);
+    emit_package_array(writer, "PKG_KDE", packages, PKG_KDE);
+    emit_package_array(writer, "PKG_KDE_RECOMMENDED", packages, PKG_KDE_RECOMMENDED);
+    emit_package_array(writer, "PKG_FCITX", packages, PKG_FCITX);
+    emit_package_array(writer, "PKG_GNOME", packages, PKG_GNOME);
+    emit_package_array(writer, "PKG_GNOME_RECOMMENDED", packages, PKG_GNOME_RECOMMENDED);
+    emit_package_array(writer, "PKG_IBUS", packages, PKG_IBUS);
+    emit_package_array(writer, "PKG_HYPRLAND", packages, PKG_HYPRLAND);
+    emit_package_array(writer, "PKG_FONTS", packages, PKG_FONTS);
+    emit_package_array(writer, "PKG_FIREWALL", packages, PKG_FIREWALL);
+    emit_package_array(writer, "PKG_PRINTER", packages, PKG_PRINTER);
+    emit_package_array(writer, "PKG_ARCHIVE_TOOLS", packages, PKG_ARCHIVE_TOOLS);
+    emit_package_array(writer, "PKG_TERMINAL_TOOLS", packages, PKG_TERMINAL_TOOLS);
+    emit_package_array(writer, "PKG_EXTRA_TOOLS", packages, PKG_EXTRA_TOOLS);
+    emit_package_array(writer, "PKG_DESKTOP_APPS", packages, PKG_DESKTOP_APPS);
     writer_puts(writer,
         "ROOT_UUID=$(blkid -s UUID -o value -- \"$ROOT_DEVICE\") || {\n"
         "    printf 'Cannot determine the root filesystem UUID.\\n' >&2\n"
@@ -1496,6 +1480,7 @@ static bool emit_chroot_configuration(ScriptWriter *writer, const InstallPlan *p
         "readonly FALLBACK_FILE=\"initramfs-$KERNEL_IMAGE-fallback.img\"\n"
         "readonly MICROCODE_FILE=\"${MICROCODE_PACKAGE:+$MICROCODE_PACKAGE.img}\"\n\n"
         "pacman_install() {\n"
+        "    (( $# > 0 )) || return 0\n"
         "    pacman -S --needed --noconfirm \"$@\"\n"
         "}\n\n"
         "set_account_password() {\n"
@@ -1529,43 +1514,32 @@ static bool emit_chroot_configuration(ScriptWriter *writer, const InstallPlan *p
         "    set_account_password root\n"
         "}\n\n"
         "install_core_packages() {\n"
-        "    local packages=(\n"
-        "        zsh zsh-completions zsh-autosuggestions zsh-syntax-highlighting grml-zsh-config\n"
-        "        networkmanager iwd dhcpcd dhclient\n"
-        "        efivar efitools efibootmgr sbsigntools mokutil\n"
-        "    )\n"
-        "    [[ \"$IS_LAPTOP\" != true ]] || packages+=(tlp)\n"
-        "    pacman_install \"${packages[@]}\"\n"
+        "    pacman_install \"${PKG_CORE[@]}\"\n"
+        "    [[ \"$IS_LAPTOP\" != true ]] || pacman_install \"${PKG_LAPTOP_TOOLS[@]}\"\n"
         "}\n\n"
         "install_drivers() {\n"
         "    if [[ \"$INTEL_GRAPHICS\" == true ]]; then\n"
-        "        pacman_install vulkan-intel intel-media-driver intel-gpu-tools\n"
+        "        pacman_install \"${PKG_INTEL_GRAPHICS[@]}\"\n"
         "    fi\n"
         "    if [[ \"$NVIDIA_GRAPHICS\" == true ]]; then\n"
         "        sed -i -E 's/^MODULES=.*/MODULES=(nvidia nvidia_modeset nvidia_uvm nvidia_drm)/' /etc/mkinitcpio.conf\n"
         "        sed -i -E '/^HOOKS=/s/(^|[ (])kms([ )]|$)/\\1\\2/' /etc/mkinitcpio.conf\n"
-        "        pacman_install nvidia-open-dkms nvidia-utils vdpauinfo\n"
+        "        pacman_install \"${PKG_NVIDIA_GRAPHICS[@]}\"\n"
         "    fi\n"
         "    if [[ \"$HAS_BLUETOOTH\" == true ]]; then\n"
-        "        pacman_install bluez bluez-utils wireless-regdb\n"
+        "        pacman_install \"${PKG_BLUETOOTH[@]}\"\n"
         "    fi\n"
         "}\n\n");
     writer_puts(writer,
         "install_desktop() {\n"
-        "    local fonts=(\n"
-        "        noto-fonts noto-fonts-cjk noto-fonts-emoji noto-fonts-extra\n"
-        "        ttf-sarasa-gothic ttf-jetbrains-mono ttf-dejavu\n"
-        "        ttf-nerd-fonts-symbols ttf-nerd-fonts-symbols-mono\n"
-        "    )\n"
         "    case \"$DESKTOP\" in\n"
         "        kde)\n"
-        "            pacman_install plasma sddm-kcm\n"
+        "            pacman_install \"${PKG_KDE[@]}\"\n"
         "            if [[ \"$DESKTOP_RECOMMENDED\" == true ]]; then\n"
-        "                pacman_install konsole dolphin ark kate partitionmanager filelight kcalc \\\n"
-        "                    gwenview okular kcharselect ksystemlog kompare kid3 haruna\n"
+        "                pacman_install \"${PKG_KDE_RECOMMENDED[@]}\"\n"
         "            fi\n"
         "            if [[ \"$CHINESE_INPUT\" == true ]]; then\n"
-        "                pacman_install fcitx5-im fcitx5-chinese-addons\n"
+        "                pacman_install \"${PKG_FCITX[@]}\"\n"
         "                cat >> /etc/environment <<'FCITX'\n"
         "XMODIFIERS=@im=fcitx\n"
         "SDL_IM_MODULE=fcitx\n"
@@ -1574,28 +1548,19 @@ static bool emit_chroot_configuration(ScriptWriter *writer, const InstallPlan *p
         "            fi\n"
         "            ;;\n"
         "        gnome)\n"
-        "            pacman_install gnome gdm\n"
-        "            [[ \"$IS_LAPTOP\" != true ]] || pacman_install tlp-pd\n"
+        "            pacman_install \"${PKG_GNOME[@]}\"\n"
+        "            [[ \"$IS_LAPTOP\" != true ]] || pacman_install \"${PKG_GNOME_LAPTOP[@]}\"\n"
         "            if [[ \"$DESKTOP_RECOMMENDED\" == true ]]; then\n"
-        "                pacman_install dconf-editor gnome-tweaks file-roller gnome-shell-extension-appindicator\n"
+        "                pacman_install \"${PKG_GNOME_RECOMMENDED[@]}\"\n"
         "            fi\n"
         "            if [[ \"$CHINESE_INPUT\" == true ]]; then\n"
-        "                pacman_install ibus ibus-libpinyin\n"
+        "                pacman_install \"${PKG_IBUS[@]}\"\n"
         "            fi\n"
         "            ;;\n"
         "        hyprland)\n"
-        "            pacman_install \\\n"
-        "                uwsm greetd greetd-regreet hyprland hyprpolkitagent hyprpaper \\\n"
-        "                hyprpicker hyprshutdown waybar cliphist wofi playerctl brightnessctl \\\n"
-        "                libnotify pavucontrol network-manager-applet blueman mako pipewire \\\n"
-        "                pipewire-jack pipewire-alsa pipewire-pulse wireplumber \\\n"
-        "                xdg-desktop-portal xdg-desktop-portal-hyprland xdg-desktop-portal-gtk \\\n"
-        "                xdg-user-dirs wl-clipboard grim slurp swayimg kvantum kvantum-qt5 \\\n"
-        "                nwg-look qt5-wayland qt6-wayland qt5ct qt6ct thunar gvfs gvfs-smb \\\n"
-        "                gvfs-mtp tumbler ffmpegthumbnailer file-roller thunar-archive-plugin \\\n"
-        "                thunar-media-tags-plugin papirus-icon-theme materia-gtk-theme kvantum-theme-materia\n"
+        "            pacman_install \"${PKG_HYPRLAND[@]}\"\n"
         "            if [[ \"$CHINESE_INPUT\" == true ]]; then\n"
-        "                pacman_install fcitx5-im fcitx5-chinese-addons\n"
+        "                pacman_install \"${PKG_FCITX[@]}\"\n"
         "                cat >> /etc/environment <<'FCITX'\n"
         "XMODIFIERS=@im=fcitx\n"
         "SDL_IM_MODULE=fcitx\n"
@@ -1628,7 +1593,7 @@ static bool emit_chroot_configuration(ScriptWriter *writer, const InstallPlan *p
         "        none) ;;\n"
         "    esac\n");
     writer_puts(writer,
-        "    pacman_install \"${fonts[@]}\"\n"
+        "    pacman_install \"${PKG_FONTS[@]}\"\n"
         "    cat > /etc/fonts/local.conf <<'FONTCONFIG'\n"
         "<fontconfig>\n"
         "  <alias><family>sans-serif</family><prefer><family>Noto Sans</family><family>Noto Sans CJK SC</family><family>Noto Color Emoji</family><family>Symbols Nerd Font</family><family>DejaVu Sans</family></prefer></alias>\n"
@@ -1638,15 +1603,12 @@ static bool emit_chroot_configuration(ScriptWriter *writer, const InstallPlan *p
         "FONTCONFIG\n"
         "}\n\n"
         "install_optional_software() {\n"
-        "    [[ \"$ENABLE_FIREWALL\" != true ]] || pacman_install firewalld\n"
-        "    [[ \"$ENABLE_PRINTER\" != true ]] || pacman_install cups system-config-printer\n"
-        "    [[ \"$INSTALL_ARCHIVE_TOOLS\" != true ]] || pacman_install unrar 7zip zip unzip\n"
-        "    [[ \"$INSTALL_TERMINAL_TOOLS\" != true ]] || pacman_install \\\n"
-        "        git openssh htop nvtop tmux lynx wget aria2 rsync usbutils cmus\n"
-        "    [[ \"$INSTALL_EXTRA_TOOLS\" != true ]] || pacman_install \\\n"
-        "        kitty neovim neovide lua51 luarocks fd ripgrep wl-clipboard npm vim mpv\n"
-        "    [[ \"$INSTALL_DESKTOP_APPS\" != true ]] || pacman_install \\\n"
-        "        chromium thunderbird libreoffice-fresh gimp\n"
+        "    [[ \"$ENABLE_FIREWALL\" != true ]] || pacman_install \"${PKG_FIREWALL[@]}\"\n"
+        "    [[ \"$ENABLE_PRINTER\" != true ]] || pacman_install \"${PKG_PRINTER[@]}\"\n"
+        "    [[ \"$INSTALL_ARCHIVE_TOOLS\" != true ]] || pacman_install \"${PKG_ARCHIVE_TOOLS[@]}\"\n"
+        "    [[ \"$INSTALL_TERMINAL_TOOLS\" != true ]] || pacman_install \"${PKG_TERMINAL_TOOLS[@]}\"\n"
+        "    [[ \"$INSTALL_EXTRA_TOOLS\" != true ]] || pacman_install \"${PKG_EXTRA_TOOLS[@]}\"\n"
+        "    [[ \"$INSTALL_DESKTOP_APPS\" != true ]] || pacman_install \"${PKG_DESKTOP_APPS[@]}\"\n"
         "}\n\n");
     writer_puts(writer,
         "configure_bootloader() {\n"
@@ -1920,7 +1882,8 @@ static void emit_outer_finish(ScriptWriter *writer, const InstallPlan *plan)
         "main \"$@\"\n");
 }
 
-bool generate_install_script(const InstallPlan *plan, const char *path,
+bool generate_install_script(const InstallPlan *plan, const PackageConfig *packages,
+                             const char *path,
                              char *error, size_t error_size)
 {
     ValidationReport report;
@@ -1935,9 +1898,10 @@ bool generate_install_script(const InstallPlan *plan, const char *path,
     if (error != NULL && error_size > 0) {
         error[0] = '\0';
     }
-    if (plan == NULL || path == NULL || path[0] == '\0') {
+    if (plan == NULL || packages == NULL || path == NULL || path[0] == '\0') {
         if (error != NULL && error_size > 0) {
-            (void)snprintf(error, error_size, "plan and output path are required");
+            (void)snprintf(error, error_size,
+                           "plan, package config, and output path are required");
         }
         return false;
     }
@@ -2024,9 +1988,9 @@ bool generate_install_script(const InstallPlan *plan, const char *path,
     writer.file = file;
     writer.ok = true;
 
-    (void)emit_header_and_plan(&writer, plan);
+    (void)emit_header_and_plan(&writer, plan, packages);
     emit_outer_runtime(&writer);
-    (void)emit_chroot_configuration(&writer, plan);
+    (void)emit_chroot_configuration(&writer, plan, packages);
     emit_outer_finish(&writer, plan);
 
     if (!writer.ok || fflush(file) != 0 || fsync(fileno(file)) != 0) {

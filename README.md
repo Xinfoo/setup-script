@@ -115,7 +115,7 @@ CMake 还提供：
 ./build/arch-install-builder
 ```
 
-默认方案文件为 `install-plan.json`，生成脚本为 `install.sh`。如果默认方案文件已存在，程序会在进入 TUI 前自动加载它。
+首次正常启动时，程序会在当前工作目录创建 `config/`，并写入 `config/packages.json`。方案文件的默认位置为 `config/install-plan.json`，但仍只会在用户保存方案或生成脚本时写入，不会在首次启动时自动创建。默认生成脚本仍为 `install.sh`。如果默认方案文件已存在，程序会在进入 TUI 前自动加载它。
 
 指定方案和输出路径：
 
@@ -138,6 +138,27 @@ CMake 还提供：
 ```bash
 ./build/arch-install-builder --help
 ```
+
+## 软件包配置
+
+`config/packages.json` 是生成脚本的软件包数据源。首次运行时会把程序内置默认值完整写入该文件；之后的脚本生成优先使用文件中的列表。
+
+配置结构如下（仅为节选，首次运行会生成完整文件）：
+
+```json
+{
+  "version": 1,
+  "groups": {
+    "bootstrap": ["base", "base-devel"],
+    "core": ["zsh", "networkmanager"],
+    "kernel_linux": ["linux", "linux-headers"]
+  }
+}
+```
+
+实际生成的文件还包含其他内核、CPU 平台、Laptop、驱动、桌面、输入法、字体、Secure Boot 和可选软件组。所有预期字段都必须存在且为字符串数组；数组可以为空，以表示用户有意不安装该组。
+
+如果文件缺少字段、版本不支持、包名无效或 JSON 损坏，程序会在进入 TUI 前报错，并询问是否使用内置默认值覆盖。在非交互环境下不会自动覆盖。
 
 ## TUI 流程
 
@@ -279,7 +300,7 @@ system
 
 ```bash
 ./build/arch-install-builder \
-    --generate install-plan.json \
+    --generate config/install-plan.json \
     --output install.sh
 
 less install.sh
@@ -306,7 +327,7 @@ root 和普通用户密码在 chroot 安装过程中通过 TTY 设置，不会�
 
 ## 软件安装习惯
 
-新构造器保留了 `live/` 旧安装脚本的主要选择：
+新构造器保留了 `live/` 旧安装脚本的主要选择；以下软件包组的实际内容由 `config/packages.json` 提供：
 
 - Intel 安装 `intel-ucode`，AMD 安装 `amd-ucode`，虚拟机不安装 microcode；
 - 内核与对应 headers 成对安装；
@@ -334,7 +355,7 @@ ncurses plan editor
         ↓
 validation
         ↓
-install-plan.json + install.sh
+config/install-plan.json + config/packages.json + install.sh
         ↓
 explicit execution
 ```
@@ -426,11 +447,13 @@ Secure Boot 可以与临时本地镜像同时启用。本地镜像模式会临�
 │   ├── main.c                 # CLI 与入口
 │   ├── detect.c               # lsblk JSON 探测
 │   ├── model.c                # 方案、验证和 JSON
+│   ├── packages.c             # 软件包默认值与 packages.json
 │   ├── ui.c                   # ncursesw TUI
 │   ├── generator.c            # Bash 生成器
 │   └── util.c                 # 子进程、验证与 Shell 转义
 ├── tests/                   # CTest 模型与生成器测试
 ├── .vscode/                 # CMake 构建和 GDB 调试配置
+├── config/                  # 运行时方案与软件包配置
 └── live/                    # 旧 Bash 安装实现，仅供参考
 ```
 

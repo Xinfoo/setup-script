@@ -3,6 +3,7 @@
 #include "detect.h"
 #include "generator.h"
 #include "model.h"
+#include "packages.h"
 #include "ui.h"
 #include "util.h"
 
@@ -13,6 +14,63 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
+
+#define CONFIG_DIRECTORY "config"
+#define PACKAGE_CONFIG_PATH CONFIG_DIRECTORY "/packages.json"
+
+static bool confirm_package_config_overwrite(void)
+{
+    char answer[32];
+
+    if (!isatty(STDIN_FILENO) || !isatty(STDOUT_FILENO)) return false;
+    (void)fputs("Overwrite config/packages.json with the built-in defaults? [y/N] ", stdout);
+    (void)fflush(stdout);
+    if (fgets(answer, sizeof(answer), stdin) == NULL) return false;
+    return answer[0] == 'y' || answer[0] == 'Y';
+}
+
+static bool prepare_package_config(PackageConfig *packages,
+                                   char *error, size_t error_size)
+{
+    struct stat status;
+
+    if (lstat(CONFIG_DIRECTORY, &status) != 0) {
+        if (errno != ENOENT) {
+            (void)snprintf(error, error_size, "cannot inspect %s: %s",
+                           CONFIG_DIRECTORY, strerror(errno));
+            return false;
+        }
+        if (mkdir(CONFIG_DIRECTORY, 0755) != 0) {
+            (void)snprintf(error, error_size, "cannot create %s: %s",
+                           CONFIG_DIRECTORY, strerror(errno));
+            return false;
+        }
+    } else if (!S_ISDIR(status.st_mode)) {
+        (void)snprintf(error, error_size, "%s is not a real directory",
+                       CONFIG_DIRECTORY);
+        return false;
+    }
+
+    if (lstat(PACKAGE_CONFIG_PATH, &status) != 0) {
+        if (errno != ENOENT) {
+            (void)snprintf(error, error_size, "cannot inspect %s: %s",
+                           PACKAGE_CONFIG_PATH, strerror(errno));
+            return false;
+        }
+        packages_init_defaults(packages);
+        return packages_save_json(packages, PACKAGE_CONFIG_PATH, error, error_size);
+    }
+    if (packages_load_json(packages, PACKAGE_CONFIG_PATH, error, error_size)) return true;
+
+    (void)fprintf(stderr, "Package configuration error: %s\n", error);
+    if (!confirm_package_config_overwrite()) {
+        (void)snprintf(error, error_size,
+                       "package configuration was not overwritten");
+        return false;
+    }
+    packages_init_defaults(packages);
+    return packages_save_json(packages, PACKAGE_CONFIG_PATH, error, error_size);
+}
 
 static bool canonical_destination(const char *path, char *output, size_t output_size)
 {
@@ -63,7 +121,7 @@ static void usage(FILE *stream, const char *program)
         "\n"
         "Build an auditable Arch Linux installation script in a TTY interface.\n"
         "\n"
-        "  -p, --plan FILE       plan file to load/save (default: install-plan.json)\n"
+        "  -p, --plan FILE       plan file to load/save (default: config/install-plan.json)\n"
         "  -o, --output FILE     generated script (default: install.sh)\n"
         "  -g, --generate FILE   generate from FILE without starting the TUI\n"
         "  -h, --help            show this help\n"
@@ -73,10 +131,11 @@ static void usage(FILE *stream, const char *program)
 
 int main(int argc, char **argv)
 {
-    const char *plan_path = "install-plan.json";
+    const char *plan_path = "config/install-plan.json";
     const char *script_path = "install.sh";
     const char *generate_path = NULL;
     InstallPlan plan;
+    PackageConfig packages;
     HardwareInventory *inventory;
     ValidationReport report;
     char error[512] = {0};
@@ -104,6 +163,11 @@ int main(int argc, char **argv)
         }
     }
 
+    if (!prepare_package_config(&packages, error, sizeof(error))) {
+        (void)fprintf(stderr, "Error: %s\n", error);
+        return EXIT_FAILURE;
+    }
+
     if (paths_refer_to_same_destination(generate_path != NULL ? generate_path : plan_path,
                                         script_path)) {
         (void)fprintf(stderr, "Plan input and script output must use different files.\n");
@@ -124,7 +188,7 @@ int main(int argc, char **argv)
             }
             return EXIT_FAILURE;
         }
-        if (!generate_install_script(&plan, script_path, error, sizeof(error))) {
+        if (!generate_install_script(&plan, &packages, script_path, error, sizeof(error))) {
             (void)fprintf(stderr, "Error: %s\n", error);
             return EXIT_FAILURE;
         }
@@ -133,10 +197,11 @@ int main(int argc, char **argv)
     }
 
     plan_init(&plan);
-    if (access(plan_path, F_OK) == 0 &&
-        !plan_load_json(&plan, plan_path, error, sizeof(error))) {
-        (void)fprintf(stderr, "Cannot load %s: %s\n", plan_path, error);
-        return EXIT_FAILURE;
+    if (access(plan_path, F_OK) == 0) {
+        if (!plan_load_json(&plan, plan_path, error, sizeof(error))) {
+            (void)fprintf(stderr, "Cannot load %s: %s\n", plan_path, error);
+            return EXIT_FAILURE;
+        }
     }
     inventory = calloc(1, sizeof(*inventory));
     if (inventory == NULL) {
@@ -149,7 +214,7 @@ int main(int argc, char **argv)
         return EXIT_FAILURE;
     }
     {
-        int result = run_tui(&plan, inventory, plan_path, script_path);
+        int result = run_tui(&plan, inventory, &packages, plan_path, script_path);
         free(inventory);
         return result;
     }

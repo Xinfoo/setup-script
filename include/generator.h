@@ -5,8 +5,10 @@
 #include <stddef.h>
 
 #include "model.h"
+#include "packages.h"
 
-bool generate_install_script(const InstallPlan *plan, const char *path,
+bool generate_install_script(const InstallPlan *plan, const PackageConfig *packages,
+                             const char *path,
                              char *error, size_t error_size);
 
 #endif

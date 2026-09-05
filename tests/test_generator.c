@@ -123,7 +123,9 @@ static bool bash_syntax_is_valid(const char *path)
     return valid;
 }
 
-static bool generate_script(const InstallPlan *plan, GeneratedScript *script)
+static bool generate_script_with_packages(const InstallPlan *plan,
+                                          const PackageConfig *packages,
+                                          GeneratedScript *script)
 {
     char error[512] = {0};
     int descriptor;
@@ -141,7 +143,7 @@ static bool generate_script(const InstallPlan *plan, GeneratedScript *script)
         (void)unlink(script->path);
         return false;
     }
-    if (!generate_install_script(plan, script->path, error, sizeof(error))) {
+    if (!generate_install_script(plan, packages, script->path, error, sizeof(error))) {
         (void)fprintf(stderr, "generate_install_script failed: %s\n", error);
         (void)unlink(script->path);
         script->path[0] = '\0';
@@ -160,6 +162,14 @@ static bool generate_script(const InstallPlan *plan, GeneratedScript *script)
         return false;
     }
     return true;
+}
+
+static bool generate_script(const InstallPlan *plan, GeneratedScript *script)
+{
+    PackageConfig packages;
+
+    packages_init_defaults(&packages);
+    return generate_script_with_packages(plan, &packages, script);
 }
 
 static void generated_script_destroy(GeneratedScript *script)
@@ -241,7 +251,7 @@ static bool test_automatic_script(void)
                                "mount -t tmpfs -o nodev,nosuid,noexec,mode=0700,size=64M tmpfs",
                                "a private tmpfs Secure Boot snapshot");
     passed &= require_fragment(&script,
-                               "pacman -S --needed --noconfirm sbsigntools",
+                               "pacman -S --needed --noconfirm \"${LIVE_SIGNING_PACKAGES[@]}\"",
                                "Live signing tools installed before disk writes");
     passed &= require_fragment(&script,
                                "require_command sbverify",
@@ -333,6 +343,7 @@ static bool test_output_symlink_is_rejected(void)
 {
     DiskInfo disk;
     InstallPlan plan;
+    PackageConfig packages;
     char directory[] = "/tmp/arch-install-output-test-XXXXXX";
     char victim[256];
     char output[256];
@@ -345,6 +356,7 @@ static bool test_output_symlink_is_rejected(void)
     plan_init(&plan);
     plan_select_disk(&plan, &disk);
     plan_use_automatic(&plan, &disk, STORAGE_AUTO_ROOT_ONLY);
+    packages_init_defaults(&packages);
     if (mkdtemp(directory) == NULL) return false;
     (void)snprintf(victim, sizeof(victim), "%s/victim", directory);
     (void)snprintf(output, sizeof(output), "%s/install.sh", directory);
@@ -369,7 +381,7 @@ static bool test_output_symlink_is_rejected(void)
         (void)rmdir(directory);
         return false;
     }
-    if (generate_install_script(&plan, output, error, sizeof(error))) {
+    if (generate_install_script(&plan, &packages, output, error, sizeof(error))) {
         (void)fprintf(stderr, "generator accepted a symbolic-link output path\n");
         passed = false;
     }
@@ -474,12 +486,40 @@ static bool test_local_mirror_script(void)
     return passed;
 }
 
+static bool test_custom_package_config_is_emitted(void)
+{
+    DiskInfo disk;
+    InstallPlan plan;
+    PackageConfig packages;
+    PackageList *core;
+    GeneratedScript script;
+    bool passed;
+
+    make_disk(&disk, 0);
+    plan_init(&plan);
+    plan_select_disk(&plan, &disk);
+    plan_use_automatic(&plan, &disk, STORAGE_AUTO_ROOT_ONLY);
+    packages_init_defaults(&packages);
+    core = &packages.groups[PKG_CORE];
+    if (core->count >= AI_MAX_PACKAGES_PER_GROUP) return false;
+    copy_text(core->values[core->count], sizeof(core->values[core->count]),
+              "custom-repository-package");
+    ++core->count;
+
+    if (!generate_script_with_packages(&plan, &packages, &script)) return false;
+    passed = require_fragment(&script, "'custom-repository-package'",
+                              "a package loaded from packages.json");
+    generated_script_destroy(&script);
+    return passed;
+}
+
 int main(void)
 {
     bool automatic = test_automatic_script();
     bool existing = test_existing_keep_and_format_actions();
     bool symlink = test_output_symlink_is_rejected();
     bool local_mirror = test_local_mirror_script();
+    bool custom_packages = test_custom_package_config_is_emitted();
 
     (void)printf("%s automatic generator integration\n",
                  automatic ? "PASS" : "FAIL");
@@ -489,5 +529,8 @@ int main(void)
                  symlink ? "PASS" : "FAIL");
     (void)printf("%s local mirror hardening\n",
                  local_mirror ? "PASS" : "FAIL");
-    return automatic && existing && symlink && local_mirror ? EXIT_SUCCESS : EXIT_FAILURE;
+    (void)printf("%s custom package configuration\n",
+                 custom_packages ? "PASS" : "FAIL");
+    return automatic && existing && symlink && local_mirror && custom_packages
+               ? EXIT_SUCCESS : EXIT_FAILURE;
 }
