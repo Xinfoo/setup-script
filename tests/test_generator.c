@@ -1,0 +1,493 @@
+#define _POSIX_C_SOURCE 200809L
+
+#include "generator.h"
+#include "model.h"
+#include "util.h"
+
+#include <stdbool.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+
+#define GIB (UINT64_C(1024) * UINT64_C(1024) * UINT64_C(1024))
+#define TIB (UINT64_C(1024) * GIB)
+#define GPT_ESP_TYPE "c12a7328-f81f-11d2-ba4b-00a0c93ec93b"
+#define GPT_LINUX_TYPE "0fc63daf-8483-4772-8e79-3d69d8477de4"
+
+typedef struct {
+    char path[64];
+    char *text;
+} GeneratedScript;
+
+static void make_disk(DiskInfo *disk, size_t partition_count)
+{
+    memset(disk, 0, sizeof(*disk));
+    copy_text(disk->name, sizeof(disk->name), "nvme0n1");
+    copy_text(disk->path, sizeof(disk->path), "/dev/nvme0n1");
+    copy_text(disk->model, sizeof(disk->model), "Integration Test NVMe");
+    copy_text(disk->serial, sizeof(disk->serial), "GENERATOR-TEST-001");
+    copy_text(disk->transport, sizeof(disk->transport), "nvme");
+    copy_text(disk->partition_table, sizeof(disk->partition_table), "gpt");
+    disk->size_bytes = UINT64_C(2) * TIB;
+    disk->partition_count = partition_count;
+}
+
+static void make_partition(PartitionInfo *partition, unsigned number,
+                           uint64_t size_bytes, const char *filesystem)
+{
+    char path[AI_PATH_LEN];
+
+    memset(partition, 0, sizeof(*partition));
+    (void)snprintf(path, sizeof(path), "/dev/nvme0n1p%u", number);
+    copy_text(partition->path, sizeof(partition->path), path);
+    copy_text(partition->current_fs, sizeof(partition->current_fs), filesystem);
+    (void)snprintf(partition->fs_uuid, sizeof(partition->fs_uuid),
+                   "40000000-0000-0000-0000-%012u", number);
+    (void)snprintf(partition->part_uuid, sizeof(partition->part_uuid),
+                   "20000000-0000-0000-0000-%012u", number);
+    copy_text(partition->part_type, sizeof(partition->part_type),
+              number == 1 ? GPT_ESP_TYPE : GPT_LINUX_TYPE);
+    partition->number = number;
+    partition->size_bytes = size_bytes;
+    partition->start_sector = UINT64_C(2048) + (uint64_t)(number - 1) * UINT64_C(2097152);
+}
+
+static char *read_file(const char *path)
+{
+    FILE *file = fopen(path, "r");
+    char *buffer;
+    size_t used = 0;
+    size_t capacity = 4096;
+
+    if (file == NULL) return NULL;
+    buffer = malloc(capacity);
+    if (buffer == NULL) {
+        (void)fclose(file);
+        return NULL;
+    }
+    for (;;) {
+        size_t count;
+
+        if (capacity - used < 2048) {
+            size_t new_capacity = capacity * 2;
+            char *resized;
+
+            if (new_capacity < capacity) {
+                free(buffer);
+                (void)fclose(file);
+                return NULL;
+            }
+            resized = realloc(buffer, new_capacity);
+            if (resized == NULL) {
+                free(buffer);
+                (void)fclose(file);
+                return NULL;
+            }
+            buffer = resized;
+            capacity = new_capacity;
+        }
+        count = fread(buffer + used, 1, capacity - used - 1, file);
+        used += count;
+        if (count != 0) continue;
+        if (ferror(file)) {
+            free(buffer);
+            (void)fclose(file);
+            return NULL;
+        }
+        break;
+    }
+    buffer[used] = '\0';
+    (void)fclose(file);
+    return buffer;
+}
+
+static bool bash_syntax_is_valid(const char *path)
+{
+    ProcessResult result = {0};
+    char error[256] = {0};
+    char *const arguments[] = {"/usr/bin/bash", "-n", (char *)path, NULL};
+    bool valid;
+
+    if (!run_capture(arguments[0], arguments, &result, error, sizeof(error))) {
+        (void)fprintf(stderr, "cannot run bash -n: %s\n", error);
+        return false;
+    }
+    valid = result.status == 0;
+    if (!valid) {
+        (void)fprintf(stderr, "bash -n failed with status %d:\n%s\n",
+                      result.status, result.output != NULL ? result.output : "");
+    }
+    process_result_free(&result);
+    return valid;
+}
+
+static bool generate_script(const InstallPlan *plan, GeneratedScript *script)
+{
+    char error[512] = {0};
+    int descriptor;
+
+    memset(script, 0, sizeof(*script));
+    copy_text(script->path, sizeof(script->path),
+              "/tmp/arch-install-generator-test-XXXXXX");
+    descriptor = mkstemp(script->path);
+    if (descriptor < 0) {
+        (void)fprintf(stderr, "mkstemp failed\n");
+        return false;
+    }
+    if (close(descriptor) != 0) {
+        (void)fprintf(stderr, "cannot close temporary script\n");
+        (void)unlink(script->path);
+        return false;
+    }
+    if (!generate_install_script(plan, script->path, error, sizeof(error))) {
+        (void)fprintf(stderr, "generate_install_script failed: %s\n", error);
+        (void)unlink(script->path);
+        script->path[0] = '\0';
+        return false;
+    }
+    if (!bash_syntax_is_valid(script->path)) {
+        (void)unlink(script->path);
+        script->path[0] = '\0';
+        return false;
+    }
+    script->text = read_file(script->path);
+    if (script->text == NULL) {
+        (void)fprintf(stderr, "cannot read generated script\n");
+        (void)unlink(script->path);
+        script->path[0] = '\0';
+        return false;
+    }
+    return true;
+}
+
+static void generated_script_destroy(GeneratedScript *script)
+{
+    free(script->text);
+    script->text = NULL;
+    if (script->path[0] != '\0') {
+        (void)unlink(script->path);
+        script->path[0] = '\0';
+    }
+}
+
+static bool require_fragment(const GeneratedScript *script, const char *fragment,
+                             const char *description)
+{
+    if (strstr(script->text, fragment) != NULL) return true;
+    (void)fprintf(stderr, "generated script is missing %s:\n%s\n",
+                  description, fragment);
+    return false;
+}
+
+static bool forbid_fragment(const GeneratedScript *script, const char *fragment,
+                            const char *description)
+{
+    if (strstr(script->text, fragment) == NULL) return true;
+    (void)fprintf(stderr, "generated script unexpectedly contains %s:\n%s\n",
+                  description, fragment);
+    return false;
+}
+
+static bool require_order(const GeneratedScript *script, const char *first,
+                          const char *second, const char *description)
+{
+    const char *left = strstr(script->text, first);
+    const char *right = strstr(script->text, second);
+
+    if (left != NULL && right != NULL && left < right) return true;
+    (void)fprintf(stderr, "generated script has the wrong order for %s\n", description);
+    return false;
+}
+
+static bool test_automatic_script(void)
+{
+    DiskInfo disk;
+    InstallPlan plan;
+    GeneratedScript script;
+    bool passed = true;
+
+    make_disk(&disk, 0);
+    plan_init(&plan);
+    plan_select_disk(&plan, &disk);
+    plan_use_automatic(&plan, &disk, STORAGE_AUTO_HOME_SWAP);
+    plan.system.kernel = KERNEL_LTS;
+
+    if (!generate_script(&plan, &script)) return false;
+    passed &= require_fragment(&script,
+                               "readonly TARGET_DISK='/dev/nvme0n1'",
+                               "the quoted target disk");
+    passed &= require_fragment(&script,
+                               "confirm_destructive_actions() {",
+                               "the destructive confirmation function");
+    passed &= require_fragment(&script,
+                               "Type the full target disk path (%s) to continue:",
+                               "the target-disk confirmation prompt");
+    passed &= require_fragment(&script,
+                               "[[ \"$answer\" == \"$TARGET_DISK\" ]]",
+                               "an exact target-disk confirmation check");
+    passed &= require_fragment(&script,
+                               "[[ \"$current_type\" == disk ]]",
+                               "a whole-disk runtime check");
+    passed &= require_fragment(&script,
+                               "confirm_package_preparation() {",
+                               "the package preparation confirmation");
+    passed &= require_order(&script,
+                            "    confirm_package_preparation\n    prepare_package_source\n",
+                            "    snapshot_secure_boot_assets\n    probe_kept_filesystems\n    confirm_destructive_actions\n",
+                            "package preparation and final disk confirmation");
+    passed &= require_fragment(&script,
+                               "mount -t tmpfs -o nodev,nosuid,noexec,mode=0700,size=64M tmpfs",
+                               "a private tmpfs Secure Boot snapshot");
+    passed &= require_fragment(&script,
+                               "pacman -S --needed --noconfirm sbsigntools",
+                               "Live signing tools installed before disk writes");
+    passed &= require_fragment(&script,
+                               "require_command sbverify",
+                               "Secure Boot signature verification support");
+    passed &= require_fragment(&script,
+                               "bsdtar -xOf \"$SECURE_BOOT_ASSET_SNAPSHOT/shim-signed.pkg.tar.zst\"",
+                               "controlled shim data extraction");
+    passed &= forbid_fragment(&script,
+                              "pacman -U --needed --noconfirm /root/shim-signed.pkg.tar.zst",
+                              "execution of an untrusted shim package in the target");
+    passed &= require_fragment(&script,
+                               "phase 'Signing boot files outside the target chroot'",
+                               "host-side Secure Boot signing");
+    passed &= require_order(&script,
+                            "arch-chroot \"$TARGET_ROOT\" /bin/bash /root/.arch-install-chroot.sh",
+                            "    sign_secure_boot_assets",
+                            "chroot completion before private-key use");
+    passed &= forbid_fragment(&script,
+                              "cp -a -- \"$ASSET_DIR/secure-boot\"",
+                              "a private-key copy into the target filesystem");
+    passed &= forbid_fragment(&script,
+                              "mount --bind -- \"$ASSET_DIR/secure-boot\"",
+                              "private-key exposure inside the target chroot");
+    passed &= require_fragment(&script,
+                               "sbsign --key \"$secure_root/secure-boot/MOK.key\"",
+                               "signing from the verified private snapshot");
+    passed &= forbid_fragment(&script,
+                              "sbsign --key \"$ASSET_DIR/secure-boot/MOK.key\"",
+                              "signing directly from mutable source assets");
+    passed &= forbid_fragment(&script, ".unsigned", "a renamed-away original kernel");
+    passed &= require_order(&script,
+                            "    atomic_install_file \"$kernel_signed\" \"$kernel_original\" 0644\n",
+                            "    atomic_install_file \"$secure_root/shimx64.efi\" \\\n        \"$TARGET_ROOT/boot/EFI/BOOT/BOOTX64.EFI\" 0644\n",
+                            "bootable-prefix Secure Boot commit order");
+    passed &= require_fragment(&script,
+                               "ROOT_UUID=$(blkid -s UUID -o value -- \"$ROOT_DEVICE\") || {",
+                               "checked root UUID discovery");
+    passed &= require_fragment(&script,
+                               "genfstab -U -f \"$TARGET_ROOT\"",
+                               "fstab filtering to the target tree");
+    passed &= forbid_fragment(&script, "blkdiscard", "an unconditional discard command");
+    passed &= require_fragment(&script,
+                               "if [[ \"$action\" == keep ]]; then",
+                               "the KEEP filesystem path");
+    passed &= require_fragment(&script,
+                               "ext4) mkfs.ext4 -F \"$device\" ;;",
+                               "the FORMAT filesystem path");
+    passed &= require_fragment(&script,
+                               "readonly FALLBACK_IMAGE='initramfs-linux-lts-fallback.img'",
+                               "the real fallback initramfs name");
+    passed &= require_fragment(&script,
+                               "initrd /$FALLBACK_FILE",
+                               "the fallback boot entry");
+    passed &= require_fragment(&script, "cleanup() {", "the cleanup function");
+    passed &= require_fragment(&script, "trap cleanup EXIT", "the cleanup trap");
+    passed &= require_fragment(&script,
+                               "umount -R -- \"$TARGET_ROOT\"",
+                               "target mount cleanup");
+    passed &= require_fragment(&script,
+                               "swapoff -- \"${SWAPS_TO_DISABLE[index]}\"",
+                               "swap cleanup");
+    passed &= require_fragment(&script,
+                               "probe_kept_filesystems() {",
+                               "the read-only KEEP probe");
+    passed &= require_fragment(&script,
+                               "ext4) options='ro,noload,nodev,nosuid,noexec'",
+                               "journal-safe Ext4 KEEP probing");
+    passed &= require_fragment(&script,
+                               "set_account_password() {",
+                               "the bounded password helper");
+    passed &= require_fragment(&script,
+                               "for attempt in 1 2 3; do",
+                               "bounded password attempts");
+    passed &= forbid_fragment(&script, "until passwd", "an unbounded password loop");
+    passed &= require_fragment(&script,
+                               "${entry,,}\" == *\"${boot_partuuid,,}\"*",
+                               "EFI entry matching by partition identity");
+    passed &= require_fragment(&script,
+                               "actual_start_bytes=$((actual_start * 512))",
+                               "lsblk START conversion on 512-byte units");
+    passed &= require_fragment(&script,
+                               "if [[ \"$TARGET_MOUNTED\" == true ]]; then",
+                               "cleanup ownership gating for the target mount");
+    generated_script_destroy(&script);
+    return passed;
+}
+
+static bool test_output_symlink_is_rejected(void)
+{
+    DiskInfo disk;
+    InstallPlan plan;
+    char directory[] = "/tmp/arch-install-output-test-XXXXXX";
+    char victim[256];
+    char output[256];
+    char error[512] = {0};
+    char *contents;
+    FILE *file;
+    bool passed = true;
+
+    make_disk(&disk, 0);
+    plan_init(&plan);
+    plan_select_disk(&plan, &disk);
+    plan_use_automatic(&plan, &disk, STORAGE_AUTO_ROOT_ONLY);
+    if (mkdtemp(directory) == NULL) return false;
+    (void)snprintf(victim, sizeof(victim), "%s/victim", directory);
+    (void)snprintf(output, sizeof(output), "%s/install.sh", directory);
+    file = fopen(victim, "w");
+    if (file == NULL) {
+        (void)rmdir(directory);
+        return false;
+    }
+    if (fputs("unchanged\n", file) == EOF) {
+        (void)fclose(file);
+        (void)unlink(victim);
+        (void)rmdir(directory);
+        return false;
+    }
+    if (fclose(file) != 0) {
+        (void)unlink(victim);
+        (void)rmdir(directory);
+        return false;
+    }
+    if (symlink(victim, output) != 0) {
+        (void)unlink(victim);
+        (void)rmdir(directory);
+        return false;
+    }
+    if (generate_install_script(&plan, output, error, sizeof(error))) {
+        (void)fprintf(stderr, "generator accepted a symbolic-link output path\n");
+        passed = false;
+    }
+    contents = read_file(victim);
+    if (contents == NULL || strcmp(contents, "unchanged\n") != 0) {
+        (void)fprintf(stderr, "generator changed the symbolic-link target\n");
+        passed = false;
+    }
+    free(contents);
+    passed &= unlink(output) == 0;
+    passed &= unlink(victim) == 0;
+    passed &= rmdir(directory) == 0;
+    return passed;
+}
+
+static bool test_existing_keep_and_format_actions(void)
+{
+    DiskInfo disk;
+    InstallPlan plan;
+    GeneratedScript script;
+    bool passed = true;
+
+    make_disk(&disk, 3);
+    make_partition(&disk.partitions[0], 1, GIB, "vfat");
+    make_partition(&disk.partitions[1], 2, UINT64_C(100) * GIB, "ext4");
+    make_partition(&disk.partitions[2], 3, UINT64_C(500) * GIB, "xfs");
+    plan_init(&plan);
+    plan_select_disk(&plan, &disk);
+    plan.storage.partitions[0].usage = PART_BOOT;
+    plan.storage.partitions[1].usage = PART_ROOT;
+    plan.storage.partitions[1].action = ACTION_FORMAT;
+    plan.storage.partitions[1].target_fs = FS_F2FS;
+    plan.storage.partitions[1].f2fs_mode = F2FS_COMPRESSED;
+    plan.storage.partitions[2].usage = PART_HOME;
+
+    if (!generate_script(&plan, &script)) return false;
+    passed &= require_fragment(&script,
+                               "readonly STORAGE_MODE='existing'",
+                               "existing-partition mode");
+    passed &= require_fragment(&script,
+                               "PART_ACTIONS=(\n    'format'\n    'keep'\n    'keep'\n)",
+                               "the mixed FORMAT/KEEP action plan");
+    passed &= require_fragment(&script,
+                               "PART_FILESYSTEMS=(\n    'f2fs'\n    'vfat'\n    'xfs'\n)",
+                               "filesystem preservation and replacement choices");
+    passed &= require_fragment(&script,
+                               "verify_existing_partition \"${PART_DEVICES[index]}\"",
+                               "existing-partition runtime validation");
+    passed &= require_fragment(&script,
+                               "PART_FS_UUIDS=(",
+                               "kept-filesystem UUID identities");
+    passed &= require_fragment(&script,
+                               "Filesystem UUID changed on $device",
+                               "kept-filesystem UUID revalidation");
+    generated_script_destroy(&script);
+    return passed;
+}
+
+static bool test_local_mirror_script(void)
+{
+    DiskInfo disk;
+    InstallPlan plan;
+    GeneratedScript script;
+    bool passed = true;
+
+    make_disk(&disk, 0);
+    plan_init(&plan);
+    plan_select_disk(&plan, &disk);
+    plan_use_automatic(&plan, &disk, STORAGE_AUTO_ROOT_ONLY);
+    plan.system.local_mirror = true;
+    plan.system.china_mirrors = true;
+
+    if (!generate_script(&plan, &script)) return false;
+    passed &= require_fragment(&script,
+                               "Type UNSIGNED %s %s to trust this exact source:",
+                               "an explicit unsigned-mirror confirmation");
+    passed &= require_fragment(&script,
+                               "LOCAL_MIRROR_UUID=$(blkid -s UUID",
+                               "local mirror UUID capture");
+    passed &= require_fragment(&script,
+                               "verify_local_mirror_identity",
+                               "local mirror identity revalidation");
+    passed &= require_fragment(&script,
+                               "Server = file:///var/cache/arch-install-repo/",
+                               "the target-visible read-only local repository URL");
+    passed &= require_fragment(&script,
+                               "mount --bind -- /run/media/root/F2FS-DATA/repo/archlinux",
+                               "an explicit target local-repository bind mount");
+    passed &= require_fragment(&script,
+                               "mount -o remount,bind,ro,nodev,nosuid,noexec",
+                               "restrictive target local-repository mount options");
+    passed &= require_order(&script,
+                            "genfstab -U -f \"$TARGET_ROOT\"",
+                            "        setup_target_local_mirror\n",
+                            "fstab generation before the temporary target mirror bind");
+    passed &= forbid_fragment(&script,
+                              "Server = file:///run/media/root/F2FS-DATA/repo/archlinux/$repo/os/$arch' > \"$TARGET_ROOT/etc/pacman.d/mirrorlist\"",
+                              "a local URL hidden from the target chroot");
+    passed &= forbid_fragment(&script, "127.0.0.1:2304", "a dead localhost mirror URL");
+    passed &= forbid_fragment(&script, "nginx", "an unsigned temporary mirror server");
+    generated_script_destroy(&script);
+    return passed;
+}
+
+int main(void)
+{
+    bool automatic = test_automatic_script();
+    bool existing = test_existing_keep_and_format_actions();
+    bool symlink = test_output_symlink_is_rejected();
+    bool local_mirror = test_local_mirror_script();
+
+    (void)printf("%s automatic generator integration\n",
+                 automatic ? "PASS" : "FAIL");
+    (void)printf("%s existing KEEP/FORMAT integration\n",
+                 existing ? "PASS" : "FAIL");
+    (void)printf("%s output symlink rejection\n",
+                 symlink ? "PASS" : "FAIL");
+    (void)printf("%s local mirror hardening\n",
+                 local_mirror ? "PASS" : "FAIL");
+    return automatic && existing && symlink && local_mirror ? EXIT_SUCCESS : EXIT_FAILURE;
+}
