@@ -456,7 +456,12 @@ Secure Boot 可以与临时本地镜像同时启用。本地镜像模式会临�
 │   ├── detect.c               # lsblk JSON 探测
 │   ├── model.c                # 方案、验证和 JSON
 │   ├── packages.c             # 软件包默认值与 packages.json
-│   ├── ui.c                   # ncursesw TUI
+│   ├── ui/                    # ncursesw TUI
+│   │   ├── ui.c               # 主循环与公共界面框架
+│   │   ├── dialogs.c          # 选择、确认和文本输入窗口
+│   │   ├── storage.c          # Storage 页面与 cfdisk 集成
+│   │   ├── screens.c          # 其他配置、审阅和预览页面
+│   │   └── internal.h         # TUI 私有状态和模块接口
 │   ├── generator.c            # Bash 生成器
 │   └── util.c                 # 子进程、验证与 Shell 转义
 ├── tests/                   # CTest 模型与生成器测试

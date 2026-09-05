@@ -29,7 +29,10 @@ add_executable(
     src/model.c
     src/packages.c
     src/detect.c
-    src/ui.c
+    src/ui/ui.c
+    src/ui/dialogs.c
+    src/ui/storage.c
+    src/ui/screens.c
     src/generator.c
 )
 
