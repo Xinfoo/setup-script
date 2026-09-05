@@ -11,6 +11,7 @@
 #include <string.h>
 #include <unistd.h>
 
+/* 在独立临时目录中同时验证默认配置往返和缺失软件包组的严格拒绝。 */
 int main(void)
 {
     char directory[] = "/tmp/arch-install-packages-test-XXXXXX";
@@ -22,6 +23,7 @@ int main(void)
     struct json_object *groups = NULL;
     bool passed = true;
 
+    /* 先保存再加载默认值，确认较大软件包组和普通组均保持不变。 */
     if (mkdtemp(directory) == NULL) return EXIT_FAILURE;
     (void)snprintf(path, sizeof(path), "%s/packages.json", directory);
     packages_init_defaults(&defaults);
@@ -39,6 +41,7 @@ int main(void)
         goto finish;
     }
 
+    /* 删除一个必需组后重写配置，加载器必须指出具体缺失组。 */
     root = json_object_from_file(path);
     if (root == NULL || !json_object_object_get_ex(root, "groups", &groups)) {
         passed = false;
@@ -59,6 +62,7 @@ int main(void)
     }
 
 finish:
+    /* 无论场景成功与否都释放 JSON 对象并移除临时文件。 */
     if (root != NULL) json_object_put(root);
     (void)unlink(path);
     (void)rmdir(directory);

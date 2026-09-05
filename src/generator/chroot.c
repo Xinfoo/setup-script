@@ -1,5 +1,6 @@
 #include "private.h"
 
+/* 目标系统内部执行的固定逻辑按配置领域拆分，并在构建期嵌入。 */
 static const unsigned char chroot_preamble_template[] = {
 #include "generated/generator/chroot_preamble.inc"
 };
@@ -24,6 +25,10 @@ static const unsigned char chroot_system_template[] = {
 #include "generated/generator/chroot_system.inc"
 };
 
+/*
+ * chroot 前导之后先写入本次方案的动态参数和软件包数组，再依次拼接
+ * 基础系统、桌面、可选软件、引导器及系统服务配置。
+ */
 bool emit_chroot_configuration(ScriptWriter *writer, const InstallPlan *plan,
                                const PackageConfig *packages)
 {

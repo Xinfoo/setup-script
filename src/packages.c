@@ -15,6 +15,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+/* 枚举顺序与 JSON 字段名保持一一对应，配置读写共同使用这张稳定映射。 */
 static const char *const group_names[PKG_GROUP_COUNT] = {
     "bootstrap", "core", "kernel_linux", "kernel_lts", "kernel_zen",
     "kernel_hardened", "platform_intel", "platform_amd", "laptop_firmware",
@@ -39,6 +40,7 @@ static bool valid_package_name(const char *value)
     return true;
 }
 
+/* 默认表统一通过有界复制进入固定容量模型，避免各组初始化逻辑分散。 */
 static void set_list(PackageConfig *config, PackageGroup group,
                      const char *const *values, size_t count)
 {
@@ -56,6 +58,7 @@ static void set_list(PackageConfig *config, PackageGroup group,
 
 void packages_init_defaults(PackageConfig *config)
 {
+    /* 这些列表是首次创建 packages.json 时使用的可编辑初始配置。 */
     static const char *const bootstrap[] = {
         "base", "base-devel", "linux-firmware", "dosfstools", "xfsprogs",
         "f2fs-tools", "exfatprogs", "btrfs-progs", "ntfsprogs", "nano", "vi",
@@ -187,6 +190,7 @@ bool packages_load_json(PackageConfig *config, const char *path,
     struct json_object *groups = NULL;
     PackageConfig loaded = {0};
 
+    /* 只读取真实普通文件，避免配置路径通过特殊文件产生意外行为。 */
     if (config == NULL || path == NULL) {
         (void)snprintf(error, error_size, "package config and path are required");
         return false;
@@ -218,6 +222,7 @@ bool packages_load_json(PackageConfig *config, const char *path,
         json_object_put(root);
         return false;
     }
+    /* 当前格式要求所有已知组完整存在，缺项不会静默回退到内建默认值。 */
     loaded.version = 1;
     for (int group = PKG_BOOTSTRAP; group < PKG_GROUP_COUNT; ++group) {
         const char *name = package_group_name((PackageGroup)group);
@@ -257,6 +262,7 @@ bool packages_load_json(PackageConfig *config, const char *path,
                       sizeof(loaded.groups[group].values[index]), value);
         }
     }
+    /* 全部字段验证成功后再一次性提交，失败不会污染调用方原配置。 */
     json_object_put(root);
     *config = loaded;
     return true;
@@ -274,6 +280,7 @@ bool packages_save_json(const PackageConfig *config, const char *path,
     int path_result;
     bool result = false;
 
+    /* 目标只允许是普通文件或尚不存在的路径，拒绝覆盖链接和其他节点。 */
     if (config == NULL || path == NULL) {
         (void)snprintf(error, error_size, "package config and path are required");
         return false;
@@ -287,6 +294,7 @@ bool packages_save_json(const PackageConfig *config, const char *path,
                        path, strerror(errno));
         return false;
     }
+    /* 序列化完整版本和全部软件包组，使后续加载可以执行严格完整性检查。 */
     root = json_object_new_object();
     groups = json_object_new_object();
     if (root == NULL || groups == NULL) {
@@ -312,6 +320,7 @@ bool packages_save_json(const PackageConfig *config, const char *path,
         json_object_object_add(groups, package_group_name((PackageGroup)group), array);
     }
     json_object_object_add(root, "groups", groups);
+    /* 在目标目录写入、同步并重命名临时文件，避免留下半写入配置。 */
     temporary = malloc(strlen(path) + 16);
     if (temporary == NULL) {
         (void)snprintf(error, error_size, "out of memory while saving package config");
@@ -366,6 +375,7 @@ bool packages_save_json(const PackageConfig *config, const char *path,
     result = true;
 
 finish:
+    /* 失败路径关闭描述符并删除临时文件，原目标文件保持不变。 */
     if (descriptor >= 0) (void)close(descriptor);
     if (!result && temporary != NULL) (void)unlink(temporary);
     free(temporary);

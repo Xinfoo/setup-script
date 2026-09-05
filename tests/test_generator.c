@@ -16,11 +16,13 @@
 #define GPT_ESP_TYPE "c12a7328-f81f-11d2-ba4b-00a0c93ec93b"
 #define GPT_LINUX_TYPE "0fc63daf-8483-4772-8e79-3d69d8477de4"
 
+/* 保存临时生成脚本及其文本，便于同时检查文件行为和脚本内容。 */
 typedef struct {
     char path[64];
     char *text;
 } GeneratedScript;
 
+/* 构造稳定的磁盘与分区夹具，避免测试依赖运行机器的真实硬件。 */
 static void make_disk(DiskInfo *disk, size_t partition_count)
 {
     memset(disk, 0, sizeof(*disk));
@@ -63,6 +65,7 @@ static void make_second_disk(DiskInfo *disk)
     copy_text(disk->serial, sizeof(disk->serial), "GENERATOR-TEST-002");
 }
 
+/* 读取生成结果并用 bash -n 做独立语法检查。 */
 static char *read_file(const char *path)
 {
     FILE *file = fopen(path, "r");
@@ -139,6 +142,7 @@ static bool generate_script_with_packages(const InstallPlan *plan,
     char error[512] = {0};
     int descriptor;
 
+    /* 每个场景使用独立临时文件，生成、校验、读取任一步失败都立即清理。 */
     memset(script, 0, sizeof(*script));
     copy_text(script->path, sizeof(script->path),
               "/tmp/arch-install-generator-test-XXXXXX");
@@ -191,6 +195,7 @@ static void generated_script_destroy(GeneratedScript *script)
     }
 }
 
+/* 内容断言同时覆盖片段的存在、缺失及关键安装步骤的先后顺序。 */
 static bool require_fragment(const GeneratedScript *script, const char *fragment,
                              const char *description)
 {
@@ -220,6 +225,7 @@ static bool require_order(const GeneratedScript *script, const char *first,
     return false;
 }
 
+/* 自动分区场景覆盖生成脚本的主体流程、运行时复核、清理和 Secure Boot。 */
 static bool test_automatic_script(void)
 {
     DiskInfo disk;
@@ -360,6 +366,7 @@ static bool test_automatic_script(void)
     return passed;
 }
 
+/* 输出路径安全场景确认符号链接不会被跟随，也不会改写其目标文件。 */
 static bool test_output_symlink_is_rejected(void)
 {
     DiskInfo disk;
@@ -418,6 +425,7 @@ static bool test_output_symlink_is_rejected(void)
     return passed;
 }
 
+/* 已有分区场景确认 KEEP 与 FORMAT 的身份信息和文件系统动作被正确编码。 */
 static bool test_existing_keep_and_format_actions(void)
 {
     DiskInfo disk;
@@ -461,6 +469,7 @@ static bool test_existing_keep_and_format_actions(void)
     return passed;
 }
 
+/* 临时本地镜像场景确认信任提示、身份复核和只读绑定挂载顺序。 */
 static bool test_local_mirror_script(void)
 {
     DiskInfo disk;
@@ -507,6 +516,7 @@ static bool test_local_mirror_script(void)
     return passed;
 }
 
+/* 自定义软件包场景确认生成器实际使用外部 PackageConfig。 */
 static bool test_custom_package_config_is_emitted(void)
 {
     DiskInfo disk;
@@ -534,6 +544,7 @@ static bool test_custom_package_config_is_emitted(void)
     return passed;
 }
 
+/* 多盘场景确认每块盘的模式、仅格式化分区及跳过挂载逻辑。 */
 static bool test_multi_disk_format_only_script(void)
 {
     DiskInfo system_disk;
@@ -572,6 +583,7 @@ static bool test_multi_disk_format_only_script(void)
 
 int main(void)
 {
+    /* 汇总各集成场景，保留独立结果以便一次运行显示全部失败项。 */
     bool automatic = test_automatic_script();
     bool existing = test_existing_keep_and_format_actions();
     bool symlink = test_output_symlink_is_rejected();

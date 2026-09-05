@@ -14,6 +14,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+/* 所有模型字符串都通过该入口进行有界复制，并统一处理空指针。 */
 void copy_text(char *destination, size_t size, const char *source)
 {
     if (size == 0) {
@@ -37,6 +38,7 @@ static bool run_capture_internal(const char *program, char *const argv[],
     size_t capacity = 4096;
     int wait_status = 0;
 
+    /* 父进程读取管道，子进程只负责重定向输出并执行指定的绝对路径程序。 */
     result->status = -1;
     result->output = NULL;
     if (pipe(pipefd) != 0) {
@@ -80,6 +82,7 @@ static bool run_capture_internal(const char *program, char *const argv[],
         return false;
     }
 
+    /* 按需扩展缓冲区，完整读取输出后再等待子进程并记录退出状态。 */
     for (;;) {
         ssize_t count;
         if (capacity - used < 2048) {
@@ -154,6 +157,7 @@ void process_result_free(ProcessResult *result)
     result->status = -1;
 }
 
+/* 主机名和用户名共享基本字符规则，用户名另有限定首字符与大小写。 */
 static bool valid_name(const char *value, size_t maximum, bool username)
 {
     size_t length;
@@ -186,6 +190,7 @@ bool valid_hostname(const char *value)
 
 bool valid_username(const char *value)
 {
+    /* 排除目标系统常见的预置服务账户，避免创建用户时发生身份冲突。 */
     static const char *const reserved[] = {
         "root", "bin", "daemon", "mail", "ftp", "http", "nobody", "dbus",
         "systemd-journal-remote", "systemd-network", "systemd-oom", "systemd-resolve",
@@ -207,6 +212,7 @@ bool valid_timezone(const char *value)
     int written;
     struct stat status;
     size_t length;
+    /* 先限制为相对区域名，再确认对应 zoneinfo 文件真实存在且可读。 */
     if (value == NULL || value[0] == '/' || strstr(value, "..") != NULL) {
         return false;
     }
@@ -234,6 +240,7 @@ char *shell_quote(const char *value)
     if (value == NULL) {
         value = "";
     }
+    /* 预先计算单引号转义后的精确长度，随后构造可直接嵌入 Bash 的字面量。 */
     for (const char *p = value; *p != '\0'; ++p) {
         if (*p == '\'') {
             if (length > SIZE_MAX - 4) {

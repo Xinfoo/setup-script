@@ -12,6 +12,7 @@
 #define GIB (UINT64_C(1024) * UINT64_C(1024) * UINT64_C(1024))
 #define GPT_ESP_TYPE "c12a7328-f81f-11d2-ba4b-00a0c93ec93b"
 
+/* 基础辅助检查：设备路径语法、问题收集和分区最终文件系统推导。 */
 static bool valid_block_device_path(const char *value)
 {
     const unsigned char *cursor;
@@ -48,6 +49,7 @@ static bool is_regular_mount_filesystem(Filesystem filesystem)
     return filesystem == FS_EXT4 || filesystem == FS_XFS || filesystem == FS_F2FS;
 }
 
+/* 引导式布局必须继续符合固定分区数量、编号、用途和格式化动作。 */
 static bool has_automatic_role(const DiskPlan *storage, PartitionUsage usage,
                                unsigned number)
 {
@@ -91,6 +93,10 @@ static bool automatic_layout_matches_mode(const DiskPlan *storage)
     return false;
 }
 
+/*
+ * 集中验证所有会影响脚本正确性和设备身份的约束。函数尽量收集完整报告，
+ * 而不是遇到第一项错误就返回，方便 Review 页面一次展示所有问题。
+ */
 void validate_plan(const InstallPlan *plan, ValidationReport *report)
 {
     size_t roots = 0;
@@ -101,6 +107,7 @@ void validate_plan(const InstallPlan *plan, ValidationReport *report)
     const DiskPlan *boot_disk = NULL;
     size_t disk_count = plan->storage.disk_count;
 
+    /* 先检查系统枚举和顶层磁盘数量，防止后续索引越过模型边界。 */
     memset(report, 0, sizeof(*report));
     if (plan->system.platform < PLATFORM_INTEL || plan->system.platform > PLATFORM_VM) {
         add_issue(report, ISSUE_ERROR, "The CPU platform value is invalid.");
@@ -121,6 +128,7 @@ void validate_plan(const InstallPlan *plan, ValidationReport *report)
         disk_count = AI_MAX_PLAN_DISKS;
     }
 
+    /* 每块磁盘先验证身份与布局模式，再验证其中所有需要处理的分区。 */
     for (size_t disk_index = 0; disk_index < disk_count; ++disk_index) {
         const DiskPlan *disk = &plan->storage.disks[disk_index];
         size_t partition_count = disk->partition_count;
@@ -174,6 +182,10 @@ void validate_plan(const InstallPlan *plan, ValidationReport *report)
                       "Using existing partitions requires a GPT partition table on every participating disk.");
         }
 
+        /*
+         * 分区检查覆盖设备归属、重复引用、挂载点唯一性、KEEP 身份、
+         * 文件系统兼容性、容量下限以及引导式布局的固定尺寸。
+         */
         for (size_t index = 0; index < partition_count; ++index) {
             const PartitionPlan *part = &disk->partitions[index];
             Filesystem fs;
@@ -341,6 +353,8 @@ void validate_plan(const InstallPlan *plan, ValidationReport *report)
                       "Automatic partition sizes must account for the entire installation disk.");
         }
     }
+
+    /* 最后检查跨磁盘的全局不变量以及系统文本和选项之间的组合约束。 */
     if (roots != 1) add_issue(report, ISSUE_ERROR, "Exactly one root (/) partition is required.");
     if (boots != 1) add_issue(report, ISSUE_ERROR, "Exactly one EFI (/boot) partition is required.");
     if (roots == 1 && boots == 1 && root_disk != boot_disk) {

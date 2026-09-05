@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+/* 基础写入函数采用“粘滞错误”状态：第一次失败后，后续写入全部成为空操作。 */
 void writer_puts(ScriptWriter *writer, const char *text)
 {
     if (writer->ok && fputs(text, writer->file) == EOF) {
@@ -29,6 +30,7 @@ void writer_printf(ScriptWriter *writer, const char *format, ...)
     va_end(arguments);
 }
 
+/* 动态字符串必须经过 shell_quote，布尔值则只生成固定的 true/false 字面量。 */
 bool emit_assignment(ScriptWriter *writer, const char *name, const char *value)
 {
     char *quoted = shell_quote(value);

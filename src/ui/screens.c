@@ -10,6 +10,7 @@
 #include <string.h>
 #include <sys/types.h>
 
+/* 首页摘要使用包含根分区的磁盘作为主要安装目标显示。 */
 static const DiskPlan *root_disk_plan(const InstallPlan *plan)
 {
     for (size_t disk_index = 0; disk_index < plan->storage.disk_count; ++disk_index) {
@@ -87,6 +88,7 @@ void handle_home(UiState *state, int key)
     }
 }
 
+/* 属性型页面共用同一行布局：左侧可选字段，右侧显示当前值。 */
 static void property_row(int y, int index, int selected, const char *name, const char *value)
 {
     if (index == selected) attron(COLOR_PAIR(COLOR_SELECTED));
@@ -95,6 +97,7 @@ static void property_row(int y, int index, int selected, const char *name, const
     put_clipped(y, 36, COLS - 39, value);
 }
 
+/* 基础系统页面：平台、内核、设备类型、区域和软件源。 */
 void draw_system(UiState *state)
 {
     SystemPlan *system = &state->plan->system;
@@ -126,6 +129,7 @@ void handle_system(UiState *state, int key)
     }
 }
 
+/* 硬件页面坚持显式选择，探测结果不会自动开启驱动或服务。 */
 void draw_hardware(UiState *state)
 {
     SystemPlan *system = &state->plan->system;
@@ -149,6 +153,7 @@ void handle_hardware(UiState *state, int key)
     }
 }
 
+/* 软件页面只编辑软件包组选项，具体包名仍由 packages.json 提供。 */
 void draw_software(UiState *state)
 {
     SystemPlan *s = &state->plan->system;
@@ -183,6 +188,7 @@ void handle_software(UiState *state, int key)
     }
 }
 
+/* 身份与启动页面包含文本字段、EFI 写入开关和 Secure Boot 开关。 */
 void draw_identity(UiState *state)
 {
     SystemPlan *s = &state->plan->system;
@@ -214,6 +220,10 @@ void handle_identity(UiState *state, int key)
     }
 }
 
+/*
+ * 审阅页面将存储操作、系统摘要和验证结果整理成一个带颜色的滚动列表。
+ * 只有验证通过且磁盘身份仍匹配时，generate() 才会真正生成脚本。
+ */
 void draw_review(UiState *state)
 {
     ValidationReport report;
@@ -321,6 +331,7 @@ void handle_review(UiState *state, int key)
     }
 }
 
+/* 预览页面逐行读取刚生成的脚本，不把整个脚本长期保存在 UI 状态中。 */
 void draw_preview(UiState *state)
 {
     FILE *file;

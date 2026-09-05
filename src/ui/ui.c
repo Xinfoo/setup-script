@@ -13,6 +13,7 @@
 #include <string.h>
 #include <unistd.h>
 
+/* 信号处理器只记录退出请求，ncurses 清理由主循环在正常控制流中完成。 */
 volatile sig_atomic_t stop_requested = 0;
 static volatile sig_atomic_t stop_signal = 0;
 
@@ -22,6 +23,7 @@ static void request_stop(int signal_number)
     stop_requested = 1;
 }
 
+/* 状态栏、颜色和页面外框由所有页面共用。 */
 void set_status(UiState *state, const char *message)
 {
     copy_text(state->status, sizeof(state->status), message);
@@ -80,6 +82,7 @@ static bool terminal_too_small(void)
     return true;
 }
 
+/* 保存、生成和退出操作集中在主模块，保证所有页面使用同一套状态转换。 */
 void quit_builder(UiState *state)
 {
     state->quit = !state->dirty ||
@@ -125,6 +128,7 @@ bool generate(UiState *state)
     return true;
 }
 
+/* 页面分发器只决定调用哪个页面，不在这里处理页面自己的业务按键。 */
 static void draw_current(UiState *state)
 {
     if (terminal_too_small()) return;
@@ -161,6 +165,10 @@ static void handle_key(UiState *state, int key)
     }
 }
 
+/*
+ * 初始化终端并运行事件循环。循环结束后先恢复终端；只有用户明确选择
+ * “生成并运行”时，才用 bash 替换 builder 进程。
+ */
 int run_tui(InstallPlan *plan, HardwareInventory *inventory,
             const PackageConfig *packages, const char *plan_path,
             const char *script_path)

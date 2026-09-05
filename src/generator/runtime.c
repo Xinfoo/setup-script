@@ -1,5 +1,6 @@
 #include "private.h"
 
+/* Live 环境运行阶段按职责拆成模板，并在构建期嵌入可执行文件。 */
 static const unsigned char runtime_state_template[] = {
 #include "generated/generator/runtime_state.inc"
 };
@@ -52,6 +53,10 @@ static const unsigned char runtime_package_source_template[] = {
 #include "generated/generator/runtime_package_source.inc"
 };
 
+/*
+ * 拼接顺序同时决定生成脚本中的函数定义顺序：先建立状态与清理机制，
+ * 再加入验证、分区、挂载和软件源阶段，最后由收尾模板提供执行入口。
+ */
 void emit_outer_runtime(ScriptWriter *writer)
 {
     writer_write(writer, runtime_state_template, sizeof(runtime_state_template));

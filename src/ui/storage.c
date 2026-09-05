@@ -14,6 +14,10 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+/*
+ * 将方案中记录的磁盘及分区身份与最新探测结果逐项比较。
+ * 这里只判断生成资格，不读取或修改真实块设备。
+ */
 bool disk_identity_matches(const InstallPlan *plan, const HardwareInventory *inventory)
 {
     for (size_t disk_index = 0; disk_index < plan->storage.disk_count; ++disk_index) {
@@ -53,6 +57,7 @@ bool disk_identity_matches(const InstallPlan *plan, const HardwareInventory *inv
     return true;
 }
 
+/* 磁盘方案操作：添加磁盘、选择引导式布局、恢复现有分区以及刷新探测结果。 */
 static int disk_dialog(const HardwareInventory *inventory, InstallPlan *plan)
 {
     const char *options[AI_MAX_DISKS];
@@ -194,6 +199,10 @@ static bool refresh_disks(UiState *state)
     return true;
 }
 
+/*
+ * 临时退出 ncurses，将终端完整交给 cfdisk；子进程结束后恢复程序模式并
+ * 强制重绘。上层随后重新探测磁盘，旧的挂载点分派不会跨分区表编辑保留。
+ */
 static int run_cfdisk_process(const char *device, char *error, size_t error_size)
 {
     pid_t child;
@@ -283,6 +292,7 @@ static void launch_cfdisk(UiState *state)
     }
 }
 
+/* 从方案移除磁盘只修改内存模型，不会对真实磁盘执行任何操作。 */
 static void remove_active_disk(UiState *state)
 {
     StoragePlan *storage = &state->plan->storage;
@@ -303,6 +313,10 @@ static void remove_active_disk(UiState *state)
     set_status(state, "Disk removed from the installation plan; no device was modified.");
 }
 
+/*
+ * Storage 表把每块磁盘的表头和分区组成连续的可滚动行。
+ * state->row == -1 表示选中磁盘表头，非负值表示当前磁盘内的分区下标。
+ */
 void draw_storage(UiState *state)
 {
     StoragePlan *storage = &state->plan->storage;
@@ -398,6 +412,7 @@ void draw_storage(UiState *state)
     }
 }
 
+/* 分区编辑分为用途、格式化动作和 F2FS 挂载配置三层。 */
 static bool regular_filesystem(Filesystem filesystem)
 {
     return filesystem == FS_EXT4 || filesystem == FS_XFS || filesystem == FS_F2FS;
@@ -573,6 +588,7 @@ static bool edit_partition_format(UiState *state, PartitionPlan *partition)
     return true;
 }
 
+/* F2FS 配置只对将被格式化且分配了挂载点的 F2FS 分区开放。 */
 static void edit_f2fs_mode(UiState *state, PartitionPlan *partition)
 {
     static const char *const options[] = {
@@ -600,6 +616,10 @@ static void edit_f2fs_mode(UiState *state, PartitionPlan *partition)
                    f2fs_mode_name(partition->f2fs_mode));
 }
 
+/*
+ * 上下键在“磁盘表头 + 该盘分区”组成的逻辑列表中连续移动。
+ * 表头处理磁盘级命令，分区行处理用途、格式化和挂载配置，二者互不混用。
+ */
 void handle_storage(UiState *state, int key)
 {
     StoragePlan *storage = &state->plan->storage;

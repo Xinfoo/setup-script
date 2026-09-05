@@ -7,6 +7,7 @@
 #define AI_PACKAGE_NAME_LEN 128
 #define AI_MAX_PACKAGES_PER_GROUP 128
 
+/* 安装阶段和可选功能使用的软件包组；枚举值也是配置表的稳定索引。 */
 typedef enum {
     PKG_BOOTSTRAP,
     PKG_CORE,
@@ -40,6 +41,7 @@ typedef enum {
     PKG_GROUP_COUNT
 } PackageGroup;
 
+/* 每组使用固定上限，配置加载完成后可直接由生成器只读遍历。 */
 typedef struct {
     char values[AI_MAX_PACKAGES_PER_GROUP][AI_PACKAGE_NAME_LEN];
     size_t count;
@@ -50,9 +52,12 @@ typedef struct {
     PackageList groups[PKG_GROUP_COUNT];
 } PackageConfig;
 
+/* 初始化内建默认配置，并提供软件包组的名称和只读访问接口。 */
 void packages_init_defaults(PackageConfig *config);
 const char *package_group_name(PackageGroup group);
 const PackageList *packages_get(const PackageConfig *config, PackageGroup group);
+
+/* JSON 接口执行完整格式校验；保存使用临时文件原子替换目标。 */
 bool packages_load_json(PackageConfig *config, const char *path,
                         char *error, size_t error_size);
 bool packages_save_json(const PackageConfig *config, const char *path,

@@ -18,6 +18,7 @@
 #define CONFIG_DIRECTORY "config"
 #define PACKAGE_CONFIG_PATH CONFIG_DIRECTORY "/packages.json"
 
+/* 软件包配置损坏或版本不匹配时，仅在交互式终端中允许用户确认覆盖。 */
 static bool confirm_package_config_overwrite(void)
 {
     char answer[32];
@@ -34,6 +35,7 @@ static bool prepare_package_config(PackageConfig *packages,
 {
     struct stat status;
 
+    /* 首次运行时创建配置目录，但拒绝把同名普通文件或链接当作目录使用。 */
     if (lstat(CONFIG_DIRECTORY, &status) != 0) {
         if (errno != ENOENT) {
             (void)snprintf(error, error_size, "cannot inspect %s: %s",
@@ -51,6 +53,7 @@ static bool prepare_package_config(PackageConfig *packages,
         return false;
     }
 
+    /* 缺失时写入内建默认值；已存在时必须完整通过当前版本的严格校验。 */
     if (lstat(PACKAGE_CONFIG_PATH, &status) != 0) {
         if (errno != ENOENT) {
             (void)snprintf(error, error_size, "cannot inspect %s: %s",
@@ -97,6 +100,7 @@ static bool canonical_destination(const char *path, char *output, size_t output_
     return written >= 0 && (size_t)written < output_size;
 }
 
+/* 同时比较文本路径、现有文件身份和父目录规范路径，避免输入覆盖生成脚本。 */
 static bool paths_refer_to_same_destination(const char *left, const char *right)
 {
     struct stat left_status;
@@ -140,6 +144,7 @@ int main(int argc, char **argv)
     ValidationReport report;
     char error[512] = {0};
 
+    /* 命令行只负责选择计划路径、输出路径以及是否跳过 TUI 直接生成。 */
     for (int index = 1; index < argc; ++index) {
         if ((strcmp(argv[index], "-p") == 0 || strcmp(argv[index], "--plan") == 0) &&
             index + 1 < argc) {
@@ -163,6 +168,7 @@ int main(int argc, char **argv)
         }
     }
 
+    /* 两种运行模式共用同一份外部软件包配置。 */
     if (!prepare_package_config(&packages, error, sizeof(error))) {
         (void)fprintf(stderr, "Error: %s\n", error);
         return EXIT_FAILURE;
@@ -174,6 +180,7 @@ int main(int argc, char **argv)
         return EXIT_FAILURE;
     }
 
+    /* 非交互模式加载并验证现有计划，验证通过后直接生成安装脚本。 */
     if (generate_path != NULL) {
         if (!plan_load_json(&plan, generate_path, error, sizeof(error))) {
             (void)fprintf(stderr, "Error: %s\n", error);
@@ -196,6 +203,7 @@ int main(int argc, char **argv)
         return EXIT_SUCCESS;
     }
 
+    /* 交互模式可从已有计划继续编辑，再结合当前硬件清单启动 TUI。 */
     plan_init(&plan);
     if (access(plan_path, F_OK) == 0) {
         if (!plan_load_json(&plan, plan_path, error, sizeof(error))) {

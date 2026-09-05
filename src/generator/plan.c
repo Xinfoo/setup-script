@@ -12,6 +12,10 @@
 
 #define MIB UINT64_C(1048576)
 
+/*
+ * PartitionRef 把跨磁盘分区展平成一张表；字段枚举让同一套数组输出器
+ * 能生成设备、用途、动作、文件系统以及运行时身份校验所需的并行数组。
+ */
 typedef struct {
     const DiskPlan *disk;
     const PartitionPlan *partition;
@@ -36,6 +40,7 @@ typedef enum {
     NUMBER_SIZE_BYTES
 } PartitionNumberField;
 
+/* Bash 模板由 CMake 转成字节数组，运行时不依赖源码目录中的模板文件。 */
 static const unsigned char preamble_template[] = {
 #include "generated/generator/preamble.inc"
 };
@@ -53,6 +58,7 @@ const PartitionPlan *find_partition(const InstallPlan *plan, PartitionUsage usag
     return NULL;
 }
 
+/* 根据分区对象反查所属磁盘，用于确定主要目标盘。 */
 static const DiskPlan *find_partition_disk(const InstallPlan *plan,
                                            const PartitionPlan *partition)
 {
@@ -65,6 +71,10 @@ static const DiskPlan *find_partition_disk(const InstallPlan *plan,
     return NULL;
 }
 
+/*
+ * 可执行分区按全局挂载顺序收集：根分区最先，普通挂载点按路径排序，
+ * Swap 随后，不分配挂载点但需要格式化的分区最后。
+ */
 static int partition_order(const PartitionRef *left, const PartitionRef *right)
 {
     const char *left_mount;
@@ -124,6 +134,7 @@ static size_t collect_actionable_partitions(const InstallPlan *plan,
     return count;
 }
 
+/* 分区的字符串字段和数值字段分别序列化为等长 Bash 数组。 */
 static const char *partition_field(const PartitionPlan *partition, PartitionField field)
 {
     Filesystem filesystem;
@@ -180,6 +191,7 @@ static void emit_partition_number_array(ScriptWriter *writer, const char *name,
     writer_puts(writer, ")\n");
 }
 
+/* 软件包数组中的每个名称单独转义，缺失的软件包组会让整个生成过程失败。 */
 static void emit_package_values(ScriptWriter *writer, const PackageList *packages)
 {
     for (size_t index = 0; index < packages->count; ++index) {
@@ -224,6 +236,7 @@ void emit_package_array(ScriptWriter *writer, const char *name,
     writer_puts(writer, ")\n");
 }
 
+/* REQUIRED_PACKAGES 是所有已启用功能的软件包并集，供安装前统一解析验证。 */
 static void emit_required_packages(ScriptWriter *writer, const InstallPlan *plan,
                                    const PackageConfig *config)
 {
@@ -296,6 +309,7 @@ static void emit_partition_array(ScriptWriter *writer, const char *name,
     writer_puts(writer, ")\n");
 }
 
+/* 自动布局尺寸和磁盘身份信息按磁盘下标写入并行数组。 */
 static const char *storage_mode_value(StorageMode mode)
 {
     switch (mode) {
@@ -379,6 +393,10 @@ static void emit_partition_disk_indexes(ScriptWriter *writer,
     writer_puts(writer, ")\n");
 }
 
+/*
+ * 先写脚本前导，再写磁盘、分区、内核和软件包变量。
+ * 后续固定模板只消费这些只读变量，不再直接访问 C 数据模型。
+ */
 bool emit_header_and_plan(ScriptWriter *writer, const InstallPlan *plan,
                           const PackageConfig *packages)
 {

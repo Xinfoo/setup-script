@@ -11,6 +11,7 @@
 #define MIB (UINT64_C(1024) * UINT64_C(1024))
 #define GIB (UINT64_C(1024) * UINT64_C(1024) * UINT64_C(1024))
 
+/* 根据磁盘名是否以数字结尾，生成 sdX1 或 nvme0n1p1 形式的分区设备名。 */
 void model_partition_device(char *output, size_t size, const char *disk, unsigned number)
 {
     char suffix[32];
@@ -28,6 +29,7 @@ void model_partition_device(char *output, size_t size, const char *disk, unsigne
     copy_text(output + output_length, size - output_length, suffix);
 }
 
+/* 新方案的默认值集中在这里，JSON 加载也以这些默认值作为初始化基线。 */
 void plan_init(InstallPlan *plan)
 {
     memset(plan, 0, sizeof(*plan));
@@ -46,6 +48,7 @@ void plan_init(InstallPlan *plan)
     plan->system.create_efi_entry = true;
 }
 
+/* 磁盘方案操作只修改内存模型；加入磁盘时先复制完整的探测身份。 */
 void plan_select_disk(InstallPlan *plan, const DiskInfo *disk)
 {
     memset(&plan->storage, 0, sizeof(plan->storage));
@@ -115,6 +118,7 @@ void plan_use_existing(InstallPlan *plan, const DiskInfo *disk)
     if (target != NULL) disk_plan_use_existing(target, disk);
 }
 
+/* 推荐 Swap 大小根据当前内存分段计算，读取失败时回退到 8 GiB。 */
 uint64_t recommended_swap_bytes(void)
 {
     FILE *file = fopen("/proc/meminfo", "r");
@@ -139,6 +143,10 @@ uint64_t recommended_swap_bytes(void)
     return UINT64_C(8) * GIB;
 }
 
+/*
+ * 引导式布局建立固定的分区角色和文件系统，并使各分区容量覆盖整块磁盘。
+ * 实际写盘动作只会出现在之后生成的 Bash 脚本中。
+ */
 static void auto_partition(DiskPlan *storage, size_t index, unsigned number,
                            uint64_t bytes, PartitionUsage usage, Filesystem filesystem)
 {
@@ -198,6 +206,7 @@ void plan_use_automatic(InstallPlan *plan, const DiskInfo *disk, StorageMode mod
     if (target != NULL) disk_plan_use_automatic(target, disk, mode);
 }
 
+/* 枚举名称是界面显示和 Shell 序列化共同使用的稳定表示。 */
 const char *filesystem_name(Filesystem value)
 {
     static const char *const names[] = {"none", "vfat", "ext4", "xfs", "f2fs", "swap"};
@@ -273,6 +282,10 @@ Filesystem filesystem_from_name(const char *name)
     return FS_NONE;
 }
 
+/*
+ * TUI 的分区编辑状态机：用途变化会同步修正允许的动作和文件系统，
+ * 格式化选择则区分现有分区、引导式分区和无挂载点数据分区。
+ */
 void plan_cycle_usage(PartitionPlan *partition)
 {
     partition->usage = (PartitionUsage)(((int)partition->usage + 1) % ((int)PART_SWAP + 1));
@@ -365,6 +378,7 @@ void plan_cycle_format(PartitionPlan *partition)
     }
 }
 
+/* 容量只负责适配人类可读显示，不参与方案中的精确字节计算。 */
 void format_size(uint64_t bytes, char *buffer, size_t size)
 {
     const char *unit = "B";

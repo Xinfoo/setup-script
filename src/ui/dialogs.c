@@ -7,6 +7,7 @@
 #include <ctype.h>
 #include <string.h>
 
+/* 通用单选列表：负责滚动可见区域，并在关闭后恢复底层 stdscr。 */
 int choose_dialog(const char *title, const char *const options[], size_t count, int current)
 {
     int width = COLS - 4;
@@ -67,6 +68,10 @@ int choose_dialog(const char *title, const char *const options[], size_t count, 
     }
 }
 
+/*
+ * 确认窗口的文本换行器。优先在空白处分行，单个超长词才按窗口宽度截断，
+ * 同一算法同时用于计算窗口高度和实际绘制，避免两者行数不一致。
+ */
 static bool next_wrapped_line(const char **cursor, size_t width,
                               const char **start, size_t *length)
 {
@@ -114,6 +119,7 @@ static size_t wrapped_line_count(const char *message, size_t width)
     return count > 0 ? count : 1;
 }
 
+/* 破坏性操作统一默认选中 No，方向键只在 No/Yes 之间切换。 */
 bool confirm_dialog(const char *title, const char *message)
 {
     const char *const options[] = {"No", "Yes"};
@@ -184,6 +190,7 @@ bool confirm_dialog(const char *title, const char *message)
     }
 }
 
+/* 单行文本编辑器：维护独立缓冲区，确认后才写回调用方提供的值。 */
 bool text_dialog(const char *title, char *value, size_t size)
 {
     int width = 68;

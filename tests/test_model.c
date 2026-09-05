@@ -18,6 +18,7 @@
 #define GPT_ESP_TYPE "c12a7328-f81f-11d2-ba4b-00a0c93ec93b"
 #define GPT_LINUX_TYPE "0fc63daf-8483-4772-8e79-3d69d8477de4"
 
+/* 单项检查失败时直接结束当前场景，并保留精确源码位置。 */
 #define CHECK(condition)                                                        \
     do {                                                                        \
         if (!(condition)) {                                                     \
@@ -36,6 +37,7 @@ typedef struct {
 
 typedef void (*JsonMutation)(struct json_object *root);
 
+/* 使用确定性的设备身份构造单盘、多盘和已有分区测试夹具。 */
 static void make_disk(DiskInfo *disk, size_t partition_count)
 {
     memset(disk, 0, sizeof(*disk));
@@ -86,6 +88,7 @@ static void make_second_disk(DiskInfo *disk, size_t partition_count)
     }
 }
 
+/* 在验证报告中按严重级别和文本片段定位预期问题。 */
 static bool report_contains(const ValidationReport *report, IssueSeverity severity,
                             const char *text)
 {
@@ -98,6 +101,7 @@ static bool report_contains(const ValidationReport *report, IssueSeverity severi
     return false;
 }
 
+/* 先生成合法计划，再定点破坏 JSON，验证加载器拒绝对应的非法输入。 */
 static bool expect_mutated_json_rejected(JsonMutation mutation, const char *expected_error)
 {
     DiskInfo disk;
@@ -150,6 +154,7 @@ static bool expect_mutated_json_rejected(JsonMutation mutation, const char *expe
     return true;
 }
 
+/* 各回调用于制造类型错误、数值越界和旧版本等互相独立的输入。 */
 static void mutate_boolean_to_string(struct json_object *root)
 {
     struct json_object *system = NULL;
@@ -179,6 +184,7 @@ static void mutate_to_incomplete_version_one(struct json_object *root)
     json_object_object_del(storage, "disks");
 }
 
+/* 基础场景覆盖默认计划、自动布局、已有分区动作和挂载点唯一性。 */
 static bool test_default_plan_fails_validation(void)
 {
     InstallPlan plan;
@@ -286,6 +292,7 @@ static bool test_duplicate_usage_is_rejected(void)
     return true;
 }
 
+/* 逐层比较计划模型，供 JSON 往返测试确认所有持久化字段均未变化。 */
 static bool partitions_equal(const PartitionPlan *left, const PartitionPlan *right)
 {
     return strcmp(left->device, right->device) == 0 &&
@@ -358,6 +365,7 @@ static bool plans_equal(const InstallPlan *left, const InstallPlan *right)
     return true;
 }
 
+/* 序列化场景使用包含多盘和非默认系统选项的完整计划进行往返。 */
 static bool test_json_round_trip(void)
 {
     DiskInfo disk;
@@ -419,6 +427,7 @@ static bool test_json_round_trip(void)
     return true;
 }
 
+/* 多盘规则允许额外挂载点或仅格式化分区，但要求根与 EFI 位于同一块盘。 */
 static bool test_multi_disk_mounts_and_format_only(void)
 {
     DiskInfo system_disk;
@@ -471,6 +480,7 @@ static bool test_root_and_boot_must_share_disk(void)
     return true;
 }
 
+/* 严格 JSON 场景验证类型、数值及版本错误不会被兼容性逻辑掩盖。 */
 static bool test_json_boolean_string_is_rejected(void)
 {
     CHECK(expect_mutated_json_rejected(mutate_boolean_to_string,
@@ -492,6 +502,7 @@ static bool test_old_version_is_reported_before_schema_errors(void)
     return true;
 }
 
+/* 防篡改场景覆盖设备路径、自动分区边界以及禁止保留的系统挂载点。 */
 static bool test_unsafe_device_paths_are_rejected(void)
 {
     DiskInfo disk;
@@ -576,6 +587,7 @@ static bool test_var_and_usr_keep_are_rejected(void)
     return true;
 }
 
+/* Shell 字面量场景确保计划文本不能在生成脚本中重新获得语法含义。 */
 static bool check_quote(const char *input, const char *expected)
 {
     char *quoted = shell_quote(input);
@@ -600,6 +612,7 @@ static bool test_shell_quote(void)
     return true;
 }
 
+/* 其余边界场景覆盖固定布局、账户名、保留文件系统身份和数组上限。 */
 static bool test_tampered_automatic_layout_is_rejected(void)
 {
     DiskInfo disk;
@@ -696,6 +709,7 @@ static bool test_direct_partition_count_overflow_is_rejected(void)
 
 int main(void)
 {
+    /* 表驱动执行全部模型场景，逐项报告后以失败总数决定进程状态。 */
     static const TestCase tests[] = {
         {"default plan fails validation", test_default_plan_fails_validation},
         {"valid automatic layout", test_valid_automatic_layout},

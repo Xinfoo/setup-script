@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <string.h>
 
+/* 集中处理 lsblk JSON 中缺失值和 null，简化后续字段映射。 */
 static const char *object_string(struct json_object *object, const char *key)
 {
     struct json_object *value = NULL;
@@ -33,6 +34,7 @@ static bool object_bool(struct json_object *object, const char *key)
     return json_object_get_boolean(value) != 0;
 }
 
+/* lsblk 可能返回单个字符串或数组，这里统一取得第一个有效挂载点。 */
 static void first_mountpoint(struct json_object *object, char *destination, size_t size)
 {
     struct json_object *mountpoints = NULL;
@@ -57,6 +59,7 @@ static void first_mountpoint(struct json_object *object, char *destination, size
     }
 }
 
+/* 递归展开磁盘下的分区，同时把挂载或叠加设备传播为整盘占用状态。 */
 static void collect_partitions(struct json_object *children, DiskInfo *disk)
 {
     if (children == NULL || !json_object_is_type(children, json_type_array)) return;
@@ -102,6 +105,7 @@ bool detect_hardware(HardwareInventory *inventory, char *error, size_t error_siz
         NULL
     };
 
+    /* 仅采集建模和运行时复核需要的字段，标准错误不会混入 JSON。 */
     memset(inventory, 0, sizeof(*inventory));
     if (!run_capture_stdout(arguments[0], arguments, &process, error, error_size)) return false;
     if (process.status != 0) {
@@ -118,6 +122,7 @@ bool detect_hardware(HardwareInventory *inventory, char *error, size_t error_siz
         return false;
     }
 
+    /* 顶层只接受物理磁盘，分区和其下设备交给递归收集器处理。 */
     for (size_t index = 0; index < json_object_array_length(devices); ++index) {
         struct json_object *item = json_object_array_get_idx(devices, index);
         struct json_object *children = NULL;

@@ -16,6 +16,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+/* 已通过 schema 检查的 JSON 字段读取器，同时为内部调用保留明确回退值。 */
 static const char *json_string(struct json_object *object, const char *key, const char *fallback)
 {
     struct json_object *value = NULL;
@@ -49,6 +50,7 @@ static void add_bool(struct json_object *object, const char *key, bool value)
     json_object_object_add(object, key, json_object_new_boolean(value));
 }
 
+/* JsonField 表只描述必需字段及类型；数值范围由专门的检查器处理。 */
 typedef struct {
     const char *name;
     enum json_type type;
@@ -106,6 +108,7 @@ static bool require_json_nonnegative(struct json_object *object, const char *sec
     return true;
 }
 
+/* 逐个验证分区对象，拒绝字段缺失、类型错误、负数和越界枚举。 */
 static bool validate_partition_array(struct json_object *parts, const char *prefix,
                                      char *error, size_t error_size)
 {
@@ -153,6 +156,10 @@ static bool validate_partition_array(struct json_object *parts, const char *pref
     return true;
 }
 
+/*
+ * 当前版本不做旧格式兼容：加载前必须完整满足 root/storage/system 的 schema，
+ * 每个磁盘和分区也必须包含本版本定义的全部字段。
+ */
 static bool validate_json_schema(struct json_object *root,
                                  struct json_object **system_out,
                                  struct json_object **disks_out,
@@ -239,6 +246,10 @@ static bool validate_json_schema(struct json_object *root,
     return true;
 }
 
+/*
+ * 保存时先从内存模型构造完整 JSON 树，再写入目标目录中的临时文件。
+ * fsync 和 close 都成功后才 rename，失败路径不会留下半写入的方案文件。
+ */
 bool plan_save_json(const InstallPlan *plan, const char *path, char *error, size_t error_size)
 {
     struct json_object *root = json_object_new_object();
@@ -317,6 +328,8 @@ bool plan_save_json(const InstallPlan *plan, const char *path, char *error, size
     ADD_SYSTEM_BOOL(create_efi_entry);
 #undef ADD_SYSTEM_BOOL
     json_object_object_add(root, "system", system);
+
+    /* 只替换普通文件，临时文件与目标同目录以保证最终 rename 原子提交。 */
     path_result = lstat(path, &status);
     if (path_result == 0 && !S_ISREG(status.st_mode)) {
         (void)snprintf(error, error_size, "refusing to replace non-regular plan path: %s", path);
@@ -397,6 +410,7 @@ bool plan_save_json(const InstallPlan *plan, const char *path, char *error, size
     return true;
 }
 
+/* schema 验证完成后，加载器按分区、磁盘、系统三层填充已初始化的方案。 */
 static void load_partitions_json(DiskPlan *disk, struct json_object *parts)
 {
     struct json_object *value = NULL;
@@ -444,6 +458,7 @@ static void load_disk_json(DiskPlan *disk, struct json_object *object,
     load_partitions_json(disk, parts);
 }
 
+/* 版本号先于 schema 检查；版本不一致时直接返回明确错误，不尝试兼容转换。 */
 bool plan_load_json(InstallPlan *plan, const char *path, char *error, size_t error_size)
 {
     struct json_object *root = json_object_from_file(path);
