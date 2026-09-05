@@ -299,8 +299,11 @@ static bool test_automatic_script(void)
                                "ROOT_UUID=$(blkid -s UUID -o value -- \"$ROOT_DEVICE\") || {",
                                "checked root UUID discovery");
     passed &= require_fragment(&script,
-                               "genfstab -U -f \"$TARGET_ROOT\"",
-                               "fstab filtering to the target tree");
+                               "genfstab -U \"$TARGET_ROOT\" > \"$TARGET_ROOT/etc/fstab\"",
+                               "complete fstab generation through genfstab");
+    passed &= forbid_fragment(&script,
+                              "UUID=%s none swap defaults 0 0",
+                              "manual swap fstab generation");
     passed &= forbid_fragment(&script, "blkdiscard", "an unconditional discard command");
     passed &= require_fragment(&script,
                                "if [[ \"$action\" == keep ]]; then",
@@ -483,7 +486,7 @@ static bool test_local_mirror_script(void)
                                "mount -o remount,bind,ro,nodev,nosuid,noexec",
                                "restrictive target local-repository mount options");
     passed &= require_order(&script,
-                            "genfstab -U -f \"$TARGET_ROOT\"",
+                            "genfstab -U \"$TARGET_ROOT\"",
                             "        setup_target_local_mirror\n",
                             "fstab generation before the temporary target mirror bind");
     passed &= forbid_fragment(&script,

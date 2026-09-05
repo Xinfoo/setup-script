@@ -293,7 +293,7 @@ system
 5. 软件源就绪后，要求从交互式终端输入包含 `/boot` 和 `/` 的磁盘路径，然后立即再做一次所有参与磁盘的身份核对；
 6. 分别在选择了引导式布局的磁盘上重建 GPT 并核对新分区；现有分区模式不写对应磁盘的分区表；
 7. 只格式化 `FORMAT`，随后按挂载路径顺序挂载到 `/mnt` 并启用指定 Swap；
-8. 运行 `pacstrap`，并只为 `/mnt` 树和方案中的 Swap 生成 UUID fstab；
+8. 运行 `pacstrap`，再由 `genfstab -U` 根据当前挂载和活动 Swap 完整生成 fstab；
 9. 生成临时 chroot 脚本并用 `arch-chroot` 自动运行；
 10. 安装软件、写入系统配置、运行 `mkinitcpio -P`、安装 systemd-boot；
 11. 创建 wheel 用户和经 `visudo -cf` 验证的 sudoers drop-in；

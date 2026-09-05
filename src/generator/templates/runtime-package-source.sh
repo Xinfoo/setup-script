@@ -20,18 +20,12 @@ prepare_package_source() {
 }
 
 install_base_system() {
-    local index uuid packages=("${BOOTSTRAP_PACKAGES[@]}" "${KERNEL_PACKAGES[@]}" "${PLATFORM_PACKAGES[@]}")
+    local packages=("${BOOTSTRAP_PACKAGES[@]}" "${KERNEL_PACKAGES[@]}" "${PLATFORM_PACKAGES[@]}")
     [[ "$IS_LAPTOP" != true ]] || packages+=("${LAPTOP_FIRMWARE_PACKAGES[@]}")
     (( ${#packages[@]} > 0 )) || die 'The bootstrap package selection is empty.'
     phase 'Installing the base system'
     pacstrap -K "$TARGET_ROOT" "${packages[@]}"
-    genfstab -U -f "$TARGET_ROOT" "$TARGET_ROOT" > "$TARGET_ROOT/etc/fstab"
-    for ((index=0; index<${#PART_DEVICES[@]}; ++index)); do
-        [[ "${PART_USAGES[index]}" == swap ]] || continue
-        uuid=$(blkid -s UUID -o value -- "${PART_DEVICES[index]}")
-        [[ -n "$uuid" ]] || die "Cannot determine swap UUID for ${PART_DEVICES[index]}"
-        printf 'UUID=%s none swap defaults 0 0\n' "$uuid" >> "$TARGET_ROOT/etc/fstab"
-    done
+    genfstab -U "$TARGET_ROOT" > "$TARGET_ROOT/etc/fstab"
     if [[ "$USE_LOCAL_MIRROR" == true ]]; then
         cp -a "$TARGET_ROOT/etc/pacman.conf" "$WORK_DIR/target-pacman.conf"
         cp -a "$TARGET_ROOT/etc/pacman.d/mirrorlist" "$WORK_DIR/target-mirrorlist"
@@ -40,4 +34,3 @@ install_base_system() {
         printf '%s\n' 'Server = file:///var/cache/arch-install-repo/$repo/os/$arch' > "$TARGET_ROOT/etc/pacman.d/mirrorlist"
     fi
 }
-
