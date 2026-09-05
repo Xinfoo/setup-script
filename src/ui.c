@@ -220,14 +220,68 @@ static int choose_dialog(const char *title, const char *const options[], size_t 
     }
 }
 
+static bool next_wrapped_line(const char **cursor, size_t width,
+                              const char **start, size_t *length)
+{
+    const char *text = *cursor;
+    size_t span = 0;
+    size_t split;
+
+    while (*text == ' ' || *text == '\t') ++text;
+    if (*text == '\0') return false;
+    if (*text == '\n') {
+        *start = text;
+        *length = 0;
+        *cursor = text + 1;
+        return true;
+    }
+    while (text[span] != '\0' && text[span] != '\n') ++span;
+    if (span <= width) {
+        *start = text;
+        *length = span;
+        *cursor = text + span + (text[span] == '\n' ? 1 : 0);
+        return true;
+    }
+
+    split = width;
+    while (split > 0 && text[split] != ' ' && text[split] != '\t') --split;
+    if (split == 0) split = width;
+    *start = text;
+    *length = split;
+    while (*length > 0 &&
+           (text[*length - 1] == ' ' || text[*length - 1] == '\t')) --(*length);
+    text += split;
+    while (*text == ' ' || *text == '\t') ++text;
+    *cursor = text;
+    return true;
+}
+
+static size_t wrapped_line_count(const char *message, size_t width)
+{
+    const char *cursor = message;
+    const char *start;
+    size_t length;
+    size_t count = 0;
+
+    while (next_wrapped_line(&cursor, width, &start, &length)) ++count;
+    return count > 0 ? count : 1;
+}
+
 static bool confirm_dialog(const char *title, const char *message)
 {
     const char *const options[] = {"No", "Yes"};
     int width = 68;
-    int height = 9;
+    int height;
+    int message_lines;
+    int options_y;
+    int footer_y;
     WINDOW *window;
     int selected = 0;
     if (width > COLS - 2) width = COLS - 2;
+    message_lines = (int)wrapped_line_count(message, (size_t)(width - 4));
+    height = message_lines + 8;
+    options_y = message_lines + 4;
+    footer_y = height - 2;
     window = newwin(height, width, (LINES - height) / 2, (COLS - width) / 2);
     if (window == NULL) return false;
     keypad(window, TRUE);
@@ -238,13 +292,25 @@ static bool confirm_dialog(const char *title, const char *message)
         wattron(window, A_BOLD | COLOR_PAIR(COLOR_WARNING));
         mvwaddnstr(window, 1, 2, title, width - 4);
         wattroff(window, A_BOLD | COLOR_PAIR(COLOR_WARNING));
-        mvwaddnstr(window, 3, 2, message, width - 4);
+        {
+            const char *cursor = message;
+            const char *start;
+            size_t length;
+            int line = 0;
+            while (line < message_lines &&
+                   next_wrapped_line(&cursor, (size_t)(width - 4), &start, &length)) {
+                mvwaddnstr(window, 3 + line, 2, start, (int)length);
+                ++line;
+            }
+        }
         for (int index = 0; index < 2; ++index) {
             if (index == selected) wattron(window, COLOR_PAIR(COLOR_SELECTED));
-            mvwprintw(window, 5, 22 + index * 12, " %-5s ", options[index]);
+            mvwprintw(window, options_y, (width - 24) / 2 + index * 12,
+                      " %-5s ", options[index]);
             if (index == selected) wattroff(window, COLOR_PAIR(COLOR_SELECTED));
         }
-        mvwaddnstr(window, 7, 2, "Left/Right select   Enter confirm   Esc cancel", width - 4);
+        mvwaddnstr(window, footer_y, 2,
+                   "Left/Right select   Enter confirm   Esc cancel", width - 4);
         wrefresh(window);
         int key = wgetch(window);
         if (stop_requested) {
