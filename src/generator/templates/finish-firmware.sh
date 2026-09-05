@@ -1,3 +1,7 @@
+# =============================================================================
+# Optional UEFI firmware entry / 可选 UEFI 固件启动项
+# =============================================================================
+
 create_firmware_entry() {
     local part_number loader label entries boot_partuuid entry
     [[ "$CREATE_EFI_ENTRY" == true ]] || return 0
@@ -26,4 +30,3 @@ create_firmware_entry() {
     arch-chroot "$TARGET_ROOT" efibootmgr --create --disk "$TARGET_DISK" \
         --part "$part_number" --loader "$loader" --label "$label" --unicode
 }
-

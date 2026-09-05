@@ -1,3 +1,7 @@
+# =============================================================================
+# systemd-boot entries and Secure Boot handoff / systemd-boot 启动项与 Secure Boot 衔接
+# =============================================================================
+
 configure_bootloader() {
     bootctl --no-variables install
     if [[ "$ENABLE_SECURE_BOOT" == true ]]; then
@@ -43,4 +47,3 @@ timeout 3
 console-mode keep
 LOADER
 }
-

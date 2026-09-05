@@ -1,3 +1,7 @@
+# =============================================================================
+# Storage identity and live-state validation / 存储身份与实时状态校验
+# =============================================================================
+
 verify_disk_identities() {
     local index disk current_size current_model current_serial current_pttype current_type
     for ((index=0; index<${#INSTALL_DISKS[@]}; ++index)); do
@@ -25,6 +29,7 @@ verify_disk_identities() {
     done
 }
 
+# Match an existing partition against its recorded identity. / 将已有分区与计划中记录的身份进行匹配。
 verify_existing_partition() {
     local device=$1 expected_parent=$2 expected_number=$3 expected_uuid=$4 expected_start=$5 expected_size=$6 expected_type=$7
     local parent actual_number actual_uuid actual_start actual_size actual_type
@@ -47,6 +52,7 @@ verify_existing_partition() {
     ensure_node_idle "$device"
 }
 
+# Verify the geometry of a partition created by this script. / 校验本脚本新建分区的几何信息。
 verify_created_partition() {
     local device=$1 expected_number=$2 usage=$3 planned_size=$4 disk_index=$5
     local target_disk=${INSTALL_DISKS[disk_index]} storage_mode=${DISK_MODES[disk_index]}
@@ -120,6 +126,7 @@ verify_created_partition() {
     ensure_node_idle "$device"
 }
 
+# Revalidate every disk and actionable partition immediately before writes. / 写入前立即重新校验每块磁盘和待处理分区。
 verify_storage_state() {
     local index disk_index disk mode node mounted_target action filesystem actual actual_uuid mount_targets disk_nodes
     [[ -d "$TARGET_ROOT" && ! -L "$TARGET_ROOT" ]] ||
@@ -169,4 +176,3 @@ verify_storage_state() {
             die "Filesystem UUID changed on ${PART_DEVICES[index]}"
     done
 }
-

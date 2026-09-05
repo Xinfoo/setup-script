@@ -1,3 +1,7 @@
+# =============================================================================
+# Base system identity, packages, and drivers / 基础系统身份、软件包与驱动
+# =============================================================================
+
 ROOT_UUID=$(blkid -s UUID -o value -- "$ROOT_DEVICE") || {
     printf 'Cannot determine the root filesystem UUID.\n' >&2
     exit 1
@@ -9,11 +13,13 @@ readonly INITRAMFS_FILE="initramfs-$KERNEL_IMAGE.img"
 readonly FALLBACK_FILE="initramfs-$KERNEL_IMAGE-fallback.img"
 readonly MICROCODE_FILE="${MICROCODE_PACKAGE:+$MICROCODE_PACKAGE.img}"
 
+# Install a package list only when it is non-empty. / 仅在软件包列表非空时执行安装。
 pacman_install() {
     (( $# > 0 )) || return 0
     pacman -S --needed --noconfirm "$@"
 }
 
+# Limit interactive password retries so installation cannot loop forever. / 限制交互式密码重试次数，避免安装无限循环。
 set_account_password() {
     local account=$1 attempt
     for attempt in 1 2 3; do
@@ -25,6 +31,7 @@ set_account_password() {
     return 1
 }
 
+# Configure locale, clock, hostname, package database, and root password. / 配置区域、时钟、主机名、软件包数据库和 root 密码。
 configure_base() {
     printf '\n==> Configuring locale, clock, and host identity\n'
     [[ -f "/usr/share/zoneinfo/$TIMEZONE" ]] || { printf 'Invalid timezone: %s\n' "$TIMEZONE" >&2; exit 1; }
@@ -46,11 +53,13 @@ HOSTS
     set_account_password root
 }
 
+# Install always-required packages and laptop additions. / 安装必需软件包及笔记本附加组件。
 install_core_packages() {
     pacman_install "${PKG_CORE[@]}"
     [[ "$IS_LAPTOP" != true ]] || pacman_install "${PKG_LAPTOP_TOOLS[@]}"
 }
 
+# Install only the hardware support selected in the plan. / 仅安装计划中选择的硬件支持。
 install_drivers() {
     if [[ "$INTEL_GRAPHICS" == true ]]; then
         pacman_install "${PKG_INTEL_GRAPHICS[@]}"
@@ -64,4 +73,3 @@ install_drivers() {
         pacman_install "${PKG_BLUETOOTH[@]}"
     fi
 }
-

@@ -1,3 +1,7 @@
+# =============================================================================
+# Secure Boot input validation and private snapshot / Secure Boot 输入校验与私有快照
+# =============================================================================
+
 verify_secure_boot_assets() {
     local asset_root=${1:-$ASSET_DIR}
     local file package_info key_public certificate_public crt_fingerprint cer_fingerprint
@@ -26,6 +30,7 @@ verify_secure_boot_assets() {
     [[ "$crt_fingerprint" == "$cer_fingerprint" ]] || die 'MOK.crt and MOK.cer do not match.'
 }
 
+# Copy verified keys and shim files into a private tmpfs snapshot. / 将已验证的密钥和 shim 文件复制到私有 tmpfs 快照。
 snapshot_secure_boot_assets() {
     local file archive_path archive_listing
     [[ "$ENABLE_SECURE_BOOT" == true ]] || return 0
@@ -61,4 +66,3 @@ snapshot_secure_boot_assets() {
             die "The supplied $file does not contain a valid Secure Boot signature."
     done
 }
-

@@ -1,3 +1,7 @@
+# =============================================================================
+# Read-only probing of preserved filesystems / 保留文件系统的只读探测
+# =============================================================================
+
 probe_kept_filesystems() {
     local index device filesystem options mounted_source has_keep=false
     for ((index=0; index<${#PART_ACTIONS[@]}; ++index)); do
@@ -40,4 +44,3 @@ probe_kept_filesystems() {
     rmdir -- "$KEEP_PROBE_MOUNT" || die 'Cannot remove the KEEP probe directory.'
     KEEP_PROBE_MOUNT=''
 }
-

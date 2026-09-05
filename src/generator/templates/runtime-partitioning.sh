@@ -1,3 +1,7 @@
+# =============================================================================
+# Partition table creation and device discovery / 分区表创建与设备发现
+# =============================================================================
+
 partition_disk() {
     local index disk mode efi_size root_size home_size swap_size
     for ((index=0; index<${#INSTALL_DISKS[@]}; ++index)); do
@@ -68,6 +72,7 @@ SFDISK
     done
 }
 
+# Wait for udev to expose every partition named by the plan. / 等待 udev 创建计划中的全部分区设备。
 wait_for_partitions() {
     local index device attempt
     for ((index=0; index<${#PART_DEVICES[@]}; ++index)); do
@@ -84,4 +89,3 @@ wait_for_partitions() {
         fi
     done
 }
-

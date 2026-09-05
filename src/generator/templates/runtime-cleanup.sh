@@ -1,3 +1,7 @@
+# =============================================================================
+# Failure recovery and resource cleanup / 失败恢复与资源清理
+# =============================================================================
+
 cleanup() {
     local status=$?
     local index logger_watchdog query_status cleanup_failed=false
@@ -6,6 +10,7 @@ cleanup() {
     local mounted_source=''
     trap - EXIT INT TERM HUP
     set +e
+    # Identify only resources still owned by this run. / 只识别仍由本次运行持有的资源。
     if command -v findmnt >/dev/null 2>&1; then
         if [[ "$KEEP_PROBE_ACTIVE" == true && -n "$KEEP_PROBE_MOUNT" ]]; then
             if mounted_source=$(findmnt -rn --mountpoint "$KEEP_PROBE_MOUNT" -o SOURCE); then
@@ -77,6 +82,7 @@ cleanup() {
             fi
         fi
     fi
+    # Restore temporary target repository changes after a failed run. / 安装失败时恢复目标系统的临时仓库改动。
     if [[ "$status" -ne 0 && "$target_active" == true &&
           "$TARGET_CONFIG_FINALIZED" != true && -n "$WORK_DIR" ]]; then
         if [[ -f "$WORK_DIR/target-pacman.conf" ]]; then
@@ -92,6 +98,7 @@ cleanup() {
             fi
         fi
     fi
+    # Remove staged files before recursively unmounting the target. / 递归卸载目标系统前移除暂存文件。
     if [[ "$target_active" == true ]]; then
         for index in "${!SECURE_BOOT_STAGED_FILES[@]}"; do
             if [[ -n "${SECURE_BOOT_STAGED_FILES[index]}" ]] &&
@@ -109,6 +116,7 @@ cleanup() {
             cleanup_failed=true
         fi
     fi
+    # Disable only swap devices enabled by this installer. / 仅关闭本安装器启用的交换设备。
     if (( ${#SWAPS_TO_DISABLE[@]} > 0 )); then
         if ! command -v swapon >/dev/null 2>&1 ||
            ! active_swaps=$(swapon --show=NAME --noheadings --raw 2>/dev/null); then
@@ -123,12 +131,14 @@ cleanup() {
             cleanup_failed=true
         fi
     done
+    # Release the Live-side local mirror mount. / 释放 Live 环境中的本地镜像挂载。
     if [[ "$mirror_active" == true ]]; then
         if ! umount -- '/run/media/root/F2FS-DATA'; then
             printf 'WARNING: failed to unmount the local mirror.\n' >&2
             cleanup_failed=true
         fi
     fi
+    # Restore the Live environment package configuration. / 恢复 Live 环境的软件包配置。
     if [[ "$HOST_PACMAN_CHANGED" == true && -n "$WORK_DIR" ]]; then
         if ! cp -a -- "$WORK_DIR/host-pacman.conf" /etc/pacman.conf; then
             printf 'WARNING: failed to restore Live pacman.conf.\n' >&2
@@ -139,6 +149,7 @@ cleanup() {
             cleanup_failed=true
         fi
     fi
+    # Unmount and erase the private Secure Boot snapshot when safe. / 在安全条件满足时卸载并清除 Secure Boot 私有快照。
     if [[ "$snapshot_active" == true ]]; then
         if ! umount -- "$SECURE_BOOT_ASSET_SNAPSHOT"; then
             printf 'WARNING: failed to unmount the private Secure Boot snapshot.\n' >&2
@@ -158,6 +169,7 @@ cleanup() {
             SECURE_BOOT_ASSET_SNAPSHOT=''
         fi
     fi
+    # Preserve recovery data when cleanup itself fails. / 清理过程失败时保留恢复数据。
     if [[ -n "$WORK_DIR" && -d "$WORK_DIR" ]]; then
         if [[ "$cleanup_failed" == true ]]; then
             printf 'WARNING: preserving recovery files in %s.\n' "$WORK_DIR" >&2
@@ -166,6 +178,7 @@ cleanup() {
             cleanup_failed=true
         fi
     fi
+    # Drain the logger last so all cleanup diagnostics reach the log. / 最后结束日志进程，确保清理诊断全部写入日志。
     if [[ "$status" -eq 0 && "$cleanup_failed" == true ]]; then status=1; fi
     if [[ -n "$LOG_TEE_PID" ]]; then
         if [[ -n "$CONSOLE_FD" ]]; then exec 1>&$CONSOLE_FD 2>&1; fi
@@ -187,4 +200,3 @@ cleanup() {
     if [[ -n "$CONSOLE_FD" ]]; then exec {CONSOLE_FD}>&-; fi
     exit "$status"
 }
-

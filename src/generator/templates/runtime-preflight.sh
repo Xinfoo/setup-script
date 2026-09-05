@@ -1,3 +1,7 @@
+# =============================================================================
+# Preflight validation / 安装前检查
+# =============================================================================
+
 preflight() {
     local command filesystem index efi_type efi_options
     [[ "$EUID" -eq 0 ]] || die 'Run this installer as root.'
@@ -54,4 +58,3 @@ preflight() {
     [[ "$USE_LOCAL_MIRROR" != true ]] || select_local_mirror_source
     verify_secure_boot_assets
 }
-

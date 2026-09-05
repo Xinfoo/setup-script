@@ -1,3 +1,7 @@
+# =============================================================================
+# Plan display and operator confirmation / 计划展示与操作确认
+# =============================================================================
+
 print_plan() {
     local index
     printf 'Boot/root disk: %s\n' "$TARGET_DISK"
@@ -20,6 +24,7 @@ print_plan() {
     done
 }
 
+# Confirm repository preparation before package databases are changed. / 更改软件包数据库前确认仓库准备操作。
 confirm_package_preparation() {
     local answer
     [[ -t 0 ]] || die 'Package preparation requires an interactive terminal.'
@@ -41,6 +46,7 @@ confirm_package_preparation() {
     [[ "$answer" == PREPARE ]] || die 'Package preparation was not confirmed.'
 }
 
+# Require the full target disk path before destructive writes. / 破坏性写入前要求完整输入目标磁盘路径。
 confirm_destructive_actions() {
     local answer
     [[ -t 0 ]] || die 'Destructive confirmation requires an interactive terminal.'
@@ -49,4 +55,3 @@ confirm_destructive_actions() {
     IFS= read -r answer || die 'Confirmation input was interrupted.'
     [[ "$answer" == "$TARGET_DISK" ]] || die 'Target disk confirmation did not match.'
 }
-

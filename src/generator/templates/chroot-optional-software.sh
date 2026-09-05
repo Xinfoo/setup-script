@@ -1,3 +1,4 @@
+    # Install shared fonts after the desktop-specific branch. / 桌面专用分支完成后安装共用字体。
     pacman_install "${PKG_FONTS[@]}"
     cat > /etc/fonts/local.conf <<'FONTCONFIG'
 <fontconfig>
@@ -8,6 +9,7 @@
 FONTCONFIG
 }
 
+# Optional feature package groups / 可选功能软件包组
 install_optional_software() {
     [[ "$ENABLE_FIREWALL" != true ]] || pacman_install "${PKG_FIREWALL[@]}"
     [[ "$ENABLE_PRINTER" != true ]] || pacman_install "${PKG_PRINTER[@]}"
@@ -16,4 +18,3 @@ install_optional_software() {
     [[ "$INSTALL_EXTRA_TOOLS" != true ]] || pacman_install "${PKG_EXTRA_TOOLS[@]}"
     [[ "$INSTALL_DESKTOP_APPS" != true ]] || pacman_install "${PKG_DESKTOP_APPS[@]}"
 }
-

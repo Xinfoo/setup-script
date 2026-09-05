@@ -1,3 +1,7 @@
+# =============================================================================
+# Target-visible local package mirror / 目标系统可见的本地软件包镜像
+# =============================================================================
+
 setup_target_local_mirror() {
     local mount_status path source uuid filesystem options option
     [[ "$USE_LOCAL_MIRROR" == true ]] || return 0
@@ -33,6 +37,7 @@ setup_target_local_mirror() {
     done
 }
 
+# Remove only the temporary bind mount owned by this installer. / 只卸载本安装器创建的临时绑定挂载。
 unmount_target_local_mirror() {
     local uuid filesystem
     [[ "$TARGET_LOCAL_MIRROR_MOUNTED" == true ]] || return 0
@@ -46,4 +51,3 @@ unmount_target_local_mirror() {
     TARGET_LOCAL_MIRROR_MOUNTED=false
     rmdir -- "$TARGET_LOCAL_MIRROR"
 }
-

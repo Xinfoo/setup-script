@@ -1,3 +1,7 @@
+# =============================================================================
+# Logging and basic runtime helpers / 日志与基础运行时辅助函数
+# =============================================================================
+
 initialize_log() {
     local previous_umask
     exec {CONSOLE_FD}>&2 || exit 1
@@ -25,14 +29,17 @@ initialize_log() {
     LOG_TEE_PID=$!
 }
 
+# Register cleanup before starting logging or touching disks. / 在记录日志或操作磁盘前注册清理逻辑。
 trap cleanup EXIT
 trap 'exit 130' INT TERM HUP
 initialize_log
 
+# Verify external dependencies before use. / 在使用外部命令前确认其存在。
 require_command() {
     command -v "$1" >/dev/null 2>&1 || die "Required command not found: $1"
 }
 
+# Normalize filesystem aliases reported by system tools. / 统一系统工具返回的文件系统别名。
 normalize_fs() {
     case "${1,,}" in
         fat|fat16|fat32|vfat) printf 'vfat' ;;
@@ -40,6 +47,7 @@ normalize_fs() {
     esac
 }
 
+# Reject mounted, active-swap, or held block devices. / 拒绝已挂载、已启用交换或仍被占用的块设备。
 ensure_node_idle() {
     local node=$1 kernel_name holders mounted_status active_swaps holder_entry
     if findmnt -rn -S "$node" >/dev/null 2>&1; then
@@ -62,4 +70,3 @@ ensure_node_idle() {
         die "$node is still held by an active mapped, RAID, or logical device"
     fi
 }
-

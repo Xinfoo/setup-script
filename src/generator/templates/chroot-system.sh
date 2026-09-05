@@ -1,3 +1,7 @@
+# =============================================================================
+# Services, user account, and mirror configuration / 服务、用户账户与镜像配置
+# =============================================================================
+
 configure_system() {
     install -d /etc/NetworkManager/conf.d /etc/systemd/timesyncd.conf.d \
         /etc/systemd/coredump.conf.d /etc/systemd/journald.conf.d
@@ -38,6 +42,7 @@ JOURNAL
     set_account_password "$USERNAME"
 }
 
+# Replace the target mirror list only when requested. / 仅在计划要求时替换目标系统镜像列表。
 configure_mirrors() {
     [[ "$USE_CHINA_MIRRORS" == true ]] || return 0
     cat > /etc/pacman.d/mirrorlist <<'MIRRORS'
@@ -49,6 +54,7 @@ Server = https://mirrors.sjtug.sjtu.edu.cn/archlinux/$repo/os/$arch
 MIRRORS
 }
 
+# Apply target-system configuration in dependency order. / 按依赖顺序应用目标系统配置。
 configure_base
 install_core_packages
 install_drivers
@@ -62,4 +68,3 @@ printf '\nChroot configuration complete.\n'
 ARCH_CHROOT_SCRIPT
     chmod 0700 "$TARGET_ROOT/root/.arch-install-chroot.sh"
 }
-

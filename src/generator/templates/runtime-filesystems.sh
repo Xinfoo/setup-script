@@ -1,3 +1,7 @@
+# =============================================================================
+# Filesystem preparation and mounting / 文件系统准备与挂载
+# =============================================================================
+
 format_partitions() {
     local index device action filesystem actual actual_uuid
     phase 'Applying filesystem actions'
@@ -30,6 +34,7 @@ format_partitions() {
     done
 }
 
+# Mount entries are emitted in path order; swap is enabled after mounts. / 挂载项按路径顺序生成；挂载完成后启用交换空间。
 mount_filesystems() {
     local index device usage filesystem mode mountpoint destination options
     phase 'Mounting filesystems in path order'
@@ -69,6 +74,7 @@ mount_filesystems() {
     done
 }
 
+# Mount the confirmed Live-side repository and temporarily use it. / 挂载已确认的 Live 端仓库并临时使用。
 setup_local_mirror() {
     local mount_status path
     [[ "$USE_LOCAL_MIRROR" == true ]] || return 0
@@ -100,4 +106,3 @@ setup_local_mirror() {
     printf '%s\n' 'Server = file:///run/media/root/F2FS-DATA/repo/archlinux/$repo/os/$arch' > /etc/pacman.d/mirrorlist
     pacman -Syy --noconfirm
 }
-

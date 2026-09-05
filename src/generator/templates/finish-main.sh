@@ -1,3 +1,7 @@
+# =============================================================================
+# Installation orchestration / 安装流程编排
+# =============================================================================
+
 main() {
     WORK_DIR=$(/usr/bin/mktemp -d /tmp/arch-install.XXXXXX) ||
         die 'Cannot create the private installer work directory.'
@@ -31,4 +35,5 @@ main() {
     printf 'Review the final cleanup result and log before rebooting: %s\n' "$LOG_FILE"
 }
 
+# Start only after every helper has been defined. / 所有辅助函数定义完成后才启动安装。
 main "$@"

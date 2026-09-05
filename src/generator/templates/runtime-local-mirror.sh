@@ -1,3 +1,7 @@
+# =============================================================================
+# Temporary local package mirror discovery / 临时本地软件包镜像探测
+# =============================================================================
+
 select_local_mirror_source() {
     local sources=() source_text source_status ancestors filesystem parent_type disk
     if source_text=$(blkid -t LABEL=F2FS-DATA -o device); then
@@ -36,6 +40,7 @@ select_local_mirror_source() {
     ensure_node_idle "$LOCAL_MIRROR_SOURCE"
 }
 
+# Recheck the complete mirror identity before mounting it. / 挂载前重新核对镜像的完整身份。
 verify_local_mirror_identity() {
     local uuid parent size label filesystem serial
     [[ "$USE_LOCAL_MIRROR" == true ]] || return 0
@@ -58,4 +63,3 @@ verify_local_mirror_identity() {
         die 'The local mirror identity changed after confirmation.'
     ensure_node_idle "$LOCAL_MIRROR_SOURCE"
 }
-

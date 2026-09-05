@@ -241,6 +241,21 @@ static bool test_automatic_script(void)
 
     if (!generate_script(&plan, &script)) return false;
     passed &= require_fragment(&script,
+                               "# Generated Arch Linux installation script; review the plan before running it.",
+                               "the English generated-script introduction");
+    passed &= require_fragment(&script,
+                               "# 自动生成的 Arch Linux 安装脚本；运行前请检查安装计划。",
+                               "the Chinese generated-script introduction");
+    passed &= require_fragment(&script,
+                               "# Runtime state and common helpers / 运行时状态与通用辅助函数",
+                               "a bilingual outer-script section comment");
+    passed &= require_fragment(&script,
+                               "# Generated target-system settings / 自动生成的目标系统设置",
+                               "a bilingual nested chroot section comment");
+    passed &= require_fragment(&script,
+                               "# Installation orchestration / 安装流程编排",
+                               "a bilingual installation-flow section comment");
+    passed &= require_fragment(&script,
                                "readonly TARGET_DISK='/dev/nvme0n1'",
                                "the quoted target disk");
     passed &= require_fragment(&script,

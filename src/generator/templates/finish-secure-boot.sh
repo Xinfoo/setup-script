@@ -1,3 +1,8 @@
+# =============================================================================
+# Secure Boot signing and atomic installation / Secure Boot 签名与原子安装
+# =============================================================================
+
+# Stage each signed file beside its destination before replacing it. / 在目标旁暂存每个签名文件，再执行替换。
 atomic_install_file() {
     local source=$1 destination=$2 mode=$3 directory stage stage_index
     directory=${destination%/*}
@@ -12,6 +17,7 @@ atomic_install_file() {
     SECURE_BOOT_STAGED_FILES[stage_index]=''
 }
 
+# Unmount and remove the private key snapshot after signing. / 签名完成后卸载并移除私钥快照。
 discard_secure_boot_snapshot() {
     local snapshot_identity
     [[ -n "$SECURE_BOOT_ASSET_SNAPSHOT" ]] || return 0
@@ -30,6 +36,7 @@ discard_secure_boot_snapshot() {
     SECURE_BOOT_ASSET_SNAPSHOT=''
 }
 
+# Sign and verify boot artifacts outside the target chroot. / 在目标 chroot 外签名并验证启动文件。
 sign_secure_boot_assets() {
     local boot_binary kernel_original boot_signed kernel_signed secure_root path
     [[ "$ENABLE_SECURE_BOOT" == true ]] || return 0
@@ -81,4 +88,3 @@ sign_secure_boot_assets() {
     SECURE_BOOT_SIGNING_COMPLETE=true
     discard_secure_boot_snapshot
 }
-
