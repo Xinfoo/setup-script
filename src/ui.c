@@ -564,7 +564,7 @@ static int disk_dialog(const HardwareInventory *inventory, InstallPlan *plan)
                            disk->in_use ? "IN-USE" : "");
         }
         (void)snprintf(labels[index], sizeof(labels[index]),
-                       "[%-12.12s] %-18.18s %9.9s SN:%-16.16s %.80s",
+                       "[%-13.13s] %-18.18s %9.9s SN:%-16.16s %.80s",
                        flags, disk->path, size,
                        disk->serial[0] != '\0' ? disk->serial : "-",
                        disk->model[0] != '\0' ? disk->model : "Unknown model");
