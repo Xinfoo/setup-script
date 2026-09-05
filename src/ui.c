@@ -198,11 +198,13 @@ static int choose_dialog(const char *title, const char *const options[], size_t 
         if (stop_requested) {
             delwin(window);
             touchwin(stdscr);
+            (void)refresh();
             return -1;
         }
         if (key == KEY_RESIZE) {
             delwin(window);
             touchwin(stdscr);
+            (void)refresh();
             return -1;
         }
         if (key == ERR) continue;
@@ -211,10 +213,12 @@ static int choose_dialog(const char *title, const char *const options[], size_t 
         else if (key == '\n' || key == KEY_ENTER) {
             delwin(window);
             touchwin(stdscr);
+            (void)refresh();
             return selected;
         } else if (key == 27 || key == 'q') {
             delwin(window);
             touchwin(stdscr);
+            (void)refresh();
             return -1;
         }
     }
