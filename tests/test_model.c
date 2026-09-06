@@ -1,7 +1,7 @@
 #define _POSIX_C_SOURCE 200809L
 
 #include "model.h"
-#include "util.h"
+#include "text.h"
 
 #include <json-c/json.h>
 
@@ -318,7 +318,7 @@ static bool partitions_equal(const PartitionPlan *left, const PartitionPlan *rig
            left->usage == right->usage &&
            left->action == right->action &&
            left->target_fs == right->target_fs &&
-           left->f2fs_mode == right->f2fs_mode;
+           left->mount_profile == right->mount_profile;
 }
 
 static bool system_plans_equal(const SystemPlan *left, const SystemPlan *right)
@@ -395,7 +395,7 @@ static bool test_json_round_trip(void)
     CHECK(plan_add_disk(&source, &second_disk));
     disk_plan_use_automatic(&source.storage.disks[1], &second_disk, STORAGE_AUTO_DATA);
     source.storage.disks[0].partitions[1].target_fs = FS_F2FS;
-    source.storage.disks[0].partitions[1].f2fs_mode = F2FS_COMPRESSED;
+    source.storage.disks[0].partitions[1].mount_profile = MOUNT_PROFILE_COMPRESSED;
     source.system.platform = PLATFORM_AMD;
     source.system.kernel = KERNEL_ZEN;
     source.system.locale = LOCALE_ZH_CN;
@@ -598,31 +598,6 @@ static bool test_var_and_usr_keep_are_rejected(void)
     return true;
 }
 
-/* Shell 字面量场景确保计划文本不能在生成脚本中重新获得语法含义。 */
-static bool check_quote(const char *input, const char *expected)
-{
-    char *quoted = shell_quote(input);
-    bool equal = quoted != NULL && strcmp(quoted, expected) == 0;
-    if (!equal) {
-        (void)fprintf(stderr, "shell_quote(%s): expected [%s], got [%s]\n",
-                      input != NULL ? input : "NULL", expected,
-                      quoted != NULL ? quoted : "NULL");
-    }
-    free(quoted);
-    return equal;
-}
-
-static bool test_shell_quote(void)
-{
-    CHECK(check_quote(NULL, "''"));
-    CHECK(check_quote("", "''"));
-    CHECK(check_quote("plain", "'plain'"));
-    CHECK(check_quote("two words", "'two words'"));
-    CHECK(check_quote("a'b", "'a'\\''b'"));
-    CHECK(check_quote("$(echo unsafe); $HOME", "'$(echo unsafe); $HOME'"));
-    return true;
-}
-
 /* 其余边界场景覆盖固定布局、账户名、保留文件系统身份和数组上限。 */
 static bool test_tampered_automatic_layout_is_rejected(void)
 {
@@ -656,7 +631,7 @@ static bool test_reserved_username_is_rejected(void)
     return true;
 }
 
-static bool test_kept_f2fs_requires_compatibility_profile(void)
+static bool test_nondefault_mount_profile_requires_formatted_f2fs(void)
 {
     DiskInfo disk;
     InstallPlan plan;
@@ -673,10 +648,16 @@ static bool test_kept_f2fs_requires_compatibility_profile(void)
     plan.storage.disks[0].partitions[1].action = ACTION_FORMAT;
     plan.storage.disks[0].partitions[1].target_fs = FS_EXT4;
     plan.storage.disks[0].partitions[2].usage = PART_HOME;
-    plan.storage.disks[0].partitions[2].f2fs_mode = F2FS_BALANCED;
+    plan.storage.disks[0].partitions[2].mount_profile = MOUNT_PROFILE_BALANCED;
     validate_plan(&plan, &report);
     CHECK(report_contains(&report, ISSUE_ERROR,
-                          "kept F2FS partition must use the compatibility mount profile"));
+                          "Non-default mount options currently require a formatted and mounted F2FS partition"));
+
+    plan.storage.disks[0].partitions[2].action = ACTION_FORMAT;
+    plan.storage.disks[0].partitions[2].target_fs = FS_EXT4;
+    validate_plan(&plan, &report);
+    CHECK(report_contains(&report, ISSUE_ERROR,
+                          "Non-default mount options currently require a formatted and mounted F2FS partition"));
     return true;
 }
 
@@ -737,11 +718,10 @@ int main(void)
         {"unsafe device paths are rejected", test_unsafe_device_paths_are_rejected},
         {"tampered automatic sizes are rejected", test_tampered_automatic_sizes_are_rejected},
         {"KEEP is rejected for /var and /usr", test_var_and_usr_keep_are_rejected},
-        {"shell quoting", test_shell_quote},
         {"tampered automatic layout is rejected", test_tampered_automatic_layout_is_rejected},
         {"reserved username is rejected", test_reserved_username_is_rejected},
-        {"kept F2FS requires the compatibility profile",
-         test_kept_f2fs_requires_compatibility_profile},
+        {"non-default mount profile requires formatted F2FS",
+         test_nondefault_mount_profile_requires_formatted_f2fs},
         {"kept filesystems require a UUID", test_kept_filesystem_requires_uuid},
         {"direct partition-count overflow is rejected",
          test_direct_partition_count_overflow_is_rejected},

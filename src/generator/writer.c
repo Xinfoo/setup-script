@@ -2,8 +2,6 @@
 
 #include "private.h"
 
-#include "util.h"
-
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>

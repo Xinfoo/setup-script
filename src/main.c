@@ -1,11 +1,11 @@
 #define _POSIX_C_SOURCE 200809L
 
-#include "detect.h"
+#include "detector.h"
 #include "generator.h"
 #include "model.h"
 #include "packages.h"
+#include "text.h"
 #include "ui.h"
-#include "util.h"
 
 #include <errno.h>
 #include <limits.h>

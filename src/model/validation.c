@@ -1,7 +1,7 @@
 #include "model.h"
 
 #include "private.h"
-#include "util.h"
+#include "text.h"
 
 #include <ctype.h>
 #include <stdio.h>
@@ -197,8 +197,9 @@ void validate_plan(const InstallPlan *plan, ValidationReport *report)
                 add_issue(report, ISSUE_ERROR, "A partition has an invalid target filesystem value.");
                 continue;
             }
-            if (part->f2fs_mode < F2FS_DEFAULT || part->f2fs_mode > F2FS_COMPRESSED) {
-                add_issue(report, ISSUE_ERROR, "A partition has an invalid F2FS profile value.");
+            if (part->mount_profile < MOUNT_PROFILE_DEFAULT ||
+                part->mount_profile > MOUNT_PROFILE_COMPRESSED) {
+                add_issue(report, ISSUE_ERROR, "A partition has an invalid mount profile value.");
                 continue;
             }
             /* 未使用且保持原样的现有分区不进入安装流程，其余三类都必须完整校验。 */
@@ -251,10 +252,11 @@ void validate_plan(const InstallPlan *plan, ValidationReport *report)
             if (part->action == ACTION_KEEP && part->fs_uuid[0] == '\0') {
                 add_issue(report, ISSUE_ERROR, "A kept filesystem is missing its UUID identity.");
             }
-            if (part->action == ACTION_KEEP && fs == FS_F2FS &&
-                part->f2fs_mode != F2FS_DEFAULT) {
+            /* 当前只有待格式化且实际挂载的 F2FS 支持非默认挂载选项。 */
+            if (part->mount_profile != MOUNT_PROFILE_DEFAULT &&
+                !partition_supports_mount_profile(part, part->mount_profile)) {
                 add_issue(report, ISSUE_ERROR,
-                          "A kept F2FS partition must use the compatibility mount profile.");
+                          "Non-default mount options currently require a formatted and mounted F2FS partition.");
             }
             if (disk->mode == STORAGE_EXISTING) {
                 if (part->size_bytes == 0 || part->start_sector == 0) {

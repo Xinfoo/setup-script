@@ -5,15 +5,14 @@
 #include <stddef.h>
 #include <stdint.h>
 
-/* 固定容量上限既约束内存布局，也用于 JSON 和 TUI 的边界检查。 */
-#define AI_MAX_DISKS 32
-#define AI_MAX_PLAN_DISKS 8
-#define AI_MAX_PARTITIONS 128
-#define AI_MAX_ISSUES 32
-#define AI_PATH_LEN 256
-#define AI_TEXT_LEN 128
+#include "storage_inventory.h"
 
-/* 分区文件系统、用途、执行动作和磁盘布局模式。 */
+/* 固定容量上限既约束内存布局，也用于 JSON 和 TUI 的边界检查。 */
+#define AI_MAX_PLAN_DISKS 8
+#define AI_MAX_ISSUES 32
+#define AI_PLAN_VERSION 4U
+
+/* 分区文件系统、用途、执行动作、挂载配置档和磁盘布局模式。 */
 typedef enum {
     FS_NONE,
     FS_VFAT,
@@ -51,41 +50,16 @@ typedef enum { PLATFORM_INTEL, PLATFORM_AMD, PLATFORM_VM } Platform;
 typedef enum { KERNEL_LINUX, KERNEL_LTS, KERNEL_ZEN, KERNEL_HARDENED } Kernel;
 typedef enum { DESKTOP_KDE, DESKTOP_GNOME, DESKTOP_HYPRLAND, DESKTOP_NONE } Desktop;
 typedef enum { LOCALE_EN_US, LOCALE_ZH_CN } LocaleChoice;
-typedef enum { F2FS_DEFAULT, F2FS_BALANCED, F2FS_COMPRESSED } F2fsMountMode;
-
-/* 硬件探测快照：只描述当前系统看到的磁盘和分区，不表达安装意图。 */
-typedef struct {
-    char path[AI_PATH_LEN];
-    char current_fs[32];
-    char fs_uuid[AI_TEXT_LEN];
-    char part_uuid[AI_TEXT_LEN];
-    char part_type[64];
-    uint64_t size_bytes;
-    uint64_t start_sector;
-    unsigned number;
-} PartitionInfo;
-
-typedef struct {
-    char path[AI_PATH_LEN];
-    char model[AI_TEXT_LEN];
-    char serial[AI_TEXT_LEN];
-    char partition_table[32];
-    uint64_t size_bytes;
-    bool removable;
-    bool read_only;
-    bool in_use;
-    PartitionInfo partitions[AI_MAX_PARTITIONS];
-    size_t partition_count;
-} DiskInfo;
-
-typedef struct {
-    DiskInfo disks[AI_MAX_DISKS];
-    size_t disk_count;
-} HardwareInventory;
+typedef enum {
+    MOUNT_PROFILE_DEFAULT,
+    MOUNT_PROFILE_BALANCED,
+    MOUNT_PROFILE_COMPRESSED
+} MountProfile;
 
 /*
  * 安装方案中的分区。planned 表示由引导式布局新建；usage/action/target_fs
- * 分别描述挂载用途、是否格式化以及格式化后的文件系统。
+ * 分别描述挂载用途、是否格式化以及格式化后的文件系统，mount_profile 保存
+ * 与最终文件系统配套的挂载配置档。
  */
 typedef struct {
     char device[AI_PATH_LEN];
@@ -100,7 +74,7 @@ typedef struct {
     PartitionUsage usage;
     PartitionAction action;
     Filesystem target_fs;
-    F2fsMountMode f2fs_mode;
+    MountProfile mount_profile;
 } PartitionPlan;
 
 typedef struct {
@@ -173,8 +147,19 @@ typedef struct {
 void plan_init(InstallPlan *plan);
 bool plan_add_disk(InstallPlan *plan, const DiskInfo *disk);
 DiskPlan *plan_find_disk(InstallPlan *plan, const char *path);
+const DiskPlan *plan_find_disk_for_usage(const InstallPlan *plan, PartitionUsage usage);
+bool plan_remove_disk_at(InstallPlan *plan, size_t index);
+bool plan_storage_matches_inventory(const InstallPlan *plan,
+                                    const HardwareInventory *inventory);
 void disk_plan_use_existing(DiskPlan *plan, const DiskInfo *disk);
 void disk_plan_use_automatic(DiskPlan *plan, const DiskInfo *disk, StorageMode mode);
+bool partition_plan_assign_usage(PartitionPlan *partition, StorageMode mode,
+                                 PartitionUsage usage);
+bool partition_plan_action_allowed(const PartitionPlan *partition,
+                                   PartitionAction action, Filesystem filesystem);
+bool partition_plan_set_action(PartitionPlan *partition,
+                               PartitionAction action, Filesystem filesystem);
+bool partition_plan_set_mount_profile(PartitionPlan *partition, MountProfile profile);
 
 /* 枚举与界面、JSON 及 Shell 使用的稳定文本之间的转换。 */
 const char *filesystem_name(Filesystem value);
@@ -185,13 +170,20 @@ const char *platform_name(Platform value);
 const char *kernel_name(Kernel value);
 const char *desktop_name(Desktop value);
 const char *locale_name(LocaleChoice value);
-const char *f2fs_mode_name(F2fsMountMode value);
+const char *mount_profile_name(MountProfile value);
 const char *partition_mountpoint(PartitionUsage value);
 Filesystem filesystem_from_name(const char *name);
+
+/* 系统文本字段的语义校验属于模型层，UI 只负责收集输入。 */
+bool valid_hostname(const char *value);
+bool valid_username(const char *value);
+bool valid_timezone(const char *value);
 
 /* 分区动作推导和普通挂载格式规则由模型层统一解释。 */
 Filesystem partition_effective_filesystem(const PartitionPlan *partition);
 bool filesystem_is_regular(Filesystem filesystem);
+bool partition_supports_mount_profile(const PartitionPlan *partition,
+                                      MountProfile profile);
 uint64_t recommended_swap_bytes(void);
 void format_size(uint64_t bytes, char *buffer, size_t size);
 

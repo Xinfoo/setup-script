@@ -3,7 +3,7 @@
 #include "private.h"
 
 #include "generator.h"
-#include "util.h"
+#include "text.h"
 
 #include <errno.h>
 #include <locale.h>
@@ -42,46 +42,6 @@ static void init_colors(void)
     init_pair(COLOR_MUTED, COLOR_BLUE, -1);
 }
 
-void put_clipped(int y, int x, int width, const char *text)
-{
-    if (width <= 0 || y < 0 || y >= LINES || x >= COLS) return;
-    mvaddnstr(y, x, text != NULL ? text : "", width);
-}
-
-void draw_shell(UiState *state, const char *title, const char *keys)
-{
-    erase();
-    attron(A_BOLD | COLOR_PAIR(COLOR_TITLE));
-    put_clipped(0, 2, COLS - 4, "Arch Linux Install Script Builder");
-    attroff(A_BOLD | COLOR_PAIR(COLOR_TITLE));
-    if (state->dirty) {
-        attron(COLOR_PAIR(COLOR_WARNING));
-        put_clipped(0, COLS - 13, 11, "[modified]");
-        attroff(COLOR_PAIR(COLOR_WARNING));
-    }
-    mvhline(1, 0, ACS_HLINE, COLS);
-    attron(A_BOLD);
-    put_clipped(2, 2, COLS - 4, title);
-    attroff(A_BOLD);
-    mvhline(LINES - 3, 0, ACS_HLINE, COLS);
-    attron(COLOR_PAIR(COLOR_MUTED));
-    put_clipped(LINES - 2, 1, COLS - 2, keys);
-    attroff(COLOR_PAIR(COLOR_MUTED));
-    put_clipped(LINES - 1, 1, COLS - 2, state->status);
-}
-
-static bool terminal_too_small(void)
-{
-    if (COLS >= 80 && LINES >= 24) return false;
-    erase();
-    attron(A_BOLD | COLOR_PAIR(COLOR_ERROR));
-    mvprintw(2, 2, "Terminal is too small (%dx%d).", COLS, LINES);
-    mvprintw(4, 2, "Resize it to at least 80x24 to continue.");
-    attroff(A_BOLD | COLOR_PAIR(COLOR_ERROR));
-    refresh();
-    return true;
-}
-
 /* 保存、生成和退出操作集中在主模块，保证所有页面使用同一套状态转换。 */
 void quit_builder(UiState *state)
 {
@@ -100,7 +60,7 @@ static void save_plan(UiState *state)
     }
 }
 
-bool generate(UiState *state)
+bool ui_generate(UiState *state)
 {
     ValidationReport report;
     char error[512] = {0};
@@ -136,12 +96,12 @@ static void draw_current(UiState *state)
     switch (state->screen) {
     case SCREEN_HOME: draw_home(state); break;
     case SCREEN_STORAGE: draw_storage(state); break;
-    case SCREEN_SYSTEM: draw_system(state); break;
+    case SCREEN_BASE_SYSTEM: draw_base_system(state); break;
     case SCREEN_HARDWARE: draw_hardware(state); break;
     case SCREEN_SOFTWARE: draw_software(state); break;
     case SCREEN_IDENTITY: draw_identity(state); break;
     case SCREEN_REVIEW: draw_review(state); break;
-    case SCREEN_PREVIEW: draw_preview(state); break;
+    case SCREEN_OUTPUT_PREVIEW: draw_output_preview(state); break;
     }
     refresh();
 }
@@ -157,12 +117,12 @@ static void handle_key(UiState *state, int key)
     switch (state->screen) {
     case SCREEN_HOME: handle_home(state, key); break;
     case SCREEN_STORAGE: handle_storage(state, key); break;
-    case SCREEN_SYSTEM: handle_system(state, key); break;
+    case SCREEN_BASE_SYSTEM: handle_base_system(state, key); break;
     case SCREEN_HARDWARE: handle_hardware(state, key); break;
     case SCREEN_SOFTWARE: handle_software(state, key); break;
     case SCREEN_IDENTITY: handle_identity(state, key); break;
     case SCREEN_REVIEW: handle_review(state, key); break;
-    case SCREEN_PREVIEW: handle_preview(state, key); break;
+    case SCREEN_OUTPUT_PREVIEW: handle_output_preview(state, key); break;
     }
 }
 
@@ -182,7 +142,7 @@ int run_tui(InstallPlan *plan, HardwareInventory *inventory,
         .plan_path = plan_path,
         .script_path = script_path,
         .screen = SCREEN_HOME,
-        .target_identity_matches = disk_identity_matches(plan, inventory)
+        .target_identity_matches = plan_storage_matches_inventory(plan, inventory)
     };
     (void)setlocale(LC_ALL, "");
     if (!isatty(STDIN_FILENO) || !isatty(STDOUT_FILENO)) {

@@ -2,7 +2,7 @@
 
 #include "private.h"
 
-#include "util.h"
+#include "text.h"
 
 #include <ctype.h>
 #include <string.h>

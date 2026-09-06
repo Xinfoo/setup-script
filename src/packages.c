@@ -3,7 +3,7 @@
 #include "atomic_file.h"
 #include "packages.h"
 
-#include "util.h"
+#include "text.h"
 
 #include <json-c/json.h>
 

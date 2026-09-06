@@ -24,25 +24,52 @@ pkg_check_modules(JSONC REQUIRED IMPORTED_TARGET json-c)
 
 set(
     COMMON_SOURCES
-    "${PROJECT_SOURCE_DIR}/src/util.c"
-    "${PROJECT_SOURCE_DIR}/src/atomic_file.c"
+    "${PROJECT_SOURCE_DIR}/src/common/atomic_file.c"
+    "${PROJECT_SOURCE_DIR}/src/common/process.c"
+    "${PROJECT_SOURCE_DIR}/src/common/text.c"
 )
 
 set(
     MODEL_SOURCES
-    "${PROJECT_SOURCE_DIR}/src/model/model.c"
+    "${PROJECT_SOURCE_DIR}/src/model/init.c"
+    "${PROJECT_SOURCE_DIR}/src/model/storage.c"
+    "${PROJECT_SOURCE_DIR}/src/model/system.c"
     "${PROJECT_SOURCE_DIR}/src/model/validation.c"
     "${PROJECT_SOURCE_DIR}/src/model/json.c"
 )
 
 set(
+    DETECTOR_SOURCES
+    "${PROJECT_SOURCE_DIR}/src/detector/storage.c"
+)
+
+set(PACKAGE_SOURCE "${PROJECT_SOURCE_DIR}/src/packages.c")
+set(
+    UI_SOURCES
+    "${PROJECT_SOURCE_DIR}/src/ui/ui.c"
+    "${PROJECT_SOURCE_DIR}/src/ui/dialogs.c"
+    "${PROJECT_SOURCE_DIR}/src/ui/layout.c"
+    "${PROJECT_SOURCE_DIR}/src/ui/pages/home.c"
+    "${PROJECT_SOURCE_DIR}/src/ui/pages/storage.c"
+    "${PROJECT_SOURCE_DIR}/src/ui/pages/base_system.c"
+    "${PROJECT_SOURCE_DIR}/src/ui/pages/hardware.c"
+    "${PROJECT_SOURCE_DIR}/src/ui/pages/software.c"
+    "${PROJECT_SOURCE_DIR}/src/ui/pages/identity.c"
+    "${PROJECT_SOURCE_DIR}/src/ui/pages/review.c"
+    "${PROJECT_SOURCE_DIR}/src/ui/pages/output_and_execute.c"
+)
+set(
     GENERATOR_SOURCES
     "${PROJECT_SOURCE_DIR}/src/generator/generator.c"
+    "${PROJECT_SOURCE_DIR}/src/generator/shell.c"
     "${PROJECT_SOURCE_DIR}/src/generator/writer.c"
-    "${PROJECT_SOURCE_DIR}/src/generator/plan.c"
-    "${PROJECT_SOURCE_DIR}/src/generator/runtime.c"
-    "${PROJECT_SOURCE_DIR}/src/generator/chroot.c"
-    "${PROJECT_SOURCE_DIR}/src/generator/finish.c"
+    "${PROJECT_SOURCE_DIR}/src/generator/emitters/disk.c"
+    "${PROJECT_SOURCE_DIR}/src/generator/emitters/package.c"
+    "${PROJECT_SOURCE_DIR}/src/generator/emitters/partition.c"
+    "${PROJECT_SOURCE_DIR}/src/generator/workflow/preamble.c"
+    "${PROJECT_SOURCE_DIR}/src/generator/workflow/live.c"
+    "${PROJECT_SOURCE_DIR}/src/generator/workflow/chroot.c"
+    "${PROJECT_SOURCE_DIR}/src/generator/workflow/finish.c"
 )
 
 set(GENERATOR_TEMPLATE_OUTPUTS)
@@ -99,19 +126,13 @@ add_executable(
     src/main.c
     ${COMMON_SOURCES}
     ${MODEL_SOURCES}
-    src/packages.c
-    src/detect.c
-    src/ui/ui.c
-    src/ui/dialogs.c
-    src/ui/storage.c
-    src/ui/screens.c
+    ${DETECTOR_SOURCES}
+    ${PACKAGE_SOURCE}
+    ${UI_SOURCES}
     ${GENERATOR_SOURCES}
 )
 
-add_dependencies(
-    arch-install-builder
-    arch-install-builder-generator-templates
-)
+add_dependencies(arch-install-builder arch-install-builder-generator-templates)
 
 target_include_directories(
     arch-install-builder
@@ -127,46 +148,48 @@ target_link_libraries(
         PkgConfig::JSONC
 )
 
-if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
-    target_compile_options(
-        arch-install-builder
-        PRIVATE
-            -Wall
-            -Wextra
-            -Wpedantic
-            -Wconversion
-            -Wshadow
-            -Wformat=2
-            -Wundef
-            -Wstrict-prototypes
-            -Wmissing-prototypes
-    )
-
-    if(ENABLE_WARNINGS_AS_ERRORS)
-        target_compile_options(arch-install-builder PRIVATE -Werror)
-    endif()
-
-    if(ENABLE_SANITIZERS)
+function(configure_project_target target)
+    if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
         target_compile_options(
-            arch-install-builder
+            ${target}
             PRIVATE
-                $<$<CONFIG:Debug>:-fsanitize=address,undefined>
-                $<$<CONFIG:Debug>:-fno-omit-frame-pointer>
+                -Wall
+                -Wextra
+                -Wpedantic
+                -Wconversion
+                -Wshadow
+                -Wformat=2
+                -Wundef
+                -Wstrict-prototypes
+                -Wmissing-prototypes
         )
-        target_link_options(
-            arch-install-builder
-            PRIVATE
-                $<$<CONFIG:Debug>:-fsanitize=address,undefined>
-        )
+        if(ENABLE_WARNINGS_AS_ERRORS)
+            target_compile_options(${target} PRIVATE -Werror)
+        endif()
+        if(ENABLE_SANITIZERS)
+            target_compile_options(
+                ${target}
+                PRIVATE
+                    $<$<CONFIG:Debug>:-fsanitize=address,undefined>
+                    $<$<CONFIG:Debug>:-fno-omit-frame-pointer>
+            )
+            target_link_options(
+                ${target}
+                PRIVATE
+                    $<$<CONFIG:Debug>:-fsanitize=address,undefined>
+            )
+        endif()
+    elseif(MSVC)
+        target_compile_options(${target} PRIVATE /W4)
+        if(ENABLE_WARNINGS_AS_ERRORS)
+            target_compile_options(${target} PRIVATE /WX)
+        endif()
     endif()
-elseif(MSVC)
-    target_compile_options(arch-install-builder PRIVATE /W4)
-    if(ENABLE_WARNINGS_AS_ERRORS)
-        target_compile_options(arch-install-builder PRIVATE /WX)
-    endif()
-endif()
+endfunction()
 
-if(BUILD_TESTING AND EXISTS "${PROJECT_SOURCE_DIR}/tests/CMakeLists.txt")
+configure_project_target(arch-install-builder)
+
+if(BUILD_TESTING)
     add_subdirectory(tests)
 endif()
 

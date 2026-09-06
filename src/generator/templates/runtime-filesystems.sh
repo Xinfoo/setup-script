@@ -39,7 +39,7 @@ format_partitions() {
 
 # Mount entries are emitted in path order; swap is enabled after mounts. / 挂载项按路径顺序生成；挂载完成后启用交换空间。
 mount_filesystems() {
-    local index device usage filesystem mode mountpoint destination options
+    local index device usage filesystem profile mountpoint destination options
     phase 'Mounting filesystems in path order'
     # Skip swap and format-only records; the emitted order places parents before children. / 跳过 Swap 和仅格式化记录；生成顺序保证父挂载先于子挂载。
     for ((index=0; index<${#PART_DEVICES[@]}; ++index)); do
@@ -47,7 +47,7 @@ mount_filesystems() {
         usage=${PART_USAGES[index]}
         [[ "$usage" != swap && "$usage" != unused ]] || continue
         filesystem=${PART_FILESYSTEMS[index]}
-        mode=${PART_F2FS_MODES[index]}
+        profile=${PART_MOUNT_PROFILES[index]}
         mountpoint=${PART_MOUNTPOINTS[index]}
         if [[ "$mountpoint" == / ]]; then
             # Mark root ownership before later mounts make the tree recursive. / 在后续挂载形成递归树前记录根挂载归属。
@@ -58,14 +58,14 @@ mount_filesystems() {
             [[ ! -L "$destination" ]] || die "Mountpoint must not be a symlink: $destination"
             mkdir -p -- "$destination"
         fi
-        # F2FS profiles translate the plan choice into stable mount options. / F2FS 配置档将计划选择转换为稳定的挂载参数。
+        # Translate the filesystem/profile pair; currently only F2FS has non-default options. / 按文件系统与配置档组合转换；目前只有 F2FS 提供非默认参数。
         options=''
-        if [[ "$filesystem" == f2fs ]]; then
-            case "$mode" in
-                balanced) options='noatime,lazytime,gc_merge,atgc,nodiscard,fsync_mode=nobarrier' ;;
-                compressed) options='noatime,lazytime,gc_merge,atgc,nodiscard,fsync_mode=nobarrier,compress_algorithm=zstd:6,compress_chksum' ;;
-            esac
-        fi
+        case "$filesystem:$profile" in
+            ext4:default|xfs:default|vfat:default|f2fs:default) ;;
+            f2fs:balanced) options='noatime,lazytime,gc_merge,atgc,nodiscard,fsync_mode=nobarrier' ;;
+            f2fs:compressed) options='noatime,lazytime,gc_merge,atgc,nodiscard,fsync_mode=nobarrier,compress_algorithm=zstd:6,compress_chksum' ;;
+            *) die "Unsupported mount profile $profile for $filesystem" ;;
+        esac
         if [[ -n "$options" ]]; then
             mount -o "$options" -- "$device" "$destination"
         else

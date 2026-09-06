@@ -2,7 +2,8 @@
 
 #include "generator.h"
 #include "model.h"
-#include "util.h"
+#include "process.h"
+#include "text.h"
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -27,7 +28,7 @@ static void make_disk(DiskInfo *disk, size_t partition_count)
 {
     memset(disk, 0, sizeof(*disk));
     copy_text(disk->path, sizeof(disk->path), "/dev/nvme0n1");
-    copy_text(disk->model, sizeof(disk->model), "Integration Test NVMe");
+    copy_text(disk->model, sizeof(disk->model), "Integration Test O'Brien NVMe");
     copy_text(disk->serial, sizeof(disk->serial), "GENERATOR-TEST-001");
     copy_text(disk->partition_table, sizeof(disk->partition_table), "gpt");
     disk->size_bytes = UINT64_C(2) * TIB;
@@ -335,6 +336,9 @@ static bool test_automatic_script(void)
 
     if (!generate_script(&plan, &script)) return false;
     passed &= require_fragment(&script,
+                               "    'Integration Test O'\\''Brien NVMe'\n",
+                               "a shell-quoted disk model");
+    passed &= require_fragment(&script,
                                "# Generated Arch Linux installation script; review the plan before running it.",
                                "the English generated-script introduction");
     passed &= require_fragment(&script,
@@ -524,6 +528,7 @@ static bool test_automatic_script(void)
                               "UUID=%s none swap defaults 0 0",
                               "manual swap fstab generation");
     passed &= forbid_fragment(&script, "blkdiscard", "an unconditional discard command");
+    passed &= forbid_fragment(&script, ",name=", "GPT PARTLABEL assignments");
     passed &= require_fragment(&script,
                                "if [[ \"$action\" == keep ]]; then",
                                "the KEEP filesystem path");
@@ -760,7 +765,7 @@ static bool test_existing_keep_and_format_actions(void)
     plan.storage.disks[0].partitions[1].usage = PART_ROOT;
     plan.storage.disks[0].partitions[1].action = ACTION_FORMAT;
     plan.storage.disks[0].partitions[1].target_fs = FS_F2FS;
-    plan.storage.disks[0].partitions[1].f2fs_mode = F2FS_COMPRESSED;
+    plan.storage.disks[0].partitions[1].mount_profile = MOUNT_PROFILE_COMPRESSED;
     plan.storage.disks[0].partitions[2].usage = PART_HOME;
 
     if (!generate_script(&plan, &script)) return false;
@@ -773,6 +778,17 @@ static bool test_existing_keep_and_format_actions(void)
     passed &= require_fragment(&script,
                                "PART_FILESYSTEMS=(\n    'f2fs'\n    'vfat'\n    'xfs'\n)",
                                "filesystem preservation and replacement choices");
+    passed &= require_fragment(&script,
+                               "PART_MOUNT_PROFILES=(\n    'compressed'\n    'default'\n    'default'\n)",
+                               "generic mount profiles for every mounted filesystem");
+    passed &= forbid_fragment(&script, "PART_F2FS_MODES",
+                              "the former F2FS-only profile array");
+    passed &= require_fragment(&script,
+                               "case \"$filesystem:$profile\" in",
+                               "filesystem-aware mount profile dispatch");
+    passed &= require_fragment(&script,
+                               "ext4:default|xfs:default|vfat:default|f2fs:default) ;;",
+                               "default profiles without extra mount arguments");
     passed &= require_fragment(&script,
                                "verify_existing_partition \"${PART_DEVICES[index]}\"",
                                "existing-partition runtime validation");

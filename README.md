@@ -166,10 +166,10 @@ CMake 还提供：
 界面需要至少 `80x24` 的终端。主页将方案拆成六个可随时返回修改的章节：
 
 1. `Storage`：参与安装的磁盘、各盘布局、文件系统和挂载用途；
-2. `Base system`：CPU 平台、内核、设备类型、Locale 和镜像；
-3. `Hardware`：Intel GPU、NVIDIA 和蓝牙；
+2. `Base system`：CPU 平台、内核、Locale、时区、镜像、systemd-boot、EFI NVRAM 和 Secure Boot；
+3. `Hardware`：Desktop/Laptop 模式、Intel GPU、NVIDIA 和蓝牙；
 4. `Desktop & software`：桌面环境和可选软件组；
-5. `Identity & boot`：hostname、username、timezone、systemd-boot 和 Secure Boot；
+5. `Identity`：hostname、username，以及安装时输入 root 和普通用户密码的说明；
 6. `Review & output`：验证、预览、生成或生成后运行。
 
 全局按键：
@@ -177,7 +177,8 @@ CMake 还提供：
 | 按键 | 作用 |
 | --- | --- |
 | `↑` / `↓` | 移动选中项 |
-| `Enter` / `Space` | 打开、切换或编辑当前项 |
+| `Enter` | 打开页面、编辑文本，或查看当前软件选择对应的包列表 |
+| `Space` | 切换当前选项；涉及软件包的选项不会用 Enter 直接修改 |
 | `Esc` | 返回上一层 |
 | `F2` | 保存方案 JSON |
 | `F5` | 进入审阅页 |
@@ -196,7 +197,7 @@ CMake 还提供：
 | `C` | 选中非自动布局的磁盘表头时，以 root 身份启动 `cfdisk`；确认后直接修改磁盘，退出时自动刷新分区列表 |
 | `U` / `Space` | 选中分区时打开用途选择框，指定 `/`、`/boot`、`/home`、`/var`、`/usr`、`/opt`、Swap 或忽略 |
 | `F` / `Enter` | 选中分区时选择 `KEEP` 或 `FORMAT` 及文件系统；未分配挂载点时也可格式化 |
-| `O` | 选中分区时打开 F2FS 挂载配置选择框 |
+| `O` | 选中有挂载点的分区时打开挂载选项选择框；目前只有 F2FS 提供非默认选项 |
 
 引导式布局包括：
 
@@ -254,7 +255,7 @@ Shell 预览页可用方向键、`Page Up` 和 `Page Down` 滚动，`G` 重新�
 
 ## 方案 JSON
 
-JSON 是 TUI 和 Shell 生成器之间的配置交换格式。当前格式版本为 `3`，顶层包含：
+JSON 是 TUI 和 Shell 生成器之间的配置交换格式。当前格式版本为 `4`，顶层包含：
 
 ```text
 version
@@ -269,7 +270,7 @@ system
   hardware, software, mirror and boot switches
 ```
 
-每块磁盘独立保存身份、分区模式和分区数组。每个分区保存设备路径、编号、容量、起始扇区、文件系统 UUID、PARTUUID、GPT 类型、当前文件系统、是否为引导式新分区、用途、`KEEP/FORMAT`、目标文件系统和 F2FS 配置。
+每块磁盘独立保存身份、分区模式和分区数组。每个分区保存设备路径、编号、容量、起始扇区、文件系统 UUID、PARTUUID、GPT 类型、当前文件系统、是否为引导式新分区、用途、`KEEP/FORMAT`、目标文件系统和挂载配置档。
 
 枚举在 JSON 中使用数字值保存，因此建议使用 TUI 编辑，而不是手工修改。加载后生成脚本前仍会执行方案验证。不支持的 `version` 会被拒绝。
 
@@ -336,7 +337,7 @@ root 和普通用户密码在 chroot 安装过程中通过 TTY 设置，不会�
 
 ## 软件安装习惯
 
-新构造器保留了 `live/` 旧安装脚本的主要选择；以下软件包组的实际内容由 `config/packages.json` 提供：
+当前构造器延续了 `legacy` 分支中旧 Bash 安装器的主要软件选择；以下软件包组的实际内容由 `config/packages.json` 提供：
 
 - Intel 安装 `intel-ucode`，AMD 安装 `amd-ucode`，虚拟机不安装 microcode；
 - 内核与对应 headers 成对安装；
@@ -445,43 +446,54 @@ Secure Boot 可以与临时本地镜像同时启用。本地镜像模式会临�
 ```text
 .
 ├── CMakeLists.txt
-├── include/                 # 数据模型和模块接口
+├── cmake/                   # 构建时嵌入 Bash 模板的辅助脚本
+├── include/                 # 各模块的公共接口
 ├── src/
-│   ├── main.c                 # CLI 与入口
-│   ├── detect.c               # lsblk JSON 探测
-│   ├── model/                 # 安装方案模型
-│   │   ├── model.c            # 方案构造、编辑和名称转换
-│   │   ├── validation.c       # 方案一致性验证
-│   │   ├── json.c             # 方案 JSON 保存、校验和加载
-│   │   └── private.h          # 模型内部接口
-│   ├── packages.c             # 软件包默认值与 packages.json
-│   ├── ui/                    # ncursesw TUI
-│   │   ├── ui.c               # 主循环与公共界面框架
-│   │   ├── dialogs.c          # 选择、确认和文本输入窗口
-│   │   ├── storage.c          # Storage 页面与 cfdisk 集成
-│   │   ├── screens.c          # 其他配置、审阅和预览页面
-│   │   └── private.h          # TUI 私有状态和模块接口
+│   ├── common/                # 原子文件、子进程和通用文本能力
+│   ├── detector/              # 只读块设备探测
 │   ├── generator/             # Bash 安装脚本生成器
-│   │   ├── generator.c        # 原子化生成入口
-│   │   ├── plan.c             # 安装方案与软件包变量
-│   │   ├── runtime.c          # Live 环境安装流程
-│   │   ├── chroot.c           # 目标系统配置流程
-│   │   ├── finish.c           # Secure Boot、固件与收尾
-│   │   ├── writer.c           # 生成器输出工具
-│   │   ├── private.h          # 生成器内部接口
-│   │   └── templates/         # 按职责拆分的 Bash 模板
-│   └── util.c                 # 子进程、验证与 Shell 转义
-├── tests/                   # CTest 模型与生成器测试
+│   │   ├── emitters/          # 磁盘、分区和软件包数据输出
+│   │   ├── templates/         # 构建时嵌入的 Bash 模板
+│   │   ├── workflow/          # Live、chroot 和收尾装配顺序
+│   │   ├── generator.c        # 校验输入并原子提交最终脚本
+│   │   ├── shell.c            # Bash 字面量转义
+│   │   ├── writer.c           # 顺序输出器
+│   │   └── private.h          # 生成器内部接口
+│   ├── model/                 # 安装方案语义与一致性规则
+│   │   ├── init.c             # 默认方案
+│   │   ├── storage.c          # 存储方案操作
+│   │   ├── system.c           # 系统字段与文本规则
+│   │   ├── validation.c       # 集中验证
+│   │   ├── json.c             # 方案 JSON 严格读写
+│   │   └── private.h          # 模型内部接口
+│   ├── ui/                    # ncursesw TUI
+│   │   ├── pages/             # 按主题拆分的页面
+│   │   ├── dialogs.c          # 通用模态窗口
+│   │   ├── layout.c           # 公共布局与绘制边界
+│   │   ├── ui.c               # curses 生命周期与页面路由
+│   │   └── private.h          # TUI 内部状态和接口
+│   ├── main.c                 # CLI 与顶层协调
+│   └── packages.c             # 软件包默认值与 packages.json
+├── tests/                   # CTest 模型、生成器和软件包测试
+├── docs/                    # 架构、流程和安装结果文档
 ├── .vscode/                 # CMake 构建和 GDB 调试配置
-├── config/                  # 运行时方案与软件包配置
-└── live/                    # 旧 Bash 安装实现，仅供参考
+└── config/                  # 运行时生成，不随源码提交
 ```
 
-## `live/` 目录
+## `legacy` 分支与重构历史
 
-`live/` 保留了重构前的线性 Bash 安装器，用于对照软件包、系统配置和安装习惯。它不是新架构的入口，不读取 `install-plan.json`，也不与 C 构造器共享运行状态。
+旧的线性 Bash 安装器仍完整保存在 `legacy` 分支的 `live/` 目录中，用于追溯软件包、系统配置和安装习惯。它不在当前分支的工作树中，当前构建、测试和运行过程均不读取它。
 
-旧实现在交互过程中就可能修改磁盘，而且不具备新方案模型的 `KEEP/FORMAT/IGNORE` 边界和集中验证。请将它视为迁移参考，不要把两套流程混合在同一次安装中。
+可以直接查看旧 Bash 文件，例如：
+
+```bash
+git show legacy:live/setup.sh
+git show legacy:live/chroot-setup.sh
+```
+
+旧 Bash 实现在交互过程中就可能修改磁盘，而且不具备当前方案模型的 `KEEP/FORMAT/IGNORE` 边界和集中验证。它不是当前架构的可用入口。
+
+重构前的 C 实现没有保留在 `legacy` 分支，只存在于当前开发分支的提交历史中。例如，删除旧代码前的提交 `7536ef0` 仍可用于查看当时的 `old/src/` 和 `old/tests/`。
 
 详细对照文档：
 

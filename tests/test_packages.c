@@ -1,7 +1,6 @@
 #define _POSIX_C_SOURCE 200809L
 
 #include "packages.h"
-#include "util.h"
 
 #include <json-c/json.h>
 
@@ -140,3 +139,4 @@ finish:
                  passed ? "PASS" : "FAIL");
     return passed ? EXIT_SUCCESS : EXIT_FAILURE;
 }
+

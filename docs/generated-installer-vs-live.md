@@ -1,23 +1,25 @@
-# C 构造器生成脚本与 `live/` 旧安装脚本的流程和差异
+# C 构造器生成脚本与 `legacy` 分支 Bash 安装脚本的流程和差异
 
-本文以当前仓库代码为准，说明 C 程序生成的 `install.sh` 如何完成一次安装，并与 `live/` 中保留的旧 Bash 安装器逐阶段对照。文档关注实际行为、数据传递、软件包、存储、Secure Boot、失败恢复等细节，不把 `live/` 当作仍需兼容的接口。
+本文以当前分支代码为准，说明 C 程序生成的 `install.sh` 如何完成一次安装，并与 `legacy` 分支 `live/` 目录中的旧 Bash 安装器逐阶段对照。旧 Bash 实现不在当前工作树中，也不是当前 C Builder 仍需兼容的接口。
 
 相关入口：
 
 - 当前构造器入口：[src/main.c](../src/main.c)
 - 当前脚本生成入口：[src/generator/generator.c](../src/generator/generator.c)
 - 当前 Bash 模板：[src/generator/templates/](../src/generator/templates/)
-- 旧版 Live 入口：[live/setup.sh](../live/setup.sh)
-- 旧版 chroot 入口：[live/chroot-setup.sh](../live/chroot-setup.sh)
+- 旧版 Live 入口：`legacy:live/setup.sh`
+- 旧版 chroot 入口：`legacy:live/chroot-setup.sh`
+
+旧 Bash 文件可通过 `git show legacy:live/<path>` 查看。
 
 ## 1. 两套实现的根本区别
 
-| 方面 | 当前 C 构造器 | `live/` 旧脚本 |
+| 方面 | 当前 C 构造器 | `legacy` 分支 Bash 脚本 |
 | --- | --- | --- |
 | 交互模型 | 先在 ncurses TUI 中编辑完整方案，再验证、保存和生成 | 一条线性 Shell 问答链，选择与执行交错进行 |
 | 配置载体 | `config/install-plan.json` + `config/packages.json` | 当前 Shell 进程中的变量和关联数组 |
 | 写盘边界 | 常规 TUI 操作只修改内存方案；执行生成脚本后才写盘 | 自动分区和手动分区在前端问答尚未结束时就可能写盘 |
-| 产物 | 一份可预览、可重复运行的 `install.sh` | `live/setup.sh`、多个 sourced 函数文件和 chroot 脚本树共同工作 |
+| 产物 | 一份可预览、可重复运行的 `install.sh` | `setup.sh`、多个 sourced 函数文件和 chroot 脚本树共同工作 |
 | chroot | 自动生成内层脚本并明确执行 | 进入 chroot 后要求用户手工运行 `./setup.sh` |
 | 软件选择 | 运行前已全部写进方案，包名来自可编辑 JSON | 多数选择在磁盘已经格式化后才逐项询问，包名硬编码在函数中 |
 | 设备复核 | 保存设备身份，生成前和写盘前多次复核 | 主要依赖当时选择的 `/dev/...` 路径 |
@@ -48,7 +50,7 @@ packages.json ──> ncurses TUI ──> InstallPlan
 4. 程序用 `lsblk --json --bytes --paths` 建立磁盘和分区清单，记录路径、容量、型号、序列号、传输方式、只读/可移动状态、分区表、PARTUUID、文件系统 UUID、GPT 类型和起始扇区等信息。
 5. TUI 编辑 `InstallPlan`。普通编辑不会执行 `wipefs`、`sfdisk`、`mkfs`、`mount` 或 `swapon`。
 6. Storage 页面主动启动 `cfdisk` 是唯一例外：它要求 root、只允许用于“使用现有分区”模式，先显示破坏性确认，退出后重新探测磁盘并清空该盘旧的分区用途分派。
-7. 保存方案时写入版本 3 的 JSON。旧版 JSON 不做兼容迁移，版本不符直接拒绝。
+7. 保存方案时写入版本 4 的 JSON。旧版 JSON 不做兼容迁移，版本不符直接拒绝。
 8. 生成前运行集中验证。存在阻断错误时不会产生脚本。
 
 构造器本身可以在普通用户环境运行。只有从 Storage 页面拉起 `cfdisk` 或实际执行生成脚本时才需要特权。
@@ -227,6 +229,8 @@ umask 022
 
 引导式磁盘使用 `wipefs --all --force` 和带 `--wipe always --wipe-partitions always` 的 `sfdisk` 重建 GPT。随后调用 `partprobe` 或 `blockdev --rereadpt`，可用时等待 `udevadm settle`，并最多等待 5 秒让每个分区设备出现。
 
+与旧版一样，当前脚本不向 `sfdisk` 提供 `name=` 字段，因此不会主动为自动创建的 GPT 分区写入 PARTLABEL。
+
 当前脚本不执行 `blkdiscard`。
 
 旧版自动布局只有前三种系统盘布局。旧 `disk_wiper` 对非旋转、支持 discard 的设备会在 `wipefs -a` 后执行整盘 `blkdiscard -f`。旧手动模式可先选择擦除，然后直接启动 `cfdisk`；其他磁盘也可以重复进入这套流程。
@@ -260,15 +264,14 @@ umask 022
 
 因此多盘挂载也会合并为一个确定的全局顺序，而不是依赖 Bash 关联数组遍历。`unused + FORMAT` 会创建文件系统但不挂载；如果它的目标文件系统是 Swap，也不会启用 Swap。
 
-F2FS 挂载配置在方案中提前确定：
+挂载配置在方案中提前确定。目前 Ext4、XFS 和 VFAT 只使用 `default`，F2FS 还提供：
 
-- `default`：不附加专用选项；
 - `balanced`：`noatime,lazytime,gc_merge,atgc,nodiscard,fsync_mode=nobarrier`；
 - `compressed`：在 balanced 基础上增加 `compress_algorithm=zstd:6,compress_chksum`。
 
 所有普通挂载完成后，脚本才逐个 `swapon`，并把本次启用的设备记入清理数组。
 
-旧版格式化顺序来自关联数组，顺序未定义；挂载顺序硬编码为 `/`、`/boot`、`/usr`、`/var`、`/home`、`/opt`，然后遍历关联数组启用 Swap。旧版 F2FS 挂载参数是在磁盘已经格式化后现场询问。旧界面中的“Optimized mount options(read only)”实际并不是只读挂载，而是当前所称的 balanced 参数。
+旧版格式化顺序来自关联数组，顺序未定义；挂载顺序硬编码为 `/`、`/boot`、`/usr`、`/var`、`/home`、`/opt`，然后遍历关联数组启用 Swap。旧版 F2FS 挂载参数是在磁盘已经格式化后现场询问。当前 Builder 通过通用的 Mount options 对话框提前选择，其中暂时只有 F2FS 存在非默认配置。旧界面中的“Optimized mount options(read only)”实际并不是只读挂载，而是当前所称的 balanced 参数。
 
 ### 3.11 `pacstrap` 与 `fstab`
 
@@ -460,9 +463,9 @@ Secure Boot 与临时本地镜像在当前实现中可以同时启用。此组�
 
 旧版成功路径只执行 `umount -R /mnt`。它不会关闭自己启用的 Swap，不会卸载本地镜像，不会停止 nginx，不会恢复 Live pacman 配置，也没有错误退出时的统一回收。任何中途失败都可能留下部分挂载或临时配置。
 
-## 4. `live/` 旧流程的完整时间线
+## 4. `legacy` 分支 Bash 流程的完整时间线
 
-旧入口 [live/setup.sh](../live/setup.sh) 的实际执行顺序如下：
+旧入口 `legacy:live/setup.sh` 的实际执行顺序如下：
 
 1. `source` 所有 processor、setter 和 actuator 函数；
 2. 立即要求 root；
@@ -596,7 +599,7 @@ Secure Boot 与临时本地镜像在当前实现中可以同时启用。此组�
 
 ## 9. 阅读和维护时应注意的边界
 
-1. `live/` 只是迁移参考。修改其中脚本不会改变 C Builder 的生成结果。
+1. 旧 Bash 实现保存在 `legacy` 分支，不参与当前分支 C Builder 的构建、测试或脚本生成。
 2. 修改 `src/generator/templates/` 后必须重新运行 CMake 构建，模板才会重新嵌入可执行文件。
 3. 修改 `config/packages.json` 会改变下一次生成脚本中的包数组，但不会改变已经生成的旧 `install.sh`。
 4. 修改 `install-plan.json` 也不会自动更新已有脚本，必须重新执行 generate。
@@ -608,22 +611,24 @@ Secure Boot 与临时本地镜像在当前实现中可以同时启用。此组�
 
 ## 10. 源码定位表
 
+旧实现列中的 `live/...` 路径均相对于 `legacy` 分支。
+
 | 主题 | 当前实现 | 旧实现 |
 | --- | --- | --- |
-| 主执行顺序 | [finish-main.sh](../src/generator/templates/finish-main.sh) | [live/setup.sh](../live/setup.sh) |
-| 方案序列化到 Shell | [src/generator/plan.c](../src/generator/plan.c) | 关联数组和 `/mnt/info/*.txt` |
-| 硬件探测 | [src/detect.c](../src/detect.c) | [disk-detector.sh](../live/functions/processor/disk-detector.sh) |
-| TUI 存储编辑/cfdisk | [src/ui/storage.c](../src/ui/storage.c) | [manual-partitioner.sh](../live/functions/actuator/manual-partitioner.sh) |
-| 自动分区 | [runtime-partitioning.sh](../src/generator/templates/runtime-partitioning.sh) | [automatic-partitioner.sh](../live/functions/actuator/automatic-partitioner.sh) |
+| 主执行顺序 | [finish-main.sh](../src/generator/templates/finish-main.sh) | `live/setup.sh` |
+| 方案序列化到 Shell | [src/generator/emitters](../src/generator/emitters/) | 关联数组和 `/mnt/info/*.txt` |
+| 硬件探测 | [src/detector/storage.c](../src/detector/storage.c) | `live/functions/processor/disk-detector.sh` |
+| TUI 存储编辑/cfdisk | [src/ui/pages/storage.c](../src/ui/pages/storage.c) | `live/functions/actuator/manual-partitioner.sh` |
+| 自动分区 | [runtime-partitioning.sh](../src/generator/templates/runtime-partitioning.sh) | `live/functions/actuator/automatic-partitioner.sh` |
 | 身份和占用复核 | [runtime-storage-validation.sh](../src/generator/templates/runtime-storage-validation.sh) | `mount-detector.sh` 的单项挂载检查 |
 | KEEP 探测 | [runtime-keep-probe.sh](../src/generator/templates/runtime-keep-probe.sh) | 无 |
 | 格式化和挂载 | [runtime-filesystems.sh](../src/generator/templates/runtime-filesystems.sh) | `partition-formatter.sh` + `mounter.sh` |
 | 包源和 pacstrap | [runtime-package-source.sh](../src/generator/templates/runtime-package-source.sh) | `use-local-mirror.sh` + `basic-software-installer.sh` |
-| chroot 入口 | [chroot-preamble.sh](../src/generator/templates/chroot-preamble.sh) | [live/chroot-setup.sh](../live/chroot-setup.sh) |
+| chroot 入口 | [chroot-preamble.sh](../src/generator/templates/chroot-preamble.sh) | `live/chroot-setup.sh` |
 | 基础和驱动 | [chroot-base.sh](../src/generator/templates/chroot-base.sh) | `basic-setter.sh` + `critical-component-installer.sh` + `extra-driver-installer.sh` |
 | 桌面和可选软件 | `chroot-desktop.sh` + `chroot-optional-software.sh` | `desktop-environment-installer.sh` + `extra-software-installer.sh` |
-| 服务和用户 | [chroot-system.sh](../src/generator/templates/chroot-system.sh) | [final-setter.sh](../live/functions/chroot/final-setter.sh) |
-| 引导器 | [chroot-bootloader.sh](../src/generator/templates/chroot-bootloader.sh) | [bootloader-installer.sh](../live/functions/chroot/bootloader-installer.sh) |
+| 服务和用户 | [chroot-system.sh](../src/generator/templates/chroot-system.sh) | `live/functions/chroot/final-setter.sh` |
+| 引导器 | [chroot-bootloader.sh](../src/generator/templates/chroot-bootloader.sh) | `live/functions/chroot/bootloader-installer.sh` |
 | Secure Boot 收尾 | [finish-secure-boot.sh](../src/generator/templates/finish-secure-boot.sh) | `bootloader-installer.sh` 内部完成 |
 | EFI NVRAM | [finish-firmware.sh](../src/generator/templates/finish-firmware.sh) | `live/setup.sh` chroot 返回后的末段 |
 | 日志和退出清理 | `runtime-logging.sh` + `runtime-cleanup.sh` | 无统一实现 |
