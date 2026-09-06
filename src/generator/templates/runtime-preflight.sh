@@ -7,6 +7,7 @@ preflight() {
     # Installation requires a root UEFI Live session. / 安装必须在 root 权限的 UEFI Live 环境中运行。
     [[ "$EUID" -eq 0 ]] || die 'Run this installer as root.'
     [[ -d /sys/firmware/efi ]] || die 'The live environment was not booted in UEFI mode.'
+    # Keep the dependency list explicit so failures occur before package or storage preparation. / 显式列出依赖，使缺失命令在软件源或存储准备前失败。
     for command in bash cat tee sleep lsblk blockdev sed grep find findmnt wipefs sfdisk blkid mount umount swapon swapoff pacman pacstrap genfstab arch-chroot mktemp mkdir rmdir install cp rm chmod mv sync; do
         require_command "$command"
     done
@@ -41,6 +42,7 @@ preflight() {
        "${#INSTALL_DISKS[@]}" -eq "${#DISK_SWAP_SIZE_MIB[@]}" ]] || die 'Disk plan arrays are inconsistent.'
     # Validate live device identities before selecting filesystem tools. / 选择文件系统工具前校验实时设备身份。
     verify_storage_state
+    # Formatter requirements depend only on records that will actually recreate a filesystem. / 格式化工具只由真正重建文件系统的记录决定。
     for ((index=0; index<${#PART_DEVICES[@]}; ++index)); do
         [[ "${PART_ACTIONS[index]}" != keep ]] || continue
         filesystem=${PART_FILESYSTEMS[index]}
@@ -62,6 +64,7 @@ preflight() {
             die 'EFI variables are not mounted read-write.'
     fi
     # Optional inputs are resolved only after the common environment passes. / 通用环境检查通过后再解析可选输入。
+    # Mirror discovery stays read-only here; repository mounting happens only after consent. / 此处的镜像探测保持只读；仓库只会在用户确认后挂载。
     [[ "$USE_LOCAL_MIRROR" != true ]] || select_local_mirror_source
     verify_secure_boot_assets
 }

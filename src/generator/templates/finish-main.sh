@@ -3,20 +3,23 @@
 # =============================================================================
 
 main() {
+    # Secure Boot trusts an external package, so obtain explicit consent before all preparation. / Secure Boot 信任外部软件包，因此在所有准备前获取明确授权。
+    confirm_secure_boot_package_source
     # Allocate the private workspace before any optional snapshots or backups. / 在创建任何可选快照或备份前分配私有工作目录。
     WORK_DIR=$(/usr/bin/mktemp -d /tmp/arch-install.XXXXXX) ||
         die 'Cannot create the private installer work directory.'
     chmod 0700 "$WORK_DIR"
     phase 'Preflight checks'
     preflight
-    # Present and confirm all package-source effects before destructive consent. / 在破坏性授权前展示并确认全部软件源副作用。
+    # Present the plan; only a local-mirror bootstrap requires source confirmation. / 展示计划；仅本地镜像引导需要软件源确认。
     print_plan
+    # Network mode returns immediately; local mode performs its two-stage trust confirmation. / 网络模式会立即返回；本地模式执行两阶段信任确认。
     confirm_package_preparation
     prepare_package_source
     snapshot_secure_boot_assets
     probe_kept_filesystems
     confirm_destructive_actions
-    # The final disk-path confirmation is followed by an immediate live-state recheck. / 最终磁盘路径确认后立即进行实时状态复核。
+    # The two-stage storage confirmation is followed by an immediate live-state recheck. / 两阶段存储确认后立即进行实时状态复核。
     phase 'Rechecking storage immediately before writes'
     verify_storage_state
     # Apply storage operations in partition, format, mount, and swap order. / 按分区、格式化、挂载和 Swap 顺序执行存储操作。

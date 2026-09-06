@@ -6,6 +6,7 @@ verify_secure_boot_assets() {
     local asset_root=${1:-$ASSET_DIR}
     local file package_info key_public certificate_public crt_fingerprint cer_fingerprint
     [[ "$ENABLE_SECURE_BOOT" == true ]] || return 0
+    # Validation establishes structural consistency, not publisher authenticity or package trust. / 校验只建立结构一致性，不代表认证发布者身份或软件包可信性。
     # Inputs must be ordinary files so later reads cannot follow substituted links. / 输入必须是普通文件，防止后续读取跟随被替换的链接。
     require_command openssl
     [[ -f "$asset_root/shim-signed.pkg.tar.zst" &&
@@ -42,6 +43,7 @@ snapshot_secure_boot_assets() {
     verify_secure_boot_assets "$ASSET_DIR"
     SECURE_BOOT_ASSET_SNAPSHOT=$WORK_DIR/secure-boot-snapshot
     install -d -m 0700 "$SECURE_BOOT_ASSET_SNAPSHOT"
+    # Publish mount ownership before mount so cleanup can inspect an interrupted attempt. / 在挂载前登记所有权，使清理逻辑能检查被中断的尝试。
     SECURE_BOOT_SNAPSHOT_MOUNTED=true
     # tmpfs prevents the private key from being written into the target system. / tmpfs 防止私钥写入目标系统。
     mount -t tmpfs -o nodev,nosuid,noexec,mode=0700,size=64M tmpfs \
@@ -61,6 +63,7 @@ snapshot_secure_boot_assets() {
     for file in shimx64.efi mmx64.efi fbx64.efi; do
         archive_path=usr/share/shim-signed/$file
         if ! grep -Fxq -- "$archive_path" <<<"$archive_listing"; then
+            # Some Pacman archives prefix member names with ./ while others do not. / 不同 Pacman 归档可能会给成员名加上或省略 ./ 前缀。
             archive_path=./$archive_path
             grep -Fxq -- "$archive_path" <<<"$archive_listing" ||
                 die "shim-signed package is missing $file."

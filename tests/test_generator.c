@@ -423,17 +423,52 @@ static bool test_automatic_script(void)
                                "confirm_destructive_actions() {",
                                "the destructive confirmation function");
     passed &= require_fragment(&script,
-                               "Type the full target disk path (%s) to continue:",
-                               "the target-disk confirmation prompt");
+                               "'PARENT DISK' 'DISK MODEL' 'BLOCK DEVICE' 'OPERATIONS' 'TARGET'",
+                               "the affected-device table header");
     passed &= require_fragment(&script,
-                               "[[ \"$answer\" == \"$TARGET_DISK\" ]]",
-                               "an exact target-disk confirmation check");
+                               "'ERASE+REPARTITION' '-'",
+                               "the whole-disk erase table row");
+    passed &= require_fragment(&script,
+                               "Continue with these storage operations? [yes/no]:",
+                               "the explicit storage yes-or-no prompt");
+    passed &= require_fragment(&script,
+                               "Type CONFIRM EXECUTE to begin storage execution:",
+                               "the final storage confirmation prompt");
+    passed &= require_fragment(&script,
+                               "[[ \"$answer\" == 'CONFIRM EXECUTE' ]]",
+                               "an exact final storage confirmation check");
+    passed &= forbid_fragment(&script,
+                              "Type the full target disk path",
+                              "the former single-disk confirmation prompt");
     passed &= require_fragment(&script,
                                "[[ \"$current_type\" == disk ]]",
                                "a whole-disk runtime check");
     passed &= require_fragment(&script,
                                "confirm_package_preparation() {",
                                "the package preparation confirmation");
+    passed &= require_fragment(&script,
+                               "[[ \"$USE_LOCAL_MIRROR\" == true ]] || return 0",
+                               "network repository preparation without confirmation");
+    passed &= forbid_fragment(&script,
+                              "Type PREPARE to continue:",
+                              "the former network repository confirmation");
+    passed &= require_fragment(&script,
+                               "confirm_secure_boot_package_source() {",
+                               "the Secure Boot package trust confirmation");
+    passed &= require_fragment(&script,
+                               "Type TRUST SHIM-SIGNED to accept responsibility and continue:",
+                               "an exact shim package trust phrase");
+    passed &= require_fragment(&script,
+                               "does not authenticate its source or inspect its install scripts",
+                               "the shim package verification boundary warning");
+    passed &= require_order(&script,
+                            "main() {\n    # Secure Boot trusts an external package",
+                            "    WORK_DIR=$(/usr/bin/mktemp -d /tmp/arch-install.XXXXXX)",
+                            "Secure Boot trust confirmation before runtime preparation");
+    passed &= require_order(&script,
+                            "    confirm_secure_boot_package_source\n",
+                            "    preflight\n",
+                            "Secure Boot trust confirmation before preflight");
     passed &= require_order(&script,
                             "    confirm_package_preparation\n    prepare_package_source\n",
                             "    snapshot_secure_boot_assets\n    probe_kept_filesystems\n    confirm_destructive_actions\n",
@@ -819,8 +854,17 @@ static bool test_local_mirror_script(void)
 
     if (!generate_script(&plan, &script)) return false;
     passed &= require_fragment(&script,
-                               "Type BOOTSTRAP %s %s to trust this exact source",
-                               "an explicit local-server bootstrap confirmation");
+                               "Accept these risks and use this local mirror? [yes/no]:",
+                               "a local-mirror risk decision");
+    passed &= require_fragment(&script,
+                               "Type ACCEPT USE LOCAL MIRROR to continue:",
+                               "an explicit local-mirror acceptance phrase");
+    passed &= require_fragment(&script,
+                               "[[ \"$answer\" == 'ACCEPT USE LOCAL MIRROR' ]]",
+                               "an exact local-mirror acceptance check");
+    passed &= forbid_fragment(&script,
+                              "Type BOOTSTRAP %s %s to trust this exact source",
+                              "the former device-bound bootstrap phrase");
     passed &= require_fragment(&script,
                                "LOCAL_MIRROR_UUID=$(blkid -s UUID",
                                "local mirror UUID capture");
@@ -919,6 +963,12 @@ static bool test_multi_disk_format_only_script(void)
                                "the format-only mount skip");
     passed &= require_fragment(&script, "auto-data)",
                                "the single data-disk partitioner");
+    passed &= require_fragment(&script,
+                               "disk=${INSTALL_DISKS[disk_index]}",
+                               "parent-disk lookup for affected-device rows");
+    passed &= require_fragment(&script,
+                               "\"$disk\" \"$model\" \"${PART_DEVICES[index]}\" \"$operation\" \"$target\"",
+                               "partition operations paired with their parent disk and model");
     generated_script_destroy(&script);
     return passed;
 }

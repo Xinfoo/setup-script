@@ -7,6 +7,7 @@ prepare_package_source() {
     if [[ "$USE_LOCAL_MIRROR" == true ]]; then
         setup_local_mirror
     else
+        # Official network repositories refresh immediately without an extra acknowledgement. / 官方网络仓库无需额外确认，直接刷新数据库。
         phase 'Checking package repositories'
         pacman -Syy --noconfirm
     fi
@@ -16,6 +17,7 @@ prepare_package_source() {
         (( ${#LIVE_SIGNING_PACKAGES[@]} > 0 )) ||
             die 'The Secure Boot Live package group is empty.'
         pacman -S --needed --noconfirm "${LIVE_SIGNING_PACKAGES[@]}"
+        # Package installation is not enough: verify every command consumed by later templates. / 仅安装软件包还不够；继续确认后续模板使用的每条命令。
         require_command sbsign
         require_command sbverify
         require_command bsdtar
@@ -39,6 +41,7 @@ install_base_system() {
         printf '%s\n' '# Static information about the filesystems.'
         printf '%s\n\n' '# See fstab(5) for details.'
         printf '%s\n' '# <file system> <dir> <type> <options> <dump> <pass>'
+        # Active mounts and swap are the sole source of truth for the final table. / 活动挂载与 Swap 是最终表格的唯一事实来源。
         genfstab -U "$TARGET_ROOT"
     } > "$TARGET_ROOT/etc/fstab"
 }

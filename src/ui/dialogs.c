@@ -157,6 +157,68 @@ int choose_dialog(const char *title, const char *const options[], size_t count, 
     }
 }
 
+/* 通用表格选择框与页面表格共用列宽、间距和对齐规则。 */
+int choose_table_dialog(const char *title, const UiTableColumn columns[],
+                        size_t column_count, const char *const cells[],
+                        size_t row_count, int current)
+{
+    int width = COLS - 4;
+    int height = (int)row_count + 7;
+    int selected = current >= 0 && (size_t)current < row_count ? current : 0;
+    UiTableLayout layout;
+    WINDOW *window;
+
+    /* 弹窗限制最大宽度以维持可读性，小终端则继续服从实际屏幕边界。 */
+    if (width > 104) width = 104;
+    if (width < 58) width = 58;
+    if (height > LINES - 2) height = LINES - 2;
+    if (width > COLS - 2) width = COLS - 2;
+    window = newwin(height, width, (LINES - height) / 2, (COLS - width) / 2);
+    if (window == NULL) return -1;
+    keypad(window, TRUE);
+    wtimeout(window, 200);
+    calculate_table_layout(&layout, 2, width - 4, columns, column_count, 3);
+    for (;;) {
+        int visible = height - 6;
+        int offset = selected >= visible ? selected - visible + 1 : 0;
+
+        werase(window);
+        box(window, 0, 0);
+        wattron(window, A_BOLD | COLOR_PAIR(COLOR_TITLE));
+        mvwaddnstr(window, 1, 2, title, width - 4);
+        draw_table_header(window, 2, &layout, columns);
+        wattroff(window, A_BOLD | COLOR_PAIR(COLOR_TITLE));
+        for (int line = 0; line < visible && (size_t)(offset + line) < row_count; ++line) {
+            int index = offset + line;
+            /* cells 是按行展开的一维矩阵，这里定位当前行的首个单元格。 */
+            const char *const *values = cells + (size_t)index * column_count;
+            if (index == selected) wattron(window, COLOR_PAIR(COLOR_SELECTED));
+            draw_table_row(window, line + 4, &layout, columns, values);
+            if (index == selected) wattroff(window, COLOR_PAIR(COLOR_SELECTED));
+        }
+        mvwaddnstr(window, height - 2, 2, "Enter select   Esc cancel", width - 4);
+        wrefresh(window);
+        {
+            int key = wgetch(window);
+
+            if (stop_requested || key == KEY_RESIZE) break;
+            if (key == ERR) continue;
+            if (key == KEY_UP && selected > 0) --selected;
+            else if (key == KEY_DOWN && (size_t)(selected + 1) < row_count) ++selected;
+            else if (key == '\n' || key == KEY_ENTER) {
+                delwin(window);
+                touchwin(stdscr);
+                (void)refresh();
+                return selected;
+            } else if (key == 27 || key == 'q') break;
+        }
+    }
+    delwin(window);
+    touchwin(stdscr);
+    (void)refresh();
+    return -1;
+}
+
 /*
  * 确认窗口的文本换行器。优先在空白处分行，单个超长词才按窗口宽度截断，
  * 同一算法同时用于计算窗口高度和实际绘制，避免两者行数不一致。

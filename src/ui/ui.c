@@ -101,6 +101,7 @@ static void draw_current(UiState *state)
     case SCREEN_SOFTWARE: draw_software(state); break;
     case SCREEN_IDENTITY: draw_identity(state); break;
     case SCREEN_REVIEW: draw_review(state); break;
+    case SCREEN_OUTPUT: draw_output(state); break;
     case SCREEN_OUTPUT_PREVIEW: draw_output_preview(state); break;
     }
     refresh();
@@ -122,6 +123,7 @@ static void handle_key(UiState *state, int key)
     case SCREEN_SOFTWARE: handle_software(state, key); break;
     case SCREEN_IDENTITY: handle_identity(state, key); break;
     case SCREEN_REVIEW: handle_review(state, key); break;
+    case SCREEN_OUTPUT: handle_output(state, key); break;
     case SCREEN_OUTPUT_PREVIEW: handle_output_preview(state, key); break;
     }
 }

@@ -26,6 +26,7 @@ COREDUMP
 SystemMaxUse=500M
 SystemMaxFileSize=50M
 JOURNAL
+    # Enabling units only creates target-system links; no service is started inside chroot. / 启用单元只会创建目标系统链接，不会在 chroot 内启动服务。
     # Enable common services first, then features selected by the plan. / 先启用公共服务，再启用计划选择的功能。
     systemctl enable NetworkManager.service systemd-timesyncd.service fstrim.timer
     [[ "$HAS_BLUETOOTH" != true ]] || systemctl enable bluetooth.service
@@ -53,6 +54,7 @@ JOURNAL
     install -d -m 0750 /etc/sudoers.d
     printf '%%wheel ALL=(ALL:ALL) ALL\n' > /etc/sudoers.d/10-wheel
     chmod 0440 /etc/sudoers.d/10-wheel
+    # Validate the complete sudoers graph so errors in includes are caught as well. / 校验完整 sudoers 引用图，使 include 中的错误也能被发现。
     visudo -cf /etc/sudoers
     # Set the ordinary account password interactively with the shared retry limit. / 使用共用重试上限交互设置普通账户密码。
     printf '\nSet the password for %s.\n' "$USERNAME"

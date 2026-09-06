@@ -17,6 +17,7 @@ typedef enum {
     SCREEN_SOFTWARE,
     SCREEN_IDENTITY,
     SCREEN_REVIEW,
+    SCREEN_OUTPUT,
     SCREEN_OUTPUT_PREVIEW
 } Screen;
 
@@ -48,6 +49,27 @@ enum {
     COLOR_MUTED
 };
 
+typedef enum {
+    UI_ALIGN_LEFT,
+    UI_ALIGN_RIGHT
+} UiTextAlignment;
+
+typedef struct {
+    const char *title;
+    int preferred_width;
+    int minimum_width;
+    UiTextAlignment alignment;
+} UiTableColumn;
+
+#define UI_TABLE_MAX_COLUMNS 8
+
+typedef struct {
+    int positions[UI_TABLE_MAX_COLUMNS];
+    int widths[UI_TABLE_MAX_COLUMNS];
+    int gap;
+    size_t count;
+} UiTableLayout;
+
 extern volatile sig_atomic_t stop_requested;
 
 /* 控制器与布局公共入口。 */
@@ -56,6 +78,12 @@ void put_clipped(int y, int x, int width, const char *text);
 void draw_shell(UiState *state, const char *title, const char *keys);
 void draw_property_row(int y, int index, int selected,
                        const char *name, const char *value);
+void calculate_table_layout(UiTableLayout *layout, int x, int available_width,
+                            const UiTableColumn columns[], size_t count, int gap);
+void draw_table_header(WINDOW *window, int y, const UiTableLayout *layout,
+                       const UiTableColumn columns[]);
+void draw_table_row(WINDOW *window, int y, const UiTableLayout *layout,
+                    const UiTableColumn columns[], const char *const values[]);
 bool terminal_too_small(void);
 void quit_builder(UiState *state);
 bool ui_generate(UiState *state);
@@ -63,6 +91,9 @@ bool ui_generate(UiState *state);
 /* 模态窗口。 */
 int choose_dialog(const char *title, const char *const options[],
                   size_t count, int current);
+int choose_table_dialog(const char *title, const UiTableColumn columns[],
+                        size_t column_count, const char *const cells[],
+                        size_t row_count, int current);
 bool confirm_dialog(const char *title, const char *message);
 bool text_dialog(const char *title, char *value, size_t size);
 void packages_dialog(const char *title, const PackageConfig *packages,
@@ -83,8 +114,9 @@ void draw_identity(UiState *state);
 void handle_identity(UiState *state, int key);
 void draw_review(UiState *state);
 void handle_review(UiState *state, int key);
+void draw_output(UiState *state);
+void handle_output(UiState *state, int key);
 void draw_output_preview(UiState *state);
 void handle_output_preview(UiState *state, int key);
-void handle_output_request(UiState *state, int key);
 
 #endif

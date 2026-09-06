@@ -82,6 +82,7 @@ hl.config({
 })
 HYPRLAND
             # Append only the GTK section to the package-provided ReGreet file. / 仅向软件包提供的 ReGreet 文件追加 GTK 段。
+            # Keeping upstream defaults intact reduces maintenance when ReGreet adds new keys. / 保留上游默认值可减少 ReGreet 新增配置项时的维护工作。
             cat >> /etc/greetd/regreet.toml <<'REGREET'
 
 [GTK]

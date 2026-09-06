@@ -57,6 +57,7 @@ HOSTS
     # Keep the console keymap deterministic and enable colored Pacman output. / 固定控制台键盘布局并启用 Pacman 彩色输出。
     printf 'KEYMAP=us\n' > /etc/vconsole.conf
     sed -i 's/^#Color$/Color/' /etc/pacman.conf
+    # Refresh against the mirror configuration inherited from pacstrap before installing additions. / 安装附加组件前，使用 pacstrap 继承的镜像配置刷新数据库。
     pacman -Syy --noconfirm
     # Set the root password before creating the ordinary account later. / 在稍后创建普通账户前设置 root 密码。
     printf '\nSet the root password.\n'
@@ -80,6 +81,7 @@ install_drivers() {
         # Force early NVIDIA modules and remove the conflicting kms hook. / 强制提前加载 NVIDIA 模块并移除冲突的 kms hook。
         sed -i -E 's/^MODULES=.*/MODULES=(nvidia nvidia_modeset nvidia_uvm nvidia_drm)/' /etc/mkinitcpio.conf
         # Remove kms without leaving doubled or edge whitespace. / 移除 kms，同时避免留下连续空格或括号边缘空格。
+        # Handle middle, leading, trailing, and sole-element positions independently. / 分别处理 kms 位于中间、开头、末尾及唯一元素的情况。
         sed -i -E '/^HOOKS=/ {
             s/[[:space:]]+kms[[:space:]]+/ /g
             s/\([[:space:]]*kms[[:space:]]+/(/g

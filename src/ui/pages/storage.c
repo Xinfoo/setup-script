@@ -16,14 +16,24 @@
 /* 磁盘方案操作：添加磁盘、选择引导式布局、恢复现有分区以及刷新探测结果。 */
 static int disk_dialog(const HardwareInventory *inventory, InstallPlan *plan)
 {
-    const char *options[AI_MAX_DISKS];
-    char labels[AI_MAX_DISKS][256];
+    static const UiTableColumn columns[] = {
+        {"Status", 15, 6, UI_ALIGN_LEFT},
+        {"Device", 18, 8, UI_ALIGN_LEFT},
+        {"Size", 9, 4, UI_ALIGN_RIGHT},
+        {"Serial", 16, 6, UI_ALIGN_LEFT},
+        {"Model", 30, 8, UI_ALIGN_LEFT}
+    };
+    const char *cells[AI_MAX_DISKS * (sizeof(columns) / sizeof(columns[0]))];
+    char statuses[AI_MAX_DISKS][32];
+    char sizes[AI_MAX_DISKS][32];
     int selected = 0;
+
     for (size_t index = 0; index < inventory->disk_count; ++index) {
-        char size[32];
         char flags[24];
         const DiskInfo *disk = &inventory->disks[index];
-        format_size(disk->size_bytes, size, sizeof(size));
+        size_t cell = index * (sizeof(columns) / sizeof(columns[0]));
+
+        format_size(disk->size_bytes, sizes[index], sizeof(sizes[index]));
         if (plan_find_disk(plan, disk->path) != NULL) {
             copy_text(flags, sizeof(flags), "ADDED");
         } else if (!disk->read_only && !disk->removable && !disk->in_use) {
@@ -34,15 +44,16 @@ static int disk_dialog(const HardwareInventory *inventory, InstallPlan *plan)
                            disk->removable ? "USB " : "",
                            disk->in_use ? "IN-USE" : "");
         }
-        (void)snprintf(labels[index], sizeof(labels[index]),
-                       "[%-13.13s] %-18.18s %9.9s SN:%-16.16s %.80s",
-                       flags, disk->path, size,
-                       disk->serial[0] != '\0' ? disk->serial : "-",
-                       disk->model[0] != '\0' ? disk->model : "Unknown model");
-        options[index] = labels[index];
+        (void)snprintf(statuses[index], sizeof(statuses[index]), "[%s]", flags);
+        cells[cell] = statuses[index];
+        cells[cell + 1] = disk->path;
+        cells[cell + 2] = sizes[index];
+        cells[cell + 3] = disk->serial[0] != '\0' ? disk->serial : "-";
+        cells[cell + 4] = disk->model[0] != '\0' ? disk->model : "Unknown model";
     }
-    return choose_dialog("Add disk to installation plan", options,
-                         inventory->disk_count, selected);
+    return choose_table_dialog("Add disk to installation plan", columns,
+                               sizeof(columns) / sizeof(columns[0]), cells,
+                               inventory->disk_count, selected);
 }
 
 static void add_disk(UiState *state)
@@ -271,6 +282,78 @@ static void remove_active_disk(UiState *state)
     set_status(state, "Disk removed from the installation plan; no device was modified.");
 }
 
+static const UiTableColumn storage_columns[] = {
+    {"Device", 11, 8, UI_ALIGN_LEFT},
+    {"Size", 7, 7, UI_ALIGN_RIGHT},
+    {"Current", 7, 7, UI_ALIGN_LEFT},
+    {"Action", 6, 6, UI_ALIGN_LEFT},
+    {"Target", 6, 6, UI_ALIGN_LEFT},
+    {"Purpose", 7, 7, UI_ALIGN_LEFT},
+    {"Mount", 7, 5, UI_ALIGN_LEFT},
+    {"Options", 12, 7, UI_ALIGN_LEFT}
+};
+
+/* 磁盘组表头使用独立列模型，但与分区表共享同一布局计算和裁切实现。 */
+static const UiTableColumn disk_group_columns[] = {
+    {"Disk", 26, 18, UI_ALIGN_LEFT},
+    {"Size", 9, 7, UI_ALIGN_RIGHT},
+    {"Model", 28, 12, UI_ALIGN_LEFT},
+    {"Layout", 28, 12, UI_ALIGN_LEFT}
+};
+
+static void draw_disk_group(int y, const UiTableLayout *layout,
+                            const DiskPlan *disk, bool active, bool selected)
+{
+    char size[32];
+    char device[AI_PATH_LEN + 8];
+    const char *values[sizeof(disk_group_columns) / sizeof(disk_group_columns[0])];
+    int color = selected ? COLOR_SELECTED :
+                (disk->mode == STORAGE_EXISTING ? COLOR_TITLE : COLOR_ERROR);
+
+    format_size(disk->size_bytes, size, sizeof(size));
+    (void)snprintf(device, sizeof(device), "%c DISK %s", active ? '>' : ' ', disk->path);
+    values[0] = device;
+    values[1] = size;
+    values[2] = disk->model[0] != '\0' ? disk->model : "Unknown model";
+    values[3] = storage_mode_name(disk->mode);
+    attron(A_BOLD | COLOR_PAIR(color));
+    draw_table_row(stdscr, y, layout, disk_group_columns, values);
+    attroff(A_BOLD | COLOR_PAIR(color));
+}
+
+static void draw_partition_row(int y, const UiTableLayout *layout,
+                               const PartitionPlan *partition, bool selected)
+{
+    char size[32];
+    const char *operation;
+    const char *current = partition->current_fs[0] != '\0' ? partition->current_fs : "-";
+    const char *target = partition->action == ACTION_FORMAT ?
+                         filesystem_name(partition->target_fs) : current;
+    const char *options = partition_supports_mount_profile(
+                              partition, MOUNT_PROFILE_DEFAULT) ?
+                          mount_profile_name(partition->mount_profile) : "-";
+    const char *values[sizeof(storage_columns) / sizeof(storage_columns[0])];
+
+    format_size(partition->size_bytes, size, sizeof(size));
+    /* 显示动作同时考虑来源与用途：未分配的 KEEP 分区在执行阶段会被忽略。 */
+    if (partition->planned) operation = "CREATE";
+    else if (partition->usage == PART_UNUSED && partition->action == ACTION_KEEP)
+        operation = "IGNORE";
+    else operation = partition->action == ACTION_FORMAT ? "FORMAT" : "KEEP";
+    values[0] = partition->device;
+    values[1] = size;
+    values[2] = current;
+    values[3] = operation;
+    values[4] = target;
+    values[5] = usage_name(partition->usage);
+    values[6] = partition_mountpoint(partition->usage);
+    values[7] = options;
+
+    if (selected) attron(COLOR_PAIR(COLOR_SELECTED));
+    draw_table_row(stdscr, y, layout, storage_columns, values);
+    if (selected) attroff(COLOR_PAIR(COLOR_SELECTED));
+}
+
 /*
  * Storage 表把每块磁盘的表头和分区组成连续的可滚动行。
  * state->row == -1 表示选中磁盘表头，非负值表示当前磁盘内的分区下标。
@@ -283,6 +366,8 @@ void draw_storage(UiState *state)
     int selected_line = 0;
     int visual_line = 0;
     int offset;
+    UiTableLayout table;
+    UiTableLayout disk_table;
 
     if (storage->disk_count == 0) {
         keys = "Up/Down move   D add disk   R refresh   Esc back";
@@ -312,61 +397,40 @@ void draw_storage(UiState *state)
     }
     mvprintw(4, 2, "%zu disk(s); Up/Down moves across disk groups. FORMAT needs no mount point.",
              storage->disk_count);
+    calculate_table_layout(&table, 2, COLS - 4, storage_columns,
+                           sizeof(storage_columns) / sizeof(storage_columns[0]), 4);
+    calculate_table_layout(&disk_table, 2, COLS - 4, disk_group_columns,
+                           sizeof(disk_group_columns) / sizeof(disk_group_columns[0]), 3);
     attron(A_BOLD);
-    mvprintw(5, 2, "%-18s %8s %-8s %-8s %-7s %-7s %-9s",
-             "Device", "Size", "Current", "Action", "Target", "Purpose", "Mount");
-    if (COLS >= 96) addstr(" Options");
+    draw_table_header(stdscr, 5, &table, storage_columns);
     attroff(A_BOLD);
 
+    /* 选中项先换算为包含组间空行的全局逻辑行，再据此移动视口。 */
     for (size_t disk_index = 0; disk_index < state->active_disk; ++disk_index)
-        selected_line += 1 + (int)storage->disks[disk_index].partition_count;
+        selected_line += 2 + (int)storage->disks[disk_index].partition_count;
     /* 逻辑坐标中表头占一行，所以 row=-1 恰好映射到该组的第一行。 */
     selected_line += 1 + state->row;
     offset = selected_line >= available ? selected_line - available + 1 : 0;
 
     for (size_t disk_index = 0; disk_index < storage->disk_count; ++disk_index) {
         const DiskPlan *disk = &storage->disks[disk_index];
-        char disk_size[32];
         bool selected = disk_index == state->active_disk && state->row < 0;
-        format_size(disk->size_bytes, disk_size, sizeof(disk_size));
+
+        /* 每个后续磁盘组前保留一行，并让它参与统一的滚动坐标计算。 */
+        if (disk_index > 0) ++visual_line;
         if (visual_line >= offset && visual_line < offset + available) {
-            int y = 6 + visual_line - offset;
-            attron(A_BOLD | COLOR_PAIR(selected ? COLOR_SELECTED :
-                                        (disk->mode == STORAGE_EXISTING ? COLOR_TITLE : COLOR_ERROR)));
-            mvprintw(y, 2, "%c DISK %-18.18s %8.8s %-28.28s  %s",
-                     disk_index == state->active_disk ? '>' : ' ', disk->path, disk_size,
-                     disk->model[0] != '\0' ? disk->model : "Unknown model",
-                     storage_mode_name(disk->mode));
-            attroff(A_BOLD | COLOR_PAIR(selected ? COLOR_SELECTED :
-                                         (disk->mode == STORAGE_EXISTING ? COLOR_TITLE : COLOR_ERROR)));
+            int y = 7 + visual_line - offset;
+            draw_disk_group(y, &disk_table, disk,
+                            disk_index == state->active_disk, selected);
         }
         ++visual_line;
         for (size_t index = 0; index < disk->partition_count; ++index, ++visual_line) {
             const PartitionPlan *part = &disk->partitions[index];
-            char size[32];
-            char operation[16];
             bool partition_selected = disk_index == state->active_disk &&
                                       (int)index == state->row;
             if (visual_line < offset || visual_line >= offset + available) continue;
-            format_size(part->size_bytes, size, sizeof(size));
-            if (part->planned) copy_text(operation, sizeof(operation), "CREATE");
-            else if (part->usage == PART_UNUSED && part->action == ACTION_KEEP)
-                copy_text(operation, sizeof(operation), "IGNORE");
-            else copy_text(operation, sizeof(operation),
-                           part->action == ACTION_FORMAT ? "FORMAT" : "KEEP");
-            if (partition_selected) attron(COLOR_PAIR(COLOR_SELECTED));
-            mvprintw(6 + visual_line - offset, 2,
-                     "  %-16.16s %8.8s %-8.8s %-8.8s %-7.7s %-7.7s %-9.9s",
-                     part->device, size, part->current_fs[0] != '\0' ? part->current_fs : "-",
-                     operation, part->action == ACTION_FORMAT ? filesystem_name(part->target_fs) :
-                     (part->current_fs[0] != '\0' ? part->current_fs : "-"),
-                     usage_name(part->usage), partition_mountpoint(part->usage));
-            if (COLS >= 96) {
-                bool configurable = partition_supports_mount_profile(
-                    part, MOUNT_PROFILE_DEFAULT);
-                printw(" %s", configurable ? mount_profile_name(part->mount_profile) : "-");
-            }
-            if (partition_selected) attroff(COLOR_PAIR(COLOR_SELECTED));
+            draw_partition_row(7 + visual_line - offset, &table, part,
+                               partition_selected);
         }
     }
 }

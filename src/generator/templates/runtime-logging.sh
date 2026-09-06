@@ -28,12 +28,14 @@ initialize_log() {
     umask "$previous_umask"
     readonly LOG_FILE
     # tee runs as a child so output remains visible while being persisted. / tee 作为子进程运行，使输出在持久记录时仍然可见。
+    # /proc/self/fd keeps the already validated descriptor instead of reopening the path. / 使用 /proc/self/fd 复用已校验描述符，而不是重新打开路径。
     exec > >(/usr/bin/tee -a "/proc/self/fd/$LOG_FD") 2>&1
     LOG_TEE_PID=$!
 }
 
 # Register cleanup before starting logging or touching disks. / 在记录日志或操作磁盘前注册清理逻辑。
 trap cleanup EXIT
+# Signal exits share the same EXIT cleanup path and retain the conventional status. / 信号退出复用同一 EXIT 清理路径并保留惯例状态码。
 trap 'exit 130' INT TERM HUP
 initialize_log
 
@@ -62,6 +64,7 @@ ensure_node_idle() {
     fi
     active_swaps=$(swapon --show=NAME --noheadings --raw 2>/dev/null) ||
         die 'Cannot inspect active swap devices.'
+    # Exact whole-line matching avoids confusing similarly prefixed device paths. / 整行精确匹配可避免混淆前缀相似的设备路径。
     if grep -Fxq -- "$node" <<<"$active_swaps"; then
         die "$node is active swap; disable it before running this script"
     fi

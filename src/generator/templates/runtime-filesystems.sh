@@ -67,6 +67,7 @@ mount_filesystems() {
             *) die "Unsupported mount profile $profile for $filesystem" ;;
         esac
         if [[ -n "$options" ]]; then
+            # Pass the selected profile as one option word to avoid accidental splitting. / 将所选配置档作为单个选项参数传递，避免意外拆词。
             mount -o "$options" -- "$device" "$destination"
         else
             mount -- "$device" "$destination"
@@ -77,6 +78,7 @@ mount_filesystems() {
     # Enable swap only after the complete directory tree is mounted. / 完整目录树挂载后才启用 Swap。
     for ((index=0; index<${#PART_DEVICES[@]}; ++index)); do
         [[ "${PART_USAGES[index]}" == swap ]] || continue
+        # Register ownership before swapon so an immediate failure still reaches cleanup state. / 在 swapon 前登记归属，使紧随其后的失败仍能进入清理状态。
         SWAPS_TO_DISABLE+=("${PART_DEVICES[index]}")
         swapon -- "${PART_DEVICES[index]}"
     done
@@ -129,6 +131,7 @@ setup_local_mirror() {
     cp -a /etc/pacman.conf "$WORK_DIR/host-pacman.conf"
     cp -a /etc/pacman.d/mirrorlist "$WORK_DIR/host-mirrorlist"
     HOST_PACMAN_CHANGED=true
+    # Setting the flag after both copies makes cleanup depend on a complete backup pair. / 两份备份都完成后才设置标志，使清理只依赖完整备份对。
     # Only this file:// bootstrap runs with signature checks disabled. / 只有本次 file:// 引导会关闭签名检查。
     sed -i -E 's/^[[:space:]#]*SigLevel[[:space:]]*=.*/SigLevel = Never/' /etc/pacman.conf
     printf '%s\n' 'Server = file:///run/media/root/F2FS-DATA/repo/archlinux/$repo/os/$arch' > /etc/pacman.d/mirrorlist
@@ -164,6 +167,7 @@ NGINX_CONFIG
     fi
     nginx -t -q -c "$WORK_DIR/local-mirror-nginx.conf" \
         -g "pid $WORK_DIR/local-mirror-nginx.pid;"
+    # Foreground mode gives this script a concrete child PID without involving systemd. / 前台模式让脚本直接持有子进程 PID，不依赖 systemd。
     nginx -c "$WORK_DIR/local-mirror-nginx.conf" \
         -g "daemon off; pid $WORK_DIR/local-mirror-nginx.pid;" &
     # Record the child before readiness polling so cleanup can always reap it. / 就绪轮询前记录子进程，确保清理始终可以回收它。

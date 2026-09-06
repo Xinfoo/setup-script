@@ -163,14 +163,15 @@ CMake 还提供：
 
 ## TUI 流程
 
-界面需要至少 `80x24` 的终端。主页将方案拆成六个可随时返回修改的章节：
+界面需要至少 `80x24` 的终端。主页将方案拆成七个可随时返回修改的章节：
 
 1. `Storage`：参与安装的磁盘、各盘布局、文件系统和挂载用途；
-2. `Base system`：CPU 平台、内核、Locale、时区、镜像、systemd-boot、EFI NVRAM 和 Secure Boot；
+2. `Base system`：CPU 平台、内核、Locale、镜像、systemd-boot、EFI NVRAM 和 Secure Boot；
 3. `Hardware`：Desktop/Laptop 模式、Intel GPU、NVIDIA 和蓝牙；
 4. `Desktop & software`：桌面环境和可选软件组；
-5. `Identity`：hostname、username，以及安装时输入 root 和普通用户密码的说明；
-6. `Review & output`：验证、预览、生成或生成后运行。
+5. `Identity`：hostname、username、时区，以及安装时输入 root 和普通用户密码的说明；
+6. `Review`：汇总安装方案并集中显示警告和验证错误；
+7. `Output`：使用启动参数确定的输出位置生成或预览脚本，以及生成后运行。
 
 全局按键：
 
@@ -241,7 +242,7 @@ F2FS 可选择：
 - hostname、username 和 timezone 格式有效；
 - 100 GiB ROOT + HOME 布局有足够空间。
 
-有阻断错误时不能生成脚本。Secure Boot 和可移动磁盘目前作为明确警告显示。
+有阻断错误时不能生成脚本。Secure Boot、本地镜像和可移动磁盘目前作为明确警告显示。在 Base system 页面开启 Secure Boot 时，TUI 会以默认选中 `No` 的对话框要求用户确认：`shim-signed.pkg.tar.zst` 的来源和可用性由用户自行核实。切换到本地镜像时也会以默认选中 `No` 的对话框提示用户自行验证镜像内容、完整性、兼容性和可用性，并说明唯一 `F2FS-DATA` 分区、F2FS 文件系统、`repo/archlinux` 目录、不得位于安装盘且必须未被使用等识别要求。
 
 审阅页按键：
 
@@ -291,8 +292,8 @@ system
 1. 检查 root、UEFI、命令依赖和 EFI variables；
 2. 核对每个参与安装的目标都是整块磁盘，并比较容量、型号、非空序列号与 GPT 类型；
 3. 核对现有分区的父磁盘、编号、起始扇区、容量、PARTUUID 和 GPT 类型；`KEEP` 还会核对文件系统 UUID 并做只读挂载探测；
-4. 显示存储表；网络源要求输入 `PREPARE`，本地源要求精确输入设备和 UUID，然后才刷新 Live 包数据库并预先解析完整软件包集；
-5. 软件源就绪后，要求从交互式终端输入包含 `/boot` 和 `/` 的磁盘路径，然后立即再做一次所有参与磁盘的身份核对；
+4. 显示存储表；网络源直接刷新 Live 包数据库，本地源则先显示风险和检测到的设备身份，要求选择 `yes/no` 并精确输入 `ACCEPT USE LOCAL MIRROR`，随后预先解析完整软件包集；
+5. 软件源就绪后，以表格列出每个将被擦除、重新分区、格式化、挂载写入或启用为 Swap 的块设备及其父磁盘；用户先选择 `yes/no`，选择 `yes` 后还必须精确输入 `CONFIRM EXECUTE`，然后立即再做一次所有参与磁盘的身份核对；
 6. 分别在选择了引导式布局的磁盘上重建 GPT 并核对新分区；现有分区模式不写对应磁盘的分区表；
 7. 只格式化 `FORMAT`，随后按挂载路径顺序挂载到 `/mnt` 并启用指定 Swap；
 8. 运行 `pacstrap`，再由 `genfstab -U` 根据当前挂载和活动 Swap 完整生成 fstab；
@@ -329,7 +330,7 @@ sudo ./install.sh
 ```
 
 > [!IMPORTANT]
-> 生成的脚本会在预检查和输出方案后，要求输入包含 `/boot` 和 `/` 的完整磁盘路径（例如 `/dev/nvme0n1`）。输入完全一致后才会进入分区和格式化阶段；该检查需要交互式 TTY。
+> 生成的脚本会在预检查和输出方案后，以表格列出所有将被擦除、重新分区、格式化、挂载写入或启用为 Swap 的块设备，以及它们的父磁盘路径和磁盘型号。用户必须先选择 `yes`，再精确输入 `CONFIRM EXECUTE`，才会进入分区和格式化阶段；该确认需要交互式 TTY。
 
 TUI 中的 `X` 会先显示一次默认为 `No` 的运行确认，然后使用当前身份运行 `/usr/bin/bash <output>`，不会自动调用 `sudo`。因此要从 `X` 直接开始安装，应在 Arch Live 的 root shell 中启动构造器。
 
@@ -374,13 +375,15 @@ explicit execution
 
 使用现有分区时，`KEEP`、`FORMAT` 和 `IGNORE` 在审阅页中分开显示。默认安全动作是 `KEEP`；只有用户显式切换为 `FORMAT` 的现有分区才会出现在格式化命令中。
 
-执行脚本会逐块核对磁盘容量、型号和非空序列号，并检查现有分区仍属于各自磁盘。它还会拒绝已挂载的目标节点、活动 Swap 和有 holder 的设备，并在写入前要求手工输入包含 `/boot` 和 `/` 的磁盘路径。
+执行脚本会逐块核对磁盘容量、型号和非空序列号，并检查现有分区仍属于各自磁盘。它还会拒绝已挂载的目标节点、活动 Swap 和有 holder 的设备。写入前会展示包含父磁盘路径、磁盘型号、块设备、操作和目标的完整表格，并依次要求 `yes/no` 选择和精确的 `CONFIRM EXECUTE` 确认。
 
 仍需注意：
 
 - JSON 中保存的仍是 `/dev/...` 路径，而不是完整的 `/dev/disk/by-id` 身份模型；
 - 没有序列号的磁盘只能依靠路径、容量和可用型号核对；
 - 插拔或重排磁盘后，应重新打开 TUI 检查方案；
+- TUI 拉起 `cfdisk` 时使用当前方案中的 `/dev/...` 路径，确认窗口不能防止热插拔、设备重排或路径在确认前后重新绑定；启动前应停止改动块设备，并在 `cfdisk` 内人工核对型号、容量和分区表；
+- 生成脚本会在开始写盘前集中复核所有目标设备，但不会在每一次 `wipefs`、`sfdisk`、`mkfs` 或挂载操作前重复整套身份校验；安装进入写盘阶段后，不应热插拔、重排目标磁盘，也不应使用其他程序改变其分区、挂载或占用状态；
 - 可移动或 USB 磁盘不会被静默过滤，选择时会显示警告并要求二次确认；
 - 当前方案验证不等同于备份或回滚机制；
 - 安装前仍应逐行审阅生成的存储命令。
@@ -389,7 +392,7 @@ explicit execution
 
 本地镜像模式要求恰好一个标签为 `F2FS-DATA` 的分区，其中包含 `repo/archlinux`。脚本会拒绝使用任意参与安装磁盘上的分区作为本地镜像。
 
-确认文本必须精确输入 `BOOTSTRAP <device> <UUID>`。脚本会确认该分区是目标盘之外、未使用的 F2FS，然后以 `ro,nodev,nosuid,noexec` 挂载。Live 环境临时使用 `file://` 和 `SigLevel = Never` 安装 `local_mirror_live` 组中的 nginx；nginx 启动后立即恢复原签名策略，并将软件源切换为仅监听 `127.0.0.1:2304` 的 HTTP 镜像。`pacstrap` 和 chroot 都通过该 HTTP 地址工作，目标 `pacman.conf` 始终保持标准签名策略。chroot 写入永久镜像后，脚本停止 nginx，并在退出清理时恢复 Live 配置、卸载镜像分区。
+脚本会显示本地镜像内容未经认证、软件包及 hook 可用 root 权限运行等风险，以及检测到的设备、UUID 和父磁盘；用户先选择 `yes/no`，选择 `yes` 后还必须精确输入 `ACCEPT USE LOCAL MIRROR`。随后脚本再次核对镜像身份，确认该分区是目标盘之外、未使用的 F2FS，然后以 `ro,nodev,nosuid,noexec` 挂载。Live 环境临时使用 `file://` 和 `SigLevel = Never` 安装 `local_mirror_live` 组中的 nginx；nginx 启动后立即恢复原签名策略，并将软件源切换为仅监听 `127.0.0.1:2304` 的 HTTP 镜像。`pacstrap` 和 chroot 都通过该 HTTP 地址工作，目标 `pacman.conf` 始终保持标准签名策略。chroot 写入永久镜像后，脚本停止 nginx，并在退出清理时恢复 Live 配置、卸载镜像分区。
 
 ## Secure Boot
 
@@ -435,7 +438,10 @@ chmod 644 secure-boot/MOK.crt secure-boot/MOK.cer
 > [!IMPORTANT]
 > `MOK.key` 是可以签署启动代码的私钥。不要将 `secure-boot/`、shim 软件包或其中的密钥提交到 Git，也不要将它们嵌入方案 JSON。
 
-材料目录、shim 包和三个 MOK 文件必须是真实文件，不接受符号链接。开启后，脚本会从当前选定的软件源安装 `sbsigntools`，在私有 tmpfs 中校验 shim 包并提取所需的 EFI 文件；已验证的软件包会临时复制到目标 `/root`，在 chroot 中通过 `pacman -U` 安装，以登记到目标包数据库并执行软件包 hook，安装后立即删除临时副本。完成 chroot 配置后再由 Live 环境使用快照中的材料签名。`MOK.key` 不会被复制或 bind 到目标文件系统；最终只有公开的 `MOK.cer` 会被复制到 EFI 分区。首次启动仍需在 MokManager 中手工注册证书。
+> [!WARNING]
+> builder 不认证 `shim-signed.pkg.tar.zst` 的发布者或来源，也不审查软件包携带的安装脚本和 hook。现有检查只确认包名、包结构、MOK 材料一致性，以及所需 EFI 文件存在签名。用户必须在开启 Secure Boot 前自行核实 shim 包的来源、完整性、内容和对当前系统的可用性。该包会在 chroot 内通过 `pacman -U` 以 root 权限安装。
+
+材料目录、shim 包和三个 MOK 文件必须是真实文件，不接受符号链接。生成脚本在主流程开始时会先显示上述信任边界，并要求精确输入 `TRUST SHIM-SIGNED`；未确认时不会继续任何安装准备。确认后，脚本会从当前选定的软件源安装 `sbsigntools`，在私有 tmpfs 中检查 shim 包并提取所需的 EFI 文件；经过这些结构检查的软件包会临时复制到目标 `/root`，在 chroot 中通过 `pacman -U` 安装，以登记到目标包数据库并执行软件包 hook，安装后立即删除临时副本。完成 chroot 配置后再由 Live 环境使用快照中的材料签名。`MOK.key` 不会被复制或 bind 到目标文件系统；最终只有公开的 `MOK.cer` 会被复制到 EFI 分区。首次启动仍需在 MokManager 中手工注册证书。
 
 Secure Boot 可以与临时本地镜像同时启用。本地镜像模式会临时关闭 pacman 包签名校验，其仓库内容与 `sbsigntools` 的可信性由用户负责。
 
@@ -508,7 +514,7 @@ git show legacy:live/chroot-setup.sh
 - 不提供任意分区表编辑器或分区缩放；
 - 现有文件系统只识别 vfat、Ext4、XFS、F2FS 和 Swap；
 - 方案中仍保存内核动态的 `/dev/...` 名称，磁盘变动后需要人工重新核对；
-- Secure Boot 需要用户自行保护和注册 MOK，更新后的重签名未自动化；
+- Secure Boot 需要用户自行确认 `shim-signed` 的可信来源与可用性、保护和注册 MOK，更新后的重签名未自动化；
 - Hyprland 只提供基础软件和 greetd/ReGreet，不包含完整用户配置；
 - 脚本仍需要在 TTY 中设置 root 和普通用户密码，不是完全无人值守安装器。
 

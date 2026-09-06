@@ -28,6 +28,7 @@ configure_bootloader() {
     fi
     # Physical CPU modes load microcode before the common initramfs. / 物理 CPU 模式会在通用 initramfs 前加载微码。
     if [[ -n "$MICROCODE_FILE" ]]; then
+        # Both entries begin from the same known-good image; the separate fallback preserves a baseline for future option edits. / 两个启动项最初使用同一已知可用镜像；独立回退项为日后的参数修改保留基线。
         cat > /boot/loader/entries/arch.conf <<ENTRY
 title Arch Linux
 linux /$KERNEL_FILE

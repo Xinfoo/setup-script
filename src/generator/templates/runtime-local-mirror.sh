@@ -8,6 +8,7 @@ select_local_mirror_source() {
     if source_text=$(blkid -t LABEL=F2FS-DATA -o device); then
         [[ -z "$source_text" ]] || mapfile -t sources <<<"$source_text"
     else
+        # blkid uses status 2 for no match; other failures mean discovery itself is unreliable. / blkid 以状态 2 表示无匹配，其他状态说明探测本身不可靠。
         source_status=$?
         [[ "$source_status" -eq 2 ]] || die 'Cannot inspect local-mirror labels.'
     fi
@@ -28,6 +29,7 @@ select_local_mirror_source() {
     parent_type=$(lsblk -dnro TYPE -- "$LOCAL_MIRROR_PARENT") ||
         die 'Cannot inspect the local mirror parent disk.'
     [[ "$parent_type" == disk ]] || die 'The local mirror parent is not a whole disk.'
+    # Serial may legitimately be empty, but preserving it when present strengthens later matching. / 序列号可以为空；存在时保存它可加强后续匹配。
     LOCAL_MIRROR_PARENT_SERIAL=$(lsblk -dno SERIAL -- "$LOCAL_MIRROR_PARENT" |
         sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
     LOCAL_MIRROR_SIZE=$(blockdev --getsize64 "$LOCAL_MIRROR_SOURCE") ||
@@ -40,6 +42,7 @@ select_local_mirror_source() {
             die 'The local mirror cannot reside on an installation disk.'
         fi
     done
+    # The source must be idle before the operator is asked to trust and mount it. / 请求操作者信任并挂载镜像前，源设备必须处于空闲状态。
     ensure_node_idle "$LOCAL_MIRROR_SOURCE"
 }
 
@@ -59,6 +62,7 @@ verify_local_mirror_identity() {
         die 'Cannot recheck the local mirror parent.'
     size=$(blockdev --getsize64 "$LOCAL_MIRROR_SOURCE") ||
         die 'Cannot recheck the local mirror size.'
+    # Normalize surrounding whitespace exactly as during the initial capture. / 与首次记录时一样规范化序列号两端空白。
     serial=$(lsblk -dno SERIAL -- "$parent" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
     # All fields must still describe the exact source approved by the operator. / 所有字段必须仍指向操作者确认的同一来源。
     [[ "$uuid" == "$LOCAL_MIRROR_UUID" && "$label" == F2FS-DATA &&
@@ -66,5 +70,6 @@ verify_local_mirror_identity() {
        "$size" == "$LOCAL_MIRROR_SIZE" &&
        "$serial" == "$LOCAL_MIRROR_PARENT_SERIAL" ]] ||
         die 'The local mirror identity changed after confirmation.'
+    # Identity equality is insufficient if another subsystem activated the source meanwhile. / 身份相同仍不足够，期间若被其他子系统启用也必须拒绝。
     ensure_node_idle "$LOCAL_MIRROR_SOURCE"
 }
