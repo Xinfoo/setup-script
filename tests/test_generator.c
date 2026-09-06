@@ -447,6 +447,12 @@ static bool test_automatic_script(void)
                                "confirm_package_preparation() {",
                                "the package preparation confirmation");
     passed &= require_fragment(&script,
+                               "[[ \"$USE_LOCAL_MIRROR\" == true ]] || return 0",
+                               "network repository preparation without confirmation");
+    passed &= forbid_fragment(&script,
+                              "Type PREPARE to continue:",
+                              "the former network repository confirmation");
+    passed &= require_fragment(&script,
                                "confirm_secure_boot_package_source() {",
                                "the Secure Boot package trust confirmation");
     passed &= require_fragment(&script,

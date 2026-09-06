@@ -11,7 +11,7 @@ main() {
     chmod 0700 "$WORK_DIR"
     phase 'Preflight checks'
     preflight
-    # Present and confirm all package-source effects before destructive consent. / 在破坏性授权前展示并确认全部软件源副作用。
+    # Present the plan; only a local-mirror bootstrap requires source confirmation. / 展示计划；仅本地镜像引导需要软件源确认。
     print_plan
     confirm_package_preparation
     prepare_package_source

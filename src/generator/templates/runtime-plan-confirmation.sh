@@ -41,30 +41,25 @@ confirm_secure_boot_package_source() {
         die 'The shim-signed source and usability were not confirmed.'
 }
 
-# Confirm repository preparation before package databases are changed. / 更改软件包数据库前确认仓库准备操作。
+# Confirm only the local-mirror bootstrap trust boundary. / 仅确认本地镜像引导过程的信任边界。
 confirm_package_preparation() {
     local answer
+    # Official network repositories proceed directly; only the local bootstrap changes trust policy. / 官方网络仓库直接继续；只有本地引导会改变信任策略。
+    [[ "$USE_LOCAL_MIRROR" == true ]] || return 0
     # This confirmation occurs before pacman state in the Live environment changes. / 此确认发生在 Live 环境 pacman 状态变化之前。
     [[ -t 0 ]] || die 'Package preparation requires an interactive terminal.'
     printf '\nPackage preparation refreshes the Live package databases.\n'
-    if [[ "$USE_LOCAL_MIRROR" == true ]]; then
-        # Bind consent to both the selected device path and filesystem UUID. / 将授权同时绑定到所选设备路径和文件系统 UUID。
-        printf 'WARNING: installing the local HTTP server temporarily disables signature verification in the Live environment.\n'
-        printf 'The target system keeps its standard package signature policy.\n'
-        printf 'The installer will mount %s read-only and temporarily edit the Live pacman configuration.\n' \
-            "$LOCAL_MIRROR_SOURCE"
-        printf 'Type BOOTSTRAP %s %s to trust this exact source for the server bootstrap: ' \
-            "$LOCAL_MIRROR_SOURCE" "$LOCAL_MIRROR_UUID"
-        IFS= read -r answer || die 'Preparation confirmation was interrupted.'
-        [[ "$answer" == "BOOTSTRAP $LOCAL_MIRROR_SOURCE $LOCAL_MIRROR_UUID" ]] ||
-            die 'Local-mirror server bootstrap was not confirmed.'
-        verify_local_mirror_identity
-        return 0
-    fi
-    # Network repositories need a shorter acknowledgement because no local source is trusted. / 网络仓库无需信任本地源，因此使用较短确认词。
-    printf 'Type PREPARE to continue: '
+    # Bind consent to both the selected device path and filesystem UUID. / 将授权同时绑定到所选设备路径和文件系统 UUID。
+    printf 'WARNING: installing the local HTTP server temporarily disables signature verification in the Live environment.\n'
+    printf 'The target system keeps its standard package signature policy.\n'
+    printf 'The installer will mount %s read-only and temporarily edit the Live pacman configuration.\n' \
+        "$LOCAL_MIRROR_SOURCE"
+    printf 'Type BOOTSTRAP %s %s to trust this exact source for the server bootstrap: ' \
+        "$LOCAL_MIRROR_SOURCE" "$LOCAL_MIRROR_UUID"
     IFS= read -r answer || die 'Preparation confirmation was interrupted.'
-    [[ "$answer" == PREPARE ]] || die 'Package preparation was not confirmed.'
+    [[ "$answer" == "BOOTSTRAP $LOCAL_MIRROR_SOURCE $LOCAL_MIRROR_UUID" ]] ||
+        die 'Local-mirror server bootstrap was not confirmed.'
+    verify_local_mirror_identity
 }
 
 # List every affected block device and require two-stage consent before writes. / 列出全部受影响块设备，并在写入前要求两阶段授权。
