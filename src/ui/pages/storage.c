@@ -293,20 +293,30 @@ static const UiTableColumn storage_columns[] = {
     {"Options", 12, 7, UI_ALIGN_LEFT}
 };
 
-static void draw_disk_group(int y, const DiskPlan *disk, bool active, bool selected)
+static const UiTableColumn disk_group_columns[] = {
+    {"Disk", 26, 18, UI_ALIGN_LEFT},
+    {"Size", 9, 7, UI_ALIGN_RIGHT},
+    {"Model", 28, 12, UI_ALIGN_LEFT},
+    {"Layout", 28, 12, UI_ALIGN_LEFT}
+};
+
+static void draw_disk_group(int y, const UiTableLayout *layout,
+                            const DiskPlan *disk, bool active, bool selected)
 {
     char size[32];
-    char line[512];
+    char device[AI_PATH_LEN + 8];
+    const char *values[sizeof(disk_group_columns) / sizeof(disk_group_columns[0])];
     int color = selected ? COLOR_SELECTED :
                 (disk->mode == STORAGE_EXISTING ? COLOR_TITLE : COLOR_ERROR);
 
     format_size(disk->size_bytes, size, sizeof(size));
-    (void)snprintf(line, sizeof(line), "%c DISK %s   %s   %s   %s",
-                   active ? '>' : ' ', disk->path, size,
-                   disk->model[0] != '\0' ? disk->model : "Unknown model",
-                   storage_mode_name(disk->mode));
+    (void)snprintf(device, sizeof(device), "%c DISK %s", active ? '>' : ' ', disk->path);
+    values[0] = device;
+    values[1] = size;
+    values[2] = disk->model[0] != '\0' ? disk->model : "Unknown model";
+    values[3] = storage_mode_name(disk->mode);
     attron(A_BOLD | COLOR_PAIR(color));
-    put_clipped(y, 2, COLS - 4, line);
+    draw_table_row(stdscr, y, layout, disk_group_columns, values);
     attroff(A_BOLD | COLOR_PAIR(color));
 }
 
@@ -355,6 +365,7 @@ void draw_storage(UiState *state)
     int visual_line = 0;
     int offset;
     UiTableLayout table;
+    UiTableLayout disk_table;
 
     if (storage->disk_count == 0) {
         keys = "Up/Down move   D add disk   R refresh   Esc back";
@@ -386,6 +397,8 @@ void draw_storage(UiState *state)
              storage->disk_count);
     calculate_table_layout(&table, 2, COLS - 4, storage_columns,
                            sizeof(storage_columns) / sizeof(storage_columns[0]), 4);
+    calculate_table_layout(&disk_table, 2, COLS - 4, disk_group_columns,
+                           sizeof(disk_group_columns) / sizeof(disk_group_columns[0]), 3);
     attron(A_BOLD);
     draw_table_header(stdscr, 5, &table, storage_columns);
     attroff(A_BOLD);
@@ -401,7 +414,8 @@ void draw_storage(UiState *state)
         bool selected = disk_index == state->active_disk && state->row < 0;
         if (visual_line >= offset && visual_line < offset + available) {
             int y = 6 + visual_line - offset;
-            draw_disk_group(y, disk, disk_index == state->active_disk, selected);
+            draw_disk_group(y, &disk_table, disk,
+                            disk_index == state->active_disk, selected);
         }
         ++visual_line;
         for (size_t index = 0; index < disk->partition_count; ++index, ++visual_line) {
