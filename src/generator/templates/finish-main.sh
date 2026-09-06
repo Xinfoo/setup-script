@@ -18,7 +18,7 @@ main() {
     snapshot_secure_boot_assets
     probe_kept_filesystems
     confirm_destructive_actions
-    # The final disk-path confirmation is followed by an immediate live-state recheck. / 最终磁盘路径确认后立即进行实时状态复核。
+    # The two-stage storage confirmation is followed by an immediate live-state recheck. / 两阶段存储确认后立即进行实时状态复核。
     phase 'Rechecking storage immediately before writes'
     verify_storage_state
     # Apply storage operations in partition, format, mount, and swap order. / 按分区、格式化、挂载和 Swap 顺序执行存储操作。

@@ -423,11 +423,23 @@ static bool test_automatic_script(void)
                                "confirm_destructive_actions() {",
                                "the destructive confirmation function");
     passed &= require_fragment(&script,
-                               "Type the full target disk path (%s) to continue:",
-                               "the target-disk confirmation prompt");
+                               "'PARENT DISK' 'DISK MODEL' 'BLOCK DEVICE' 'OPERATIONS' 'TARGET'",
+                               "the affected-device table header");
     passed &= require_fragment(&script,
-                               "[[ \"$answer\" == \"$TARGET_DISK\" ]]",
-                               "an exact target-disk confirmation check");
+                               "'ERASE+REPARTITION' '-'",
+                               "the whole-disk erase table row");
+    passed &= require_fragment(&script,
+                               "Continue with these storage operations? [yes/no]:",
+                               "the explicit storage yes-or-no prompt");
+    passed &= require_fragment(&script,
+                               "Type CONFIRM EXECUTE to begin storage execution:",
+                               "the final storage confirmation prompt");
+    passed &= require_fragment(&script,
+                               "[[ \"$answer\" == 'CONFIRM EXECUTE' ]]",
+                               "an exact final storage confirmation check");
+    passed &= forbid_fragment(&script,
+                              "Type the full target disk path",
+                              "the former single-disk confirmation prompt");
     passed &= require_fragment(&script,
                                "[[ \"$current_type\" == disk ]]",
                                "a whole-disk runtime check");
@@ -936,6 +948,12 @@ static bool test_multi_disk_format_only_script(void)
                                "the format-only mount skip");
     passed &= require_fragment(&script, "auto-data)",
                                "the single data-disk partitioner");
+    passed &= require_fragment(&script,
+                               "disk=${INSTALL_DISKS[disk_index]}",
+                               "parent-disk lookup for affected-device rows");
+    passed &= require_fragment(&script,
+                               "\"$disk\" \"$model\" \"${PART_DEVICES[index]}\" \"$operation\" \"$target\"",
+                               "partition operations paired with their parent disk and model");
     generated_script_destroy(&script);
     return passed;
 }

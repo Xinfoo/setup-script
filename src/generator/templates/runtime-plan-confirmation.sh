@@ -67,13 +67,62 @@ confirm_package_preparation() {
     [[ "$answer" == PREPARE ]] || die 'Package preparation was not confirmed.'
 }
 
-# Require the full target disk path before destructive writes. / 破坏性写入前要求完整输入目标磁盘路径。
+# List every affected block device and require two-stage consent before writes. / 列出全部受影响块设备，并在写入前要求两阶段授权。
 confirm_destructive_actions() {
-    local answer
-    # Require the complete system-disk path immediately before write-side validation. / 在写入前复核之前要求输入完整系统盘路径。
+    local answer index disk_index disk model mode action usage operation target
     [[ -t 0 ]] || die 'Destructive confirmation requires an interactive terminal.'
-    printf '\nThis plan can overwrite filesystems and cannot be rolled back.\n'
-    printf 'Type the full target disk path (%s) to continue: ' "$TARGET_DISK"
-    IFS= read -r answer || die 'Confirmation input was interrupted.'
-    [[ "$answer" == "$TARGET_DISK" ]] || die 'Target disk confirmation did not match.'
+    printf '\nThe following table lists every disk and block device that will be erased, formatted, mounted for writing, or enabled as swap.\n\n'
+    printf '%-22s  %-28s  %-22s  %-30s  %s\n' \
+        'PARENT DISK' 'DISK MODEL' 'BLOCK DEVICE' 'OPERATIONS' 'TARGET'
+    printf '%-22s  %-28s  %-22s  %-30s  %s\n' \
+        '-----------' '----------' '------------' '----------' '------'
+    # Group whole-disk and partition operations by parent disk. / 按父磁盘对整盘和分区操作分组。
+    for ((disk_index=0; disk_index<${#INSTALL_DISKS[@]}; ++disk_index)); do
+        disk=${INSTALL_DISKS[disk_index]}
+        model=${DISK_MODELS[disk_index]:-unknown}
+        mode=${DISK_MODES[disk_index]}
+        if [[ "$mode" != existing ]]; then
+            printf '%-22s  %-28s  %-22s  %-30s  %s\n' \
+                "$disk" "$model" "$disk" 'ERASE+REPARTITION' '-'
+        fi
+        for ((index=0; index<${#PART_DEVICES[@]}; ++index)); do
+            [[ "${PART_DISK_INDEXES[index]}" == "$disk_index" ]] || continue
+            action=${PART_ACTIONS[index]}
+            usage=${PART_USAGES[index]}
+            if [[ "$action" == format ]]; then
+                [[ "$mode" == existing ]] && operation='FORMAT' || operation='CREATE+FORMAT'
+            else
+                operation='KEEP'
+            fi
+            case "$usage" in
+                swap)
+                    operation+='+SWAPON'
+                    target='swap'
+                    ;;
+                unused)
+                    target='-'
+                    ;;
+                *)
+                    operation+='+MOUNT/WRITE'
+                    target=${PART_MOUNTPOINTS[index]}
+                    ;;
+            esac
+            printf '%-22s  %-28s  %-22s  %-30s  %s\n' \
+                "$disk" "$model" "${PART_DEVICES[index]}" "$operation" "$target"
+        done
+    done
+    printf '\nThis plan can destroy data and cannot be rolled back.\n'
+    # A plain yes/no decision precedes the deliberately exact final phrase. / 普通 yes/no 选择之后仍需输入精确的最终确认短语。
+    while true; do
+        printf 'Continue with these storage operations? [yes/no]: '
+        IFS= read -r answer || die 'Confirmation input was interrupted.'
+        case "${answer,,}" in
+            yes) break ;;
+            no) die 'Storage execution was declined.' ;;
+            *) printf 'Please enter yes or no.\n' ;;
+        esac
+    done
+    printf 'Type CONFIRM EXECUTE to begin storage execution: '
+    IFS= read -r answer || die 'Final confirmation input was interrupted.'
+    [[ "$answer" == 'CONFIRM EXECUTE' ]] || die 'Final storage confirmation did not match.'
 }
