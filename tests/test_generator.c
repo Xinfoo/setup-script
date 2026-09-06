@@ -214,6 +214,24 @@ static bool forbid_fragment(const GeneratedScript *script, const char *fragment,
     return false;
 }
 
+static bool require_fragment_count(const GeneratedScript *script, const char *fragment,
+                                   size_t expected, const char *description)
+{
+    const char *cursor = script->text;
+    size_t count = 0;
+    size_t length = strlen(fragment);
+
+    if (length == 0) return false;
+    while ((cursor = strstr(cursor, fragment)) != NULL) {
+        ++count;
+        cursor += length;
+    }
+    if (count == expected) return true;
+    (void)fprintf(stderr, "generated script has %zu occurrences of %s; expected %zu\n",
+                  count, description, expected);
+    return false;
+}
+
 static bool require_order(const GeneratedScript *script, const char *first,
                           const char *second, const char *description)
 {
@@ -223,6 +241,68 @@ static bool require_order(const GeneratedScript *script, const char *first,
     if (left != NULL && right != NULL && left < right) return true;
     (void)fprintf(stderr, "generated script has the wrong order for %s\n", description);
     return false;
+}
+
+/* 用真实 sed 验证 kms 位于数组各位置时都能得到规范的单空格结果。 */
+static bool test_mkinitcpio_kms_rewrite(void)
+{
+    static const char input[] =
+        "HOOKS=(kms keyboard filesystems)\n"
+        "HOOKS=(base modconf kms keyboard filesystems)\n"
+        "HOOKS=(base modconf keyboard kms)\n"
+        "HOOKS=(kms)\n";
+    static const char expected[] =
+        "HOOKS=(keyboard filesystems)\n"
+        "HOOKS=(base modconf keyboard filesystems)\n"
+        "HOOKS=(base modconf keyboard)\n"
+        "HOOKS=()\n";
+    static const char expression[] =
+        "/^HOOKS=/ {"
+        "s/[[:space:]]+kms[[:space:]]+/ /g;"
+        "s/\\([[:space:]]*kms[[:space:]]+/(/g;"
+        "s/[[:space:]]+kms[[:space:]]*\\)/)/g;"
+        "s/\\([[:space:]]*kms[[:space:]]*\\)/()/g;"
+        "}";
+    char path[] = "/tmp/arch-install-mkinitcpio-test-XXXXXX";
+    char error[256] = {0};
+    ProcessResult result = {0};
+    char *contents;
+    char *const arguments[] = {
+        "/usr/bin/sed", "-i", "-E", (char *)expression, path, NULL
+    };
+    FILE *file;
+    int descriptor = mkstemp(path);
+    bool write_ok;
+    bool passed;
+
+    if (descriptor < 0) return false;
+    file = fdopen(descriptor, "w");
+    if (file == NULL) {
+        (void)close(descriptor);
+        (void)unlink(path);
+        return false;
+    }
+    write_ok = fputs(input, file) != EOF;
+    if (fclose(file) != 0) write_ok = false;
+    if (!write_ok) {
+        (void)unlink(path);
+        return false;
+    }
+    if (!run_capture(arguments[0], arguments, &result, error, sizeof(error))) {
+        (void)fprintf(stderr, "cannot test mkinitcpio HOOKS rewrite: %s\n", error);
+        (void)unlink(path);
+        return false;
+    }
+    passed = result.status == 0;
+    process_result_free(&result);
+    contents = read_file(path);
+    if (contents == NULL || strcmp(contents, expected) != 0) {
+        (void)fprintf(stderr, "mkinitcpio HOOKS rewrite produced an unexpected result\n");
+        passed = false;
+    }
+    free(contents);
+    if (unlink(path) != 0) passed = false;
+    return passed;
 }
 
 /* 自动分区场景覆盖生成脚本的主体流程、运行时复核、清理和 Secure Boot。 */
@@ -252,6 +332,69 @@ static bool test_automatic_script(void)
     passed &= require_fragment(&script,
                                "# Generated target-system settings / 自动生成的目标系统设置",
                                "a bilingual nested chroot section comment");
+    passed &= require_fragment(&script,
+                               "cat > /etc/environment <<'ENVIRONMENT'\n#\n"
+                               "# This file is parsed by pam_env module\n#\n"
+                               "# Syntax: simple \"KEY=VAL\" pairs on separate lines\n#\n\n"
+                               "XMODIFIERS=@im=fcitx\n"
+                               "SDL_IM_MODULE=fcitx\n"
+                               "GLFW_IM_MODULE=ibus\n"
+                               "ENVIRONMENT\n}",
+                               "the complete Arch environment file with its standard header");
+    passed &= forbid_fragment(&script,
+                              "cat >> /etc/environment",
+                              "append-only environment configuration");
+    passed &= require_fragment(&script,
+                               "cat > /etc/hosts <<HOSTS\n"
+                               "# Static table lookup for hostnames.\n"
+                               "# See hosts(5) for details.\n\n"
+                               "127.0.0.1 localhost\n"
+                               "::1 localhost\n"
+                               "127.0.1.1 $HOSTNAME_VALUE.localdomain $HOSTNAME_VALUE\n"
+                               "HOSTS",
+                               "the complete hosts file with its standard header");
+    passed &= require_fragment(&script,
+                               "            <family>Noto Sans CJK SC</family>\n"
+                               "            <family>Noto Sans CJK TC</family>\n"
+                               "            <family>Noto Sans CJK JP</family>\n"
+                               "            <family>Noto Sans CJK KR</family>\n",
+                               "the complete regional sans-serif CJK fallback order");
+    passed &= require_fragment(&script,
+                               "            <family>Noto Serif CJK SC</family>\n"
+                               "            <family>Noto Serif CJK TC</family>\n"
+                               "            <family>Noto Serif CJK JP</family>\n"
+                               "            <family>Noto Serif CJK KR</family>\n",
+                               "the complete regional serif CJK fallback order");
+    passed &= require_fragment(&script,
+                               "            <family>Sarasa Mono SC</family>\n"
+                               "            <family>Sarasa Mono TC</family>\n"
+                               "            <family>Sarasa Mono J</family>\n"
+                               "            <family>Sarasa Mono K</family>\n",
+                               "the complete regional monospace CJK fallback order");
+    passed &= forbid_fragment(&script,
+                              "<alias><family>",
+                              "the compacted fontconfig format");
+    passed &= require_fragment(&script,
+                               "cat > /etc/systemd/timesyncd.conf.d/custom.conf <<'TIME'\n"
+                               "[Time]\n"
+                               "NTP=cn.ntp.org.cn time.windows.com cn.pool.ntp.org time.cloudflare.com\n"
+                               "TIME",
+                               "the custom timesyncd drop-in");
+    passed &= forbid_fragment(&script,
+                              "/etc/systemd/timesyncd.conf.d/local.conf",
+                              "the former timesyncd drop-in path");
+    passed &= require_fragment(&script,
+                               "################################################################################\n"
+                               "############################ Arch Linux mirrorlist #############################\n"
+                               "################################################################################\n\n"
+                               "Server = https://mirrors.tuna.tsinghua.edu.cn/archlinux/$repo/os/$arch\n",
+                               "the legacy China mirrorlist header and first server");
+    passed &= require_fragment(&script,
+                               "Server = https://mirrors.xjtu.edu.cn/archlinux/$repo/os/$arch\n"
+                               "MIRRORS",
+                               "the legacy China mirrorlist final server");
+    passed &= require_fragment_count(&script, "Server = https://", 21,
+                                     "legacy China mirror servers");
     passed &= require_fragment(&script,
                                "# Installation orchestration / 安装流程编排",
                                "a bilingual installation-flow section comment");
@@ -298,9 +441,24 @@ static bool test_automatic_script(void)
     passed &= require_fragment(&script,
                                "bsdtar -xOf \"$SECURE_BOOT_ASSET_SNAPSHOT/shim-signed.pkg.tar.zst\"",
                                "controlled shim data extraction");
-    passed &= forbid_fragment(&script,
-                              "pacman -U --needed --noconfirm /root/shim-signed.pkg.tar.zst",
-                              "execution of an untrusted shim package in the target");
+    passed &= require_fragment(&script,
+                               "\"$SECURE_BOOT_ASSET_SNAPSHOT/shim-signed.pkg.tar.zst\" \\\n"
+                               "            \"$TARGET_ROOT/root/.arch-install-shim-signed.pkg.tar.zst\"",
+                               "verified shim package staging into the target");
+    passed &= require_fragment(&script,
+                               "pacman -U --needed --noconfirm /root/.arch-install-shim-signed.pkg.tar.zst",
+                               "shim package installation in the target");
+    passed &= require_fragment(&script,
+                               "rm -f -- /root/.arch-install-shim-signed.pkg.tar.zst",
+                               "staged shim package cleanup inside the target");
+    passed &= require_order(&script,
+                            "    snapshot_secure_boot_assets\n",
+                            "    write_chroot_script\n",
+                            "Secure Boot verification before target staging");
+    passed &= require_order(&script,
+                            "        pacman -U --needed --noconfirm /root/.arch-install-shim-signed.pkg.tar.zst\n",
+                            "    bootctl --no-variables install\n",
+                            "shim package installation before bootloader setup");
     passed &= require_fragment(&script,
                                "phase 'Signing boot files outside the target chroot'",
                                "host-side Secure Boot signing");
@@ -321,6 +479,17 @@ static bool test_automatic_script(void)
                               "sbsign --key \"$ASSET_DIR/secure-boot/MOK.key\"",
                               "signing directly from mutable source assets");
     passed &= forbid_fragment(&script, ".unsigned", "a renamed-away original kernel");
+    passed &= require_fragment(&script,
+                               "atomic_install_file \"$kernel_original\" \"$kernel_original.bak\" 0644",
+                               "the retained unsigned kernel backup");
+    passed &= require_order(&script,
+                            "    sbverify --cert \"$secure_root/secure-boot/MOK.crt\" \"$kernel_signed\" >/dev/null\n",
+                            "    atomic_install_file \"$kernel_original\" \"$kernel_original.bak\" 0644\n",
+                            "signature verification before retaining the unsigned kernel");
+    passed &= require_order(&script,
+                            "    atomic_install_file \"$kernel_original\" \"$kernel_original.bak\" 0644\n",
+                            "    atomic_install_file \"$kernel_signed\" \"$kernel_original\" 0644\n",
+                            "unsigned backup before signed-kernel replacement");
     passed &= require_order(&script,
                             "    atomic_install_file \"$kernel_signed\" \"$kernel_original\" 0644\n",
                             "    atomic_install_file \"$secure_root/shimx64.efi\" \\\n        \"$TARGET_ROOT/boot/EFI/BOOT/BOOTX64.EFI\" 0644\n",
@@ -329,8 +498,14 @@ static bool test_automatic_script(void)
                                "ROOT_UUID=$(blkid -s UUID -o value -- \"$ROOT_DEVICE\") || {",
                                "checked root UUID discovery");
     passed &= require_fragment(&script,
-                               "genfstab -U \"$TARGET_ROOT\" > \"$TARGET_ROOT/etc/fstab\"",
-                               "complete fstab generation through genfstab");
+                               "printf '%s\\n' '# Static information about the filesystems.'",
+                               "the standard fstab header");
+    passed &= require_fragment(&script,
+                               "printf '%s\\n' '# <file system> <dir> <type> <options> <dump> <pass>'",
+                               "the standard fstab column header");
+    passed &= require_fragment(&script,
+                               "genfstab -U \"$TARGET_ROOT\"\n    } > \"$TARGET_ROOT/etc/fstab\"",
+                               "complete fstab generation through one overwrite");
     passed &= forbid_fragment(&script,
                               "UUID=%s none swap defaults 0 0",
                               "manual swap fstab generation");
@@ -342,11 +517,112 @@ static bool test_automatic_script(void)
                                "ext4) mkfs.ext4 -F \"$device\" ;;",
                                "the FORMAT filesystem path");
     passed &= require_fragment(&script,
-                               "readonly FALLBACK_IMAGE='initramfs-linux-lts-fallback.img'",
-                               "the real fallback initramfs name");
+                               "cat > /boot/loader/entries/arch-fallback.conf <<ENTRY\n"
+                               "title Arch Linux Fallback\n"
+                               "linux /$KERNEL_FILE\n"
+                               "initrd /$MICROCODE_FILE\n"
+                               "initrd /$INITRAMFS_FILE\n"
+                               "options root=UUID=$ROOT_UUID rw loglevel=3\n"
+                               "ENTRY",
+                               "the legacy parameter-fallback entry with microcode");
     passed &= require_fragment(&script,
-                               "initrd /$FALLBACK_FILE",
-                               "the fallback boot entry");
+                               "cat > /boot/loader/entries/arch-fallback.conf <<ENTRY\n"
+                               "title Arch Linux Fallback\n"
+                               "linux /$KERNEL_FILE\n"
+                               "initrd /$INITRAMFS_FILE\n"
+                               "options root=UUID=$ROOT_UUID rw loglevel=3\n"
+                               "ENTRY",
+                               "the legacy parameter-fallback entry without microcode");
+    passed &= require_fragment(&script,
+                               "cat > /boot/loader/entries/arch.conf <<ENTRY\n"
+                               "title Arch Linux\n"
+                               "linux /$KERNEL_FILE\n"
+                               "initrd /$MICROCODE_FILE\n"
+                               "initrd /$INITRAMFS_FILE\n"
+                               "options root=UUID=$ROOT_UUID rw loglevel=3\n"
+                               "ENTRY",
+                               "the legacy normal entry with microcode");
+    passed &= require_fragment(&script,
+                               "cat > /boot/loader/entries/arch.conf <<ENTRY\n"
+                               "title Arch Linux\n"
+                               "linux /$KERNEL_FILE\n"
+                               "initrd /$INITRAMFS_FILE\n"
+                               "options root=UUID=$ROOT_UUID rw loglevel=3\n"
+                               "ENTRY",
+                               "the legacy normal entry without microcode");
+    passed &= require_fragment(&script,
+                               "cat > /boot/loader/loader.conf <<'LOADER'\n"
+                               "default arch.conf\n"
+                               "editor no\n"
+                               "timeout 3\n"
+                               "console-mode keep\n"
+                               "LOADER",
+                               "the legacy systemd-boot loader settings");
+    passed &= forbid_fragment(&script,
+                              "-fallback.img",
+                              "an initramfs image no longer generated by default");
+    passed &= forbid_fragment(&script,
+                              "FALLBACK_FILE",
+                              "the removed fallback-initramfs variable");
+    passed &= require_fragment(&script,
+                               "sed -i -E '/^HOOKS=/ {\n"
+                               "            s/[[:space:]]+kms[[:space:]]+/ /g\n"
+                               "            s/\\([[:space:]]*kms[[:space:]]+/(/g\n"
+                               "            s/[[:space:]]+kms[[:space:]]*\\)/)/g\n"
+                               "            s/\\([[:space:]]*kms[[:space:]]*\\)/()/g\n"
+                               "        }' /etc/mkinitcpio.conf",
+                               "position-aware kms hook removal");
+    passed &= forbid_fragment(&script,
+                              "/^HOOKS=/s/(^|[ (])kms([ )]|$)/\\1\\2/",
+                              "the doubled-whitespace kms rewrite");
+    passed &= require_fragment(&script,
+                               "local user_shell",
+                               "the selected Zsh path variable");
+    passed &= require_fragment(&script,
+                               "if [[ -x /usr/bin/zsh ]]; then\n"
+                               "        user_shell=/usr/bin/zsh\n"
+                               "    elif [[ -x /bin/zsh ]]; then\n"
+                               "        user_shell=/bin/zsh\n"
+                               "    else\n"
+                               "        printf 'ERROR: zsh is not executable at /usr/bin/zsh or /bin/zsh.\\n' >&2\n"
+                               "        return 1\n"
+                               "    fi",
+                               "validated Zsh path selection and failure handling");
+    passed &= require_fragment(&script,
+                               "useradd -m -G wheel -s \"$user_shell\" \"$USERNAME\"",
+                               "new-user creation with the selected Zsh path");
+    passed &= forbid_fragment(&script,
+                              "useradd -m -G wheel -s /bin/zsh",
+                              "an unconditional legacy Zsh path");
+    passed &= require_fragment(&script,
+                               "cat > /etc/greetd/config.toml <<'GREETD'\n"
+                               "[terminal]\n"
+                               "vt = 1\n\n"
+                               "[default_session]\n"
+                               "command = \"dbus-run-session start-hyprland -- -c /etc/greetd/hyprland.lua\"\n"
+                               "user = \"greeter\"\n"
+                               "GREETD",
+                               "the legacy greetd session configuration");
+    passed &= require_fragment(&script,
+                               "cat > /etc/greetd/hyprland.lua <<'HYPRLAND'\n"
+                               "hl.monitor({\n"
+                               "    output   = \"\",\n"
+                               "    mode     = \"highrr\",\n"
+                               "    position = \"auto\",\n"
+                               "    scale    = \"auto\",\n"
+                               "})\n\n"
+                               "hl.on(\"hyprland.start\", function()\n"
+                               "\thl.exec_cmd(\"regreet; hyprctl dispatch 'hl.dsp.exit()'\")\n"
+                               "end)\n"
+                               "hl.config({\n"
+                               "    misc = {\n"
+                               "        disable_hyprland_logo = true,\n"
+                               "        disable_splash_rendering = true,\n"
+                               "        disable_hyprland_guiutils_check = true,\n"
+                               "    },\n"
+                               "})\n"
+                               "HYPRLAND",
+                               "the legacy maintainable greetd Hyprland configuration");
     passed &= require_fragment(&script, "cleanup() {", "the cleanup function");
     passed &= require_fragment(&script, "trap cleanup EXIT", "the cleanup trap");
     passed &= require_fragment(&script,
@@ -371,6 +647,18 @@ static bool test_automatic_script(void)
     passed &= require_fragment(&script,
                                "${entry,,}\" == *\"${boot_partuuid,,}\"*",
                                "EFI entry matching by partition identity");
+    passed &= require_fragment(&script,
+                               "label='Linux Boot Manager'",
+                               "the unified EFI boot entry label");
+    passed &= forbid_fragment(&script,
+                              "label='Arch Linux'",
+                              "a Secure Boot-specific EFI entry label");
+    passed &= require_fragment(&script,
+                               "SHIMX64.EFI,Linux Boot Manager,,Linux Boot Manager\\r\\n",
+                               "the unified shim fallback entry label");
+    passed &= forbid_fragment(&script,
+                              "SHIMX64.EFI,Arch Linux,,Arch Linux Secure Boot",
+                              "the old shim fallback entry label");
     passed &= require_fragment(&script,
                                "actual_start_bytes=$((actual_start * 512))",
                                "lsblk START conversion on 512-byte units");
@@ -484,7 +772,7 @@ static bool test_existing_keep_and_format_actions(void)
     return passed;
 }
 
-/* 临时本地镜像场景确认信任提示、身份复核和只读绑定挂载顺序。 */
+/* 临时本地镜像场景确认 nginx 引导、HTTP 切换和目标标准签名策略。 */
 static bool test_local_mirror_script(void)
 {
     DiskInfo disk;
@@ -501,8 +789,8 @@ static bool test_local_mirror_script(void)
 
     if (!generate_script(&plan, &script)) return false;
     passed &= require_fragment(&script,
-                               "Type UNSIGNED %s %s to trust this exact source:",
-                               "an explicit unsigned-mirror confirmation");
+                               "Type BOOTSTRAP %s %s to trust this exact source",
+                               "an explicit local-server bootstrap confirmation");
     passed &= require_fragment(&script,
                                "LOCAL_MIRROR_UUID=$(blkid -s UUID",
                                "local mirror UUID capture");
@@ -510,23 +798,32 @@ static bool test_local_mirror_script(void)
                                "verify_local_mirror_identity",
                                "local mirror identity revalidation");
     passed &= require_fragment(&script,
-                               "Server = file:///var/cache/arch-install-repo/",
-                               "the target-visible read-only local repository URL");
+                               "LOCAL_MIRROR_LIVE_PACKAGES=(\n    'nginx'\n)",
+                               "the configurable local-mirror server package");
     passed &= require_fragment(&script,
-                               "mount --bind -- /run/media/root/F2FS-DATA/repo/archlinux",
-                               "an explicit target local-repository bind mount");
+                               "listen 127.0.0.1:2304;",
+                               "a loopback-only temporary nginx server");
     passed &= require_fragment(&script,
-                               "mount -o remount,bind,ro,nodev,nosuid,noexec",
-                               "restrictive target local-repository mount options");
+                               "Server = http://127.0.0.1:2304/$repo/os/$arch",
+                               "the HTTP mirror inherited by the target");
     passed &= require_order(&script,
-                            "genfstab -U \"$TARGET_ROOT\"",
-                            "        setup_target_local_mirror\n",
-                            "fstab generation before the temporary target mirror bind");
+                            "Server = file:///run/media/root/F2FS-DATA/repo/archlinux/",
+                            "pacman -S --needed --noconfirm \"${LOCAL_MIRROR_LIVE_PACKAGES[@]}\"",
+                            "the file-based nginx bootstrap");
+    passed &= require_order(&script,
+                            "pacman -S --needed --noconfirm \"${LOCAL_MIRROR_LIVE_PACKAGES[@]}\"",
+                            "Server = http://127.0.0.1:2304/$repo/os/$arch",
+                            "the switch to HTTP after nginx installation");
+    passed &= require_order(&script,
+                            "arch-chroot \"$TARGET_ROOT\"",
+                            "        stop_local_mirror_server\n",
+                            "the local server lifetime through chroot configuration");
     passed &= forbid_fragment(&script,
-                              "Server = file:///run/media/root/F2FS-DATA/repo/archlinux/$repo/os/$arch' > \"$TARGET_ROOT/etc/pacman.d/mirrorlist\"",
-                              "a local URL hidden from the target chroot");
-    passed &= forbid_fragment(&script, "127.0.0.1:2304", "a dead localhost mirror URL");
-    passed &= forbid_fragment(&script, "nginx", "an unsigned temporary mirror server");
+                              "mount --bind -- /run/media/root/F2FS-DATA/repo/archlinux",
+                              "a target local-repository bind mount");
+    passed &= forbid_fragment(&script,
+                              "\"$TARGET_ROOT/etc/pacman.conf\"",
+                              "a target pacman signature-policy modification");
     generated_script_destroy(&script);
     return passed;
 }
@@ -599,6 +896,7 @@ static bool test_multi_disk_format_only_script(void)
 int main(void)
 {
     /* 汇总各集成场景，保留独立结果以便一次运行显示全部失败项。 */
+    bool mkinitcpio_rewrite = test_mkinitcpio_kms_rewrite();
     bool automatic = test_automatic_script();
     bool existing = test_existing_keep_and_format_actions();
     bool symlink = test_output_symlink_is_rejected();
@@ -606,18 +904,21 @@ int main(void)
     bool custom_packages = test_custom_package_config_is_emitted();
     bool multi_disk = test_multi_disk_format_only_script();
 
+    (void)printf("%s mkinitcpio kms rewrite\n",
+                 mkinitcpio_rewrite ? "PASS" : "FAIL");
     (void)printf("%s automatic generator integration\n",
                  automatic ? "PASS" : "FAIL");
     (void)printf("%s existing KEEP/FORMAT integration\n",
                  existing ? "PASS" : "FAIL");
     (void)printf("%s output symlink rejection\n",
                  symlink ? "PASS" : "FAIL");
-    (void)printf("%s local mirror hardening\n",
+    (void)printf("%s local mirror HTTP architecture\n",
                  local_mirror ? "PASS" : "FAIL");
     (void)printf("%s custom package configuration\n",
                  custom_packages ? "PASS" : "FAIL");
     (void)printf("%s multi-disk format-only generation\n",
                  multi_disk ? "PASS" : "FAIL");
-    return automatic && existing && symlink && local_mirror && custom_packages && multi_disk
+    return mkinitcpio_rewrite && automatic && existing && symlink && local_mirror &&
+                   custom_packages && multi_disk
                ? EXIT_SUCCESS : EXIT_FAILURE;
 }

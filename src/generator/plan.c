@@ -286,6 +286,9 @@ static void emit_required_packages(ScriptWriter *writer, const InstallPlan *plan
     if (plan->system.terminal_tools) emit_package_group(writer, config, PKG_TERMINAL_TOOLS);
     if (plan->system.extra_tools) emit_package_group(writer, config, PKG_EXTRA_TOOLS);
     if (plan->system.desktop_apps) emit_package_group(writer, config, PKG_DESKTOP_APPS);
+    if (plan->system.local_mirror) {
+        emit_package_group(writer, config, PKG_LOCAL_MIRROR_LIVE);
+    }
     if (plan->system.secure_boot) emit_package_group(writer, config, PKG_SECURE_BOOT_LIVE);
     writer_puts(writer, ")\n");
 }
@@ -408,12 +411,9 @@ bool emit_header_and_plan(ScriptWriter *writer, const InstallPlan *plan,
     const char *kernel = kernel_name(plan->system.kernel);
     char kernel_image[AI_TEXT_LEN];
     char initramfs_image[AI_TEXT_LEN];
-    char fallback_image[AI_TEXT_LEN];
 
     (void)snprintf(kernel_image, sizeof(kernel_image), "vmlinuz-%s", kernel);
     (void)snprintf(initramfs_image, sizeof(initramfs_image), "initramfs-%s.img", kernel);
-    (void)snprintf(fallback_image, sizeof(fallback_image),
-                   "initramfs-%s-fallback.img", kernel);
 
     writer_write(writer, preamble_template, sizeof(preamble_template));
     if (!emit_assignment(writer, "TARGET_DISK", root_disk == NULL ? "" : root_disk->path) ||
@@ -421,8 +421,7 @@ bool emit_header_and_plan(ScriptWriter *writer, const InstallPlan *plan,
         !emit_assignment(writer, "ROOT_DEVICE", root == NULL ? "" : root->device) ||
         !emit_assignment(writer, "BOOT_DEVICE", boot == NULL ? "" : boot->device) ||
         !emit_assignment(writer, "KERNEL_IMAGE", kernel_image) ||
-        !emit_assignment(writer, "INITRAMFS_IMAGE", initramfs_image) ||
-        !emit_assignment(writer, "FALLBACK_IMAGE", fallback_image)) {
+        !emit_assignment(writer, "INITRAMFS_IMAGE", initramfs_image)) {
         return false;
     }
     emit_disk_string_array(writer, "INSTALL_DISKS", plan, 0);
@@ -463,6 +462,8 @@ bool emit_header_and_plan(ScriptWriter *writer, const InstallPlan *plan,
     }
     emit_package_array(writer, "LAPTOP_FIRMWARE_PACKAGES", packages,
                        PKG_LAPTOP_FIRMWARE);
+    emit_package_array(writer, "LOCAL_MIRROR_LIVE_PACKAGES", packages,
+                       PKG_LOCAL_MIRROR_LIVE);
     emit_package_array(writer, "LIVE_SIGNING_PACKAGES", packages,
                        PKG_SECURE_BOOT_LIVE);
     emit_required_packages(writer, plan, packages);

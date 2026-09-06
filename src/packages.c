@@ -23,7 +23,7 @@ static const char *const group_names[PKG_GROUP_COUNT] = {
     "bluetooth", "kde", "kde_recommended", "fcitx", "gnome",
     "gnome_recommended", "ibus", "hyprland", "fonts", "firewall",
     "printer", "archive_tools", "terminal_tools", "extra_tools", "desktop_apps",
-    "secure_boot_live"
+    "local_mirror_live", "secure_boot_live"
 };
 
 static bool valid_package_name(const char *value)
@@ -132,10 +132,11 @@ void packages_init_defaults(PackageConfig *config)
     static const char *const desktop_apps[] = {
         "chromium", "thunderbird", "libreoffice-fresh", "gimp"
     };
+    static const char *const local_mirror_live[] = {"nginx"};
     static const char *const secure_boot_live[] = {"sbsigntools"};
 
     memset(config, 0, sizeof(*config));
-    config->version = 1;
+    config->version = 2;
     SET_DEFAULT(config, PKG_BOOTSTRAP, bootstrap);
     SET_DEFAULT(config, PKG_CORE, core);
     SET_DEFAULT(config, PKG_KERNEL_LINUX, kernel_linux);
@@ -164,6 +165,7 @@ void packages_init_defaults(PackageConfig *config)
     SET_DEFAULT(config, PKG_TERMINAL_TOOLS, terminal_tools);
     SET_DEFAULT(config, PKG_EXTRA_TOOLS, extra_tools);
     SET_DEFAULT(config, PKG_DESKTOP_APPS, desktop_apps);
+    SET_DEFAULT(config, PKG_LOCAL_MIRROR_LIVE, local_mirror_live);
     SET_DEFAULT(config, PKG_SECURE_BOOT_LIVE, secure_boot_live);
 }
 
@@ -211,7 +213,7 @@ bool packages_load_json(PackageConfig *config, const char *path,
         return false;
     }
     if (!json_object_object_get_ex(root, "version", &version) ||
-        !json_object_is_type(version, json_type_int) || json_object_get_int(version) != 1) {
+        !json_object_is_type(version, json_type_int) || json_object_get_int(version) != 2) {
         (void)snprintf(error, error_size, "missing or unsupported packages.version");
         json_object_put(root);
         return false;
@@ -223,7 +225,7 @@ bool packages_load_json(PackageConfig *config, const char *path,
         return false;
     }
     /* 当前格式要求所有已知组完整存在，缺项不会静默回退到内建默认值。 */
-    loaded.version = 1;
+    loaded.version = 2;
     for (int group = PKG_BOOTSTRAP; group < PKG_GROUP_COUNT; ++group) {
         const char *name = package_group_name((PackageGroup)group);
         struct json_object *array = NULL;
@@ -303,7 +305,7 @@ bool packages_save_json(const PackageConfig *config, const char *path,
         if (groups != NULL) json_object_put(groups);
         return false;
     }
-    json_object_object_add(root, "version", json_object_new_int(1));
+    json_object_object_add(root, "version", json_object_new_int(2));
     for (int group = PKG_BOOTSTRAP; group < PKG_GROUP_COUNT; ++group) {
         struct json_object *array = json_object_new_array();
         const PackageList *list = &config->groups[group];

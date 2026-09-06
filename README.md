@@ -47,7 +47,7 @@ VS Code 调试配置默认使用 GDB：
 sudo pacman -S --needed gdb
 ```
 
-运行 TUI 时需要 `lsblk`（由 `util-linux` 提供）；从 Storage 页面启动手动分区器还需要同属 `util-linux` 的 `cfdisk`。生成的脚本面向 Arch Linux Live ISO，并使用该环境中的 `pacstrap`、`arch-chroot`、`sfdisk`、文件系统工具和 systemd-boot 等命令。本地镜像模式直接使用只读的 `F2FS-DATA` 仓库，不需要 nginx。
+运行 TUI 时需要 `lsblk`（由 `util-linux` 提供）；从 Storage 页面启动手动分区器还需要同属 `util-linux` 的 `cfdisk`。生成的脚本面向 Arch Linux Live ISO，并使用该环境中的 `pacstrap`、`arch-chroot`、`sfdisk`、文件系统工具和 systemd-boot 等命令。本地镜像模式从只读的 `F2FS-DATA` 仓库引导安装 nginx，再通过仅监听回环地址的临时 HTTP 镜像同时服务 `pacstrap` 和 chroot。
 
 ## 使用 CMake 构建
 
@@ -147,11 +147,12 @@ CMake 还提供：
 
 ```json
 {
-  "version": 1,
+  "version": 2,
   "groups": {
     "bootstrap": ["base", "base-devel"],
     "core": ["zsh", "networkmanager"],
-    "kernel_linux": ["linux", "linux-headers"]
+    "kernel_linux": ["linux", "linux-headers"],
+    "local_mirror_live": ["nginx"]
   }
 }
 ```
@@ -387,7 +388,7 @@ explicit execution
 
 本地镜像模式要求恰好一个标签为 `F2FS-DATA` 的分区，其中包含 `repo/archlinux`。脚本会拒绝使用任意参与安装磁盘上的分区作为本地镜像。
 
-确认文本必须精确输入 `UNSIGNED <device> <UUID>`。脚本会确认该分区是目标盘之外、未使用的 F2FS，然后以 `ro,nodev,nosuid,noexec` 挂载。`pacstrap` 完成且 `genfstab` 生成后，仓库目录才会临时 bind 到目标系统的 `/var/cache/arch-install-repo`，供 chroot 内的 `file://` 源使用；该挂载不会写入 fstab。这个兼容模式会临时设置 `SigLevel = Never`，因此仓库内容将被视为可以以 root 权限安装的可信输入。成功后目标系统改用选定的永久镜像。
+确认文本必须精确输入 `BOOTSTRAP <device> <UUID>`。脚本会确认该分区是目标盘之外、未使用的 F2FS，然后以 `ro,nodev,nosuid,noexec` 挂载。Live 环境临时使用 `file://` 和 `SigLevel = Never` 安装 `local_mirror_live` 组中的 nginx；nginx 启动后立即恢复原签名策略，并将软件源切换为仅监听 `127.0.0.1:2304` 的 HTTP 镜像。`pacstrap` 和 chroot 都通过该 HTTP 地址工作，目标 `pacman.conf` 始终保持标准签名策略。chroot 写入永久镜像后，脚本停止 nginx，并在退出清理时恢复 Live 配置、卸载镜像分区。
 
 ## Secure Boot
 
@@ -433,7 +434,7 @@ chmod 644 secure-boot/MOK.crt secure-boot/MOK.cer
 > [!IMPORTANT]
 > `MOK.key` 是可以签署启动代码的私钥。不要将 `secure-boot/`、shim 软件包或其中的密钥提交到 Git，也不要将它们嵌入方案 JSON。
 
-材料目录、shim 包和三个 MOK 文件必须是真实文件，不接受符号链接。开启后，脚本会从当前选定的软件源安装 `sbsigntools`，在私有 tmpfs 中校验并仅解包 shim 包中所需的 EFI 文件，不安装该 AUR 包、也不执行其 hook。完成 chroot 配置后再由 Live 环境签名。`MOK.key` 不会被复制或 bind 到目标文件系统；最终只有公开的 `MOK.cer` 会被复制到 EFI 分区。首次启动仍需在 MokManager 中手工注册证书。
+材料目录、shim 包和三个 MOK 文件必须是真实文件，不接受符号链接。开启后，脚本会从当前选定的软件源安装 `sbsigntools`，在私有 tmpfs 中校验 shim 包并提取所需的 EFI 文件；已验证的软件包会临时复制到目标 `/root`，在 chroot 中通过 `pacman -U` 安装，以登记到目标包数据库并执行软件包 hook，安装后立即删除临时副本。完成 chroot 配置后再由 Live 环境使用快照中的材料签名。`MOK.key` 不会被复制或 bind 到目标文件系统；最终只有公开的 `MOK.cer` 会被复制到 EFI 分区。首次启动仍需在 MokManager 中手工注册证书。
 
 Secure Boot 可以与临时本地镜像同时启用。本地镜像模式会临时关闭 pacman 包签名校验，其仓库内容与 `sbsigntools` 的可信性由用户负责。
 
@@ -481,6 +482,11 @@ Secure Boot 可以与临时本地镜像同时启用。本地镜像模式会临�
 `live/` 保留了重构前的线性 Bash 安装器，用于对照软件包、系统配置和安装习惯。它不是新架构的入口，不读取 `install-plan.json`，也不与 C 构造器共享运行状态。
 
 旧实现在交互过程中就可能修改磁盘，而且不具备新方案模型的 `KEEP/FORMAT/IGNORE` 边界和集中验证。请将它视为迁移参考，不要把两套流程混合在同一次安装中。
+
+详细对照文档：
+
+- [当前生成脚本与旧脚本的安装流程差异](docs/generated-installer-vs-live.md)
+- [相同选项下两者安装出的最终系统差异](docs/installed-system-differences.md)
 
 ## 已知限制
 

@@ -33,7 +33,10 @@ int main(void)
         passed = false;
         goto finish;
     }
-    if (loaded.groups[PKG_HYPRLAND].count != defaults.groups[PKG_HYPRLAND].count ||
+    if (loaded.version != 2 ||
+        loaded.groups[PKG_LOCAL_MIRROR_LIVE].count != 1 ||
+        strcmp(loaded.groups[PKG_LOCAL_MIRROR_LIVE].values[0], "nginx") != 0 ||
+        loaded.groups[PKG_HYPRLAND].count != defaults.groups[PKG_HYPRLAND].count ||
         strcmp(loaded.groups[PKG_CORE].values[0],
                defaults.groups[PKG_CORE].values[0]) != 0) {
         (void)fprintf(stderr, "package config changed during round trip\n");
