@@ -329,8 +329,14 @@ static bool test_automatic_script(void)
                                "ROOT_UUID=$(blkid -s UUID -o value -- \"$ROOT_DEVICE\") || {",
                                "checked root UUID discovery");
     passed &= require_fragment(&script,
-                               "genfstab -U \"$TARGET_ROOT\" > \"$TARGET_ROOT/etc/fstab\"",
-                               "complete fstab generation through genfstab");
+                               "printf '%s\\n' '# Static information about the filesystems.'",
+                               "the standard fstab header");
+    passed &= require_fragment(&script,
+                               "printf '%s\\n' '# <file system> <dir> <type> <options> <dump> <pass>'",
+                               "the standard fstab column header");
+    passed &= require_fragment(&script,
+                               "genfstab -U \"$TARGET_ROOT\"\n    } > \"$TARGET_ROOT/etc/fstab\"",
+                               "complete fstab generation through one overwrite");
     passed &= forbid_fragment(&script,
                               "UUID=%s none swap defaults 0 0",
                               "manual swap fstab generation");

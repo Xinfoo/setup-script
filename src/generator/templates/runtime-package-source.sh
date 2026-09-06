@@ -30,5 +30,10 @@ install_base_system() {
     (( ${#packages[@]} > 0 )) || die 'The bootstrap package selection is empty.'
     phase 'Installing the base system'
     pacstrap -K "$TARGET_ROOT" "${packages[@]}"
-    genfstab -U "$TARGET_ROOT" > "$TARGET_ROOT/etc/fstab"
+    {
+        printf '%s\n' '# Static information about the filesystems.'
+        printf '%s\n\n' '# See fstab(5) for details.'
+        printf '%s\n' '# <file system> <dir> <type> <options> <dump> <pass>'
+        genfstab -U "$TARGET_ROOT"
+    } > "$TARGET_ROOT/etc/fstab"
 }

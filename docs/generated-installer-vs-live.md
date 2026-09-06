@@ -281,10 +281,15 @@ F2FS 挂载配置在方案中提前确定：
 
 本地镜像模式下，Live mirrorlist 此时已经指向临时 nginx。`pacstrap -K` 会把该 mirrorlist 带入目标，同时不会把 Live 为引导 nginx 临时修改过的 `pacman.conf` 复制进去，因此目标使用新安装 pacman 的标准签名策略。
 
-挂载和 `swapon` 已经完成，因此紧接着执行：
+挂载和 `swapon` 已经完成，因此紧接着用一次覆盖重定向写入说明文件头和 `genfstab` 输出：
 
 ```bash
-genfstab -U "$TARGET_ROOT" > "$TARGET_ROOT/etc/fstab"
+{
+    printf '%s\n' '# Static information about the filesystems.'
+    printf '%s\n\n' '# See fstab(5) for details.'
+    printf '%s\n' '# <file system> <dir> <type> <options> <dump> <pass>'
+    genfstab -U "$TARGET_ROOT"
+} > "$TARGET_ROOT/etc/fstab"
 ```
 
 `genfstab` 全权负责普通挂载和 Swap 的 fstab 内容。当前脚本不手工追加 Swap，也不使用 `>>` 累积旧内容。

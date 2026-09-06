@@ -42,6 +42,9 @@ configure_base() {
     printf 'LANG=%s\n' "$LOCALE" > /etc/locale.conf
     printf '%s\n' "$HOSTNAME_VALUE" > /etc/hostname
     cat > /etc/hosts <<HOSTS
+# Static table lookup for hostnames.
+# See hosts(5) for details.
+
 127.0.0.1 localhost
 ::1 localhost
 127.0.1.1 $HOSTNAME_VALUE.localdomain $HOSTNAME_VALUE
