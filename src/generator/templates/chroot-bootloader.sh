@@ -18,7 +18,7 @@ configure_bootloader() {
         install -d /boot/EFI/BOOT /boot/EFI/ARCH
         {
             printf '\xff\xfe'
-            printf 'SHIMX64.EFI,Arch Linux,,Arch Linux Secure Boot\r\n' | iconv -f UTF-8 -t UTF-16LE
+            printf 'SHIMX64.EFI,Linux Boot Manager,,Linux Boot Manager\r\n' | iconv -f UTF-8 -t UTF-16LE
         } > /boot/EFI/ARCH/BOOTX64.CSV
     fi
     if [[ -n "$MICROCODE_FILE" ]]; then

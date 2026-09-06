@@ -436,7 +436,8 @@ Secure Boot 与临时本地镜像在当前实现中可以同时启用。此组�
 - 用 PARTUUID 标识 EFI 分区；
 - 先读取现有 `efibootmgr -v` 输出；
 - 同时匹配 label、PARTUUID 和 loader，避免创建重复项；
-- Secure Boot 使用 `\\EFI\\ARCH\\SHIMX64.EFI`，否则使用 systemd-boot 路径。
+- Secure Boot 使用 `\\EFI\\ARCH\\SHIMX64.EFI`，否则使用 systemd-boot 路径；
+- 两种模式的 NVRAM label 以及 shim `BOOTX64.CSV` 中的回退注册名称统一为 `Linux Boot Manager`。
 
 旧版在 chroot 中询问是否创建，然后用 `/boot` 设备路径的最后一个字符作为分区号。多位分区号会被截断，且没有重复项检查。旧命令中的主磁盘变量也没有加引号。
 

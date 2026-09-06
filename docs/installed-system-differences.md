@@ -278,7 +278,7 @@ MODULES=(nvidia nvidia_modeset nvidia_uvm nvidia_drm)
 
 ### 9.2 EFI NVRAM
 
-当机器中不存在匹配项、EFI 分区号为一位数且两边都选择创建时，创建出的 label 和 loader 路径相同：普通模式使用 `Linux Boot Manager`，Secure Boot 使用 `Arch Linux`。
+新版无论是否启用 Secure Boot，EFI NVRAM label 都统一为 `Linux Boot Manager`；Secure Boot 的 shim `BOOTX64.CSV` 回退注册名称也使用该名称。旧版普通模式使用 `Linux Boot Manager`，Secure Boot 模式则使用 `Arch Linux`，其 CSV 描述中还包含 `Arch Linux Secure Boot`。两版仍根据模式选择不同的 loader 路径。
 
 已有启动项或多位分区号会导致不同结果：
 

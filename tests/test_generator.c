@@ -575,6 +575,18 @@ static bool test_automatic_script(void)
                                "${entry,,}\" == *\"${boot_partuuid,,}\"*",
                                "EFI entry matching by partition identity");
     passed &= require_fragment(&script,
+                               "label='Linux Boot Manager'",
+                               "the unified EFI boot entry label");
+    passed &= forbid_fragment(&script,
+                              "label='Arch Linux'",
+                              "a Secure Boot-specific EFI entry label");
+    passed &= require_fragment(&script,
+                               "SHIMX64.EFI,Linux Boot Manager,,Linux Boot Manager\\r\\n",
+                               "the unified shim fallback entry label");
+    passed &= forbid_fragment(&script,
+                              "SHIMX64.EFI,Arch Linux,,Arch Linux Secure Boot",
+                              "the old shim fallback entry label");
+    passed &= require_fragment(&script,
                                "actual_start_bytes=$((actual_start * 512))",
                                "lsblk START conversion on 512-byte units");
     passed &= require_fragment(&script,

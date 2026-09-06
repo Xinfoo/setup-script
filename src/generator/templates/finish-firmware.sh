@@ -7,12 +7,11 @@ create_firmware_entry() {
     [[ "$CREATE_EFI_ENTRY" == true ]] || return 0
     part_number=$(lsblk -dnro PARTN -- "$BOOT_DEVICE")
     [[ "$part_number" =~ ^[0-9]+$ ]] || die 'Cannot determine the EFI partition number.'
+    label='Linux Boot Manager'
     if [[ "$ENABLE_SECURE_BOOT" == true ]]; then
         loader='\EFI\ARCH\SHIMX64.EFI'
-        label='Arch Linux'
     else
         loader='\EFI\systemd\systemd-bootx64.efi'
-        label='Linux Boot Manager'
     fi
     boot_partuuid=$(lsblk -dnro PARTUUID -- "$BOOT_DEVICE") ||
         die 'Cannot determine the EFI partition PARTUUID.'
