@@ -483,6 +483,11 @@ Secure Boot 可以与临时本地镜像同时启用。本地镜像模式会临�
 
 旧实现在交互过程中就可能修改磁盘，而且不具备新方案模型的 `KEEP/FORMAT/IGNORE` 边界和集中验证。请将它视为迁移参考，不要把两套流程混合在同一次安装中。
 
+详细对照文档：
+
+- [当前生成脚本与旧脚本的安装流程差异](docs/generated-installer-vs-live.md)
+- [相同选项下两者安装出的最终系统差异](docs/installed-system-differences.md)
+
 ## 已知限制
 
 - 只支持 UEFI + GPT + systemd-boot；
