@@ -3,6 +3,8 @@
 # =============================================================================
 
 main() {
+    # Secure Boot trusts an external package, so obtain explicit consent before all preparation. / Secure Boot 信任外部软件包，因此在所有准备前获取明确授权。
+    confirm_secure_boot_package_source
     # Allocate the private workspace before any optional snapshots or backups. / 在创建任何可选快照或备份前分配私有工作目录。
     WORK_DIR=$(/usr/bin/mktemp -d /tmp/arch-install.XXXXXX) ||
         die 'Cannot create the private installer work directory.'

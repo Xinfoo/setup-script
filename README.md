@@ -242,7 +242,7 @@ F2FS 可选择：
 - hostname、username 和 timezone 格式有效；
 - 100 GiB ROOT + HOME 布局有足够空间。
 
-有阻断错误时不能生成脚本。Secure Boot 和可移动磁盘目前作为明确警告显示。
+有阻断错误时不能生成脚本。Secure Boot 和可移动磁盘目前作为明确警告显示。在 Base system 页面开启 Secure Boot 时，TUI 会以默认选中 `No` 的对话框要求用户确认：`shim-signed.pkg.tar.zst` 的来源和可用性由用户自行核实。
 
 审阅页按键：
 
@@ -436,7 +436,10 @@ chmod 644 secure-boot/MOK.crt secure-boot/MOK.cer
 > [!IMPORTANT]
 > `MOK.key` 是可以签署启动代码的私钥。不要将 `secure-boot/`、shim 软件包或其中的密钥提交到 Git，也不要将它们嵌入方案 JSON。
 
-材料目录、shim 包和三个 MOK 文件必须是真实文件，不接受符号链接。开启后，脚本会从当前选定的软件源安装 `sbsigntools`，在私有 tmpfs 中校验 shim 包并提取所需的 EFI 文件；已验证的软件包会临时复制到目标 `/root`，在 chroot 中通过 `pacman -U` 安装，以登记到目标包数据库并执行软件包 hook，安装后立即删除临时副本。完成 chroot 配置后再由 Live 环境使用快照中的材料签名。`MOK.key` 不会被复制或 bind 到目标文件系统；最终只有公开的 `MOK.cer` 会被复制到 EFI 分区。首次启动仍需在 MokManager 中手工注册证书。
+> [!WARNING]
+> builder 不认证 `shim-signed.pkg.tar.zst` 的发布者或来源，也不审查软件包携带的安装脚本和 hook。现有检查只确认包名、包结构、MOK 材料一致性，以及所需 EFI 文件存在签名。用户必须在开启 Secure Boot 前自行核实 shim 包的来源、完整性、内容和对当前系统的可用性。该包会在 chroot 内通过 `pacman -U` 以 root 权限安装。
+
+材料目录、shim 包和三个 MOK 文件必须是真实文件，不接受符号链接。生成脚本在主流程开始时会先显示上述信任边界，并要求精确输入 `TRUST SHIM-SIGNED`；未确认时不会继续任何安装准备。确认后，脚本会从当前选定的软件源安装 `sbsigntools`，在私有 tmpfs 中检查 shim 包并提取所需的 EFI 文件；经过这些结构检查的软件包会临时复制到目标 `/root`，在 chroot 中通过 `pacman -U` 安装，以登记到目标包数据库并执行软件包 hook，安装后立即删除临时副本。完成 chroot 配置后再由 Live 环境使用快照中的材料签名。`MOK.key` 不会被复制或 bind 到目标文件系统；最终只有公开的 `MOK.cer` 会被复制到 EFI 分区。首次启动仍需在 MokManager 中手工注册证书。
 
 Secure Boot 可以与临时本地镜像同时启用。本地镜像模式会临时关闭 pacman 包签名校验，其仓库内容与 `sbsigntools` 的可信性由用户负责。
 
@@ -509,7 +512,7 @@ git show legacy:live/chroot-setup.sh
 - 不提供任意分区表编辑器或分区缩放；
 - 现有文件系统只识别 vfat、Ext4、XFS、F2FS 和 Swap；
 - 方案中仍保存内核动态的 `/dev/...` 名称，磁盘变动后需要人工重新核对；
-- Secure Boot 需要用户自行保护和注册 MOK，更新后的重签名未自动化；
+- Secure Boot 需要用户自行确认 `shim-signed` 的可信来源与可用性、保护和注册 MOK，更新后的重签名未自动化；
 - Hyprland 只提供基础软件和 greetd/ReGreet，不包含完整用户配置；
 - 脚本仍需要在 TTY 中设置 root 和普通用户密码，不是完全无人值守安装器。
 

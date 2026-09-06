@@ -73,7 +73,23 @@ void handle_base_system(UiState *state, int key)
         case 4: system->china_mirrors = !system->china_mirrors; changed = true; break;
         case 5: break;
         case 6: system->create_efi_entry = !system->create_efi_entry; changed = true; break;
-        case 7: system->secure_boot = !system->secure_boot; changed = true; break;
+        case 7:
+            if (system->secure_boot) {
+                system->secure_boot = false;
+                changed = true;
+            } else if (confirm_dialog(
+                           "Enable Secure Boot",
+                           "Enable Secure Boot only after independently confirming that "
+                           "shim-signed.pkg.tar.zst comes from a trusted source and is usable "
+                           "on this system. The builder checks its package name and EFI "
+                           "signature presence, but does not authenticate its source or inspect "
+                           "its install scripts. Continue?")) {
+                system->secure_boot = true;
+                changed = true;
+            } else {
+                set_status(state, "Secure Boot remains disabled; shim-signed was not trusted.");
+            }
+            break;
         }
         if (changed) state->dirty = true;
     }

@@ -434,6 +434,23 @@ static bool test_automatic_script(void)
     passed &= require_fragment(&script,
                                "confirm_package_preparation() {",
                                "the package preparation confirmation");
+    passed &= require_fragment(&script,
+                               "confirm_secure_boot_package_source() {",
+                               "the Secure Boot package trust confirmation");
+    passed &= require_fragment(&script,
+                               "Type TRUST SHIM-SIGNED to accept responsibility and continue:",
+                               "an exact shim package trust phrase");
+    passed &= require_fragment(&script,
+                               "does not authenticate its source or inspect its install scripts",
+                               "the shim package verification boundary warning");
+    passed &= require_order(&script,
+                            "main() {\n    # Secure Boot trusts an external package",
+                            "    WORK_DIR=$(/usr/bin/mktemp -d /tmp/arch-install.XXXXXX)",
+                            "Secure Boot trust confirmation before runtime preparation");
+    passed &= require_order(&script,
+                            "    confirm_secure_boot_package_source\n",
+                            "    preflight\n",
+                            "Secure Boot trust confirmation before preflight");
     passed &= require_order(&script,
                             "    confirm_package_preparation\n    prepare_package_source\n",
                             "    snapshot_secure_boot_assets\n    probe_kept_filesystems\n    confirm_destructive_actions\n",

@@ -27,6 +27,20 @@ print_plan() {
     done
 }
 
+# Confirm the user-supplied shim package trust boundary before any preparation. / 在任何准备操作前确认用户提供的 shim 包信任边界。
+confirm_secure_boot_package_source() {
+    local answer
+    [[ "$ENABLE_SECURE_BOOT" == true ]] || return 0
+    [[ -t 0 ]] || die 'Secure Boot package confirmation requires an interactive terminal.'
+    printf '\nWARNING: shim-signed.pkg.tar.zst is a user-trusted input.\n'
+    printf 'The installer checks its package name and EFI signature presence, but does not authenticate its source or inspect its install scripts.\n'
+    printf 'You must independently confirm that this package comes from a trusted source and is usable on this system.\n'
+    printf 'Type TRUST SHIM-SIGNED to accept responsibility and continue: '
+    IFS= read -r answer || die 'Secure Boot package confirmation was interrupted.'
+    [[ "$answer" == 'TRUST SHIM-SIGNED' ]] ||
+        die 'The shim-signed source and usability were not confirmed.'
+}
+
 # Confirm repository preparation before package databases are changed. / 更改软件包数据库前确认仓库准备操作。
 confirm_package_preparation() {
     local answer

@@ -180,6 +180,8 @@ umask 022
 
 ### 3.6 Secure Boot 输入快照
 
+如果方案开启 Secure Boot，脚本主流程首先警告 `shim-signed.pkg.tar.zst` 是用户信任的外部输入，并要求精确输入 `TRUST SHIM-SIGNED`。用户必须自行确认该包的来源、完整性、内容和对当前系统的可用性；未确认时，脚本在软件源准备和磁盘操作之前退出。
+
 如果启用 Secure Boot，脚本在写盘前验证：
 
 - `shim-signed.pkg.tar.zst` 是普通文件而非符号链接；
@@ -189,7 +191,7 @@ umask 022
 - PEM 私钥和 PEM 证书的公钥匹配；
 - PEM 与 DER 证书的 SHA-256 指纹匹配。
 
-通过后，它在私有工作目录下挂载 `nodev,nosuid,noexec,mode=0700,size=64M` 的 tmpfs，把材料以 `0600` 复制进去并再次验证。脚本用 `bsdtar -xOf` 提取 `shimx64.efi`、`mmx64.efi` 和 `fbx64.efi`，并用 `sbverify --list` 检查它们带有签名。完成 pacstrap 后，已验证的 shim 包会临时复制到目标 `/root`，再由 chroot 内的 `pacman -U` 安装并删除临时副本。
+通过后，它在私有工作目录下挂载 `nodev,nosuid,noexec,mode=0700,size=64M` 的 tmpfs，把材料以 `0600` 复制进去并再次执行相同结构检查。脚本用 `bsdtar -xOf` 提取 `shimx64.efi`、`mmx64.efi` 和 `fbx64.efi`，并用 `sbverify --list` 检查它们带有签名。这些检查不认证包的来源，也不审查其安装脚本或 hook。完成 pacstrap 后，该 shim 包快照会临时复制到目标 `/root`，再由 chroot 内的 `pacman -U` 安装并删除临时副本。
 
 旧版只判断 shim 文件和密钥目录是否存在，然后把整个目录复制到目标系统，并在 chroot 内用 `pacman -U` 安装 shim 包。两版都会在目标系统登记该包并执行其安装脚本和 hook；区别是新版安装经过前置验证的 tmpfs 快照副本，而旧版不比较私钥/证书、不验证 DER 证书，也不验证提取的 EFI 文件。
 
@@ -402,7 +404,7 @@ console-mode keep
 
 ### 3.17 Secure Boot 签名
 
-当前 chroot 阶段先通过 `pacman -U` 安装已验证的 `shim-signed` 包并删除临时副本，再安装 systemd-boot、创建目标目录和 `BOOTX64.CSV`；私钥不进入 chroot。chroot 完成后，外层 Live 脚本才执行签名：
+当前 chroot 阶段先通过 `pacman -U` 安装已由用户确认信任、并经过结构检查的 `shim-signed` 包快照，然后删除临时副本，再安装 systemd-boot、创建目标目录和 `BOOTX64.CSV`；私钥不进入 chroot。chroot 完成后，外层 Live 脚本才执行签名：
 
 1. 在私有工作目录生成签名后的 systemd-boot 和 kernel 临时文件；
 2. 用 `sbverify --cert` 确认签名与 MOK 证书匹配；
@@ -607,7 +609,8 @@ Secure Boot 与临时本地镜像在当前实现中可以同时启用。此组�
 6. `/dev/...` 仍是执行路径。序列号、型号、容量、PARTUUID 等检查用于降低路径重排风险，但不能代替备份。
 7. KEEP 不是只读安装。它只禁止 `mkfs`，挂载后安装步骤仍可修改其中内容。
 8. Secure Boot 当前没有覆盖外置 initramfs、NVIDIA DKMS 模块和软件更新后的自动重签名。
-9. 任何一套安装流程都不提供事务回滚。当前清理只负责运行时资源和临时配置，不会恢复已经写入的分区表或文件系统。
+9. `shim-signed.pkg.tar.zst` 的发布者、来源、安装脚本和实际可用性不由 builder 认证；TUI 与生成脚本的确认是用户对这一信任边界的明确接受。
+10. 任何一套安装流程都不提供事务回滚。当前清理只负责运行时资源和临时配置，不会恢复已经写入的分区表或文件系统。
 
 ## 10. 源码定位表
 
