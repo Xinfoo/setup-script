@@ -38,31 +38,31 @@ partition_disk() {
         auto-root-swap)
             sfdisk --wipe always --wipe-partitions always "$disk" <<SFDISK
 label: gpt
-size=${efi_size}MiB,type=uefi,name="EFI System"
-size=${root_size}MiB,type=linux,name="Arch Linux root"
-size=${swap_size}MiB,type=swap,name="Linux swap"
+size=${efi_size}MiB,type=uefi
+size=${root_size}MiB,type=linux
+size=${swap_size}MiB,type=swap
 SFDISK
             ;;
         auto-home-swap)
             sfdisk --wipe always --wipe-partitions always "$disk" <<SFDISK
 label: gpt
-size=${efi_size}MiB,type=uefi,name="EFI System"
-size=${root_size}MiB,type=linux,name="Arch Linux root"
-size=${home_size}MiB,type=linux,name="Arch Linux home"
-size=${swap_size}MiB,type=swap,name="Linux swap"
+size=${efi_size}MiB,type=uefi
+size=${root_size}MiB,type=linux
+size=${home_size}MiB,type=linux
+size=${swap_size}MiB,type=swap
 SFDISK
             ;;
         auto-root-only)
             sfdisk --wipe always --wipe-partitions always "$disk" <<SFDISK
 label: gpt
-size=${efi_size}MiB,type=uefi,name="EFI System"
-size=,type=linux,name="Arch Linux root"
+size=${efi_size}MiB,type=uefi
+size=,type=linux
 SFDISK
             ;;
         auto-data)
             sfdisk --wipe always --wipe-partitions always "$disk" <<SFDISK
 label: gpt
-size=,type=linux,name="Linux data"
+size=,type=linux
 SFDISK
             ;;
         *) die "Unknown storage mode: $mode" ;;

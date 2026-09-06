@@ -227,6 +227,8 @@ umask 022
 
 引导式磁盘使用 `wipefs --all --force` 和带 `--wipe always --wipe-partitions always` 的 `sfdisk` 重建 GPT。随后调用 `partprobe` 或 `blockdev --rereadpt`，可用时等待 `udevadm settle`，并最多等待 5 秒让每个分区设备出现。
 
+与旧版一样，当前脚本不向 `sfdisk` 提供 `name=` 字段，因此不会主动为自动创建的 GPT 分区写入 PARTLABEL。
+
 当前脚本不执行 `blkdiscard`。
 
 旧版自动布局只有前三种系统盘布局。旧 `disk_wiper` 对非旋转、支持 discard 的设备会在 `wipefs -a` 后执行整盘 `blkdiscard -f`。旧手动模式可先选择擦除，然后直接启动 `cfdisk`；其他磁盘也可以重复进入这套流程。

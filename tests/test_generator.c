@@ -524,6 +524,7 @@ static bool test_automatic_script(void)
                               "UUID=%s none swap defaults 0 0",
                               "manual swap fstab generation");
     passed &= forbid_fragment(&script, "blkdiscard", "an unconditional discard command");
+    passed &= forbid_fragment(&script, ",name=", "GPT PARTLABEL assignments");
     passed &= require_fragment(&script,
                                "if [[ \"$action\" == keep ]]; then",
                                "the KEEP filesystem path");

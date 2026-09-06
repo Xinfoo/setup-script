@@ -25,7 +25,6 @@
 
 | 领域 | 最终差异 |
 | --- | --- |
-| GPT | 新版自动分区写入 PARTLABEL；旧版不写 `name=` |
 | `/etc/hosts` | 新版生成完整 localhost/IPv6/hostname 映射；旧版只追加 hostname 映射 |
 | 时间同步 | 新版使用 timesyncd drop-in；旧版修改主配置文件 |
 | sudo | 新版固定生成 wheel sudoers drop-in；旧版结果取决于人工 `visudo` |
@@ -45,16 +44,7 @@
 - EFI 1 GiB + ROOT 100 GiB + HOME + Swap；
 - EFI 1 GiB + 占满剩余空间的 ROOT。
 
-EFI、Linux filesystem 和 Swap 的 GPT 类型也一致。新版额外向 GPT 条目写入：
-
-```text
-EFI System
-Arch Linux root
-Arch Linux home
-Linux swap
-```
-
-这些是 GPT partition name，通常由工具显示为 `PARTLABEL`，不是 FAT/Ext4/XFS/F2FS 的文件系统卷标。旧版 [`automatic-partitioner.sh`](../live/functions/actuator/automatic-partitioner.sh) 没有 `name=` 字段，因此对应分区通常没有这些 PARTLABEL。
+EFI、Linux filesystem 和 Swap 的 GPT 类型也一致。两版都不向 `sfdisk` 提供 `name=` 字段，因此自动创建的分区不会被安装器主动写入 GPT PARTLABEL。
 
 ROOT + Swap 和 ROOT + HOME + Swap 布局的精确尾部扇区也可能略有差异。旧版让 `sfdisk` 用负 size 自动为 Swap 留空间；新版先按探测容量计算 MiB，并为首扇区对齐和备份 GPT 表保留小余量后写入显式容量。名义上的 1 GiB EFI、100 GiB ROOT 和推荐 Swap 不变，但不保证两个分区表逐扇区相同。ROOT-only 布局两边都让最后一个 ROOT 填满剩余空间。
 
@@ -362,7 +352,7 @@ MODULES=(nvidia nvidia_modeset nvidia_uvm nvidia_drm)
 
 ### 最终内容或行为不同
 
-- GPT PARTLABEL、部分自动布局的精确分区边界、SSD 未分配区 discard 状态；
+- 部分自动布局的精确分区边界、SSD 未分配区 discard 状态；
 - `/etc/hosts`；
 - timesyncd 配置文件落点；
 - `/etc/default/useradd` 的处理；
