@@ -4,11 +4,13 @@
 
 initialize_log() {
     local previous_umask
+    # Preserve the original terminal before stdout and stderr are redirected. / 重定向标准输出与错误前保留原始终端。
     exec {CONSOLE_FD}>&2 || exit 1
     [[ -x /usr/bin/tee && -x /usr/bin/mktemp && -x /usr/bin/sleep ]] ||
         die 'tee, mktemp, and sleep are required for logging.'
     previous_umask=$(umask)
     umask 077
+    # User-provided paths must be new files; automatic logs use a private name. / 用户指定路径必须是新文件；自动日志使用私有名称。
     if [[ -n "$LOG_FILE" ]]; then
         [[ ! -e "$LOG_FILE" && ! -L "$LOG_FILE" ]] ||
             die "Refusing to replace existing log path: $LOG_FILE"
@@ -25,6 +27,7 @@ initialize_log() {
     fi
     umask "$previous_umask"
     readonly LOG_FILE
+    # tee runs as a child so output remains visible while being persisted. / tee 作为子进程运行，使输出在持久记录时仍然可见。
     exec > >(/usr/bin/tee -a "/proc/self/fd/$LOG_FD") 2>&1
     LOG_TEE_PID=$!
 }
@@ -50,6 +53,7 @@ normalize_fs() {
 # Reject mounted, active-swap, or held block devices. / 拒绝已挂载、已启用交换或仍被占用的块设备。
 ensure_node_idle() {
     local node=$1 kernel_name holders mounted_status active_swaps holder_entry
+    # A mounted source must be released explicitly by the operator. / 已挂载的源设备必须由操作者显式释放。
     if findmnt -rn -S "$node" >/dev/null 2>&1; then
         die "$node is mounted; unmount it before running this script"
     else
@@ -61,6 +65,7 @@ ensure_node_idle() {
     if grep -Fxq -- "$node" <<<"$active_swaps"; then
         die "$node is active swap; disable it before running this script"
     fi
+    # Kernel holders cover device-mapper, RAID, and similar stacked devices. / 内核 holders 覆盖 device-mapper、RAID 等堆叠设备。
     kernel_name=$(lsblk -dnro KNAME -- "$node")
     holders=/sys/class/block/$kernel_name/holders
     [[ -d "$holders" ]] || die "Cannot inspect block-device holders for $node"

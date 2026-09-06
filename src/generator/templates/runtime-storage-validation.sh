@@ -4,10 +4,12 @@
 
 verify_disk_identities() {
     local index disk current_size current_model current_serial current_pttype current_type
+    # Re-read immutable disk characteristics recorded by the builder. / 重新读取构造器记录的磁盘稳定特征。
     for ((index=0; index<${#INSTALL_DISKS[@]}; ++index)); do
         disk=${INSTALL_DISKS[index]}
         [[ -b "$disk" ]] || die "Installation disk is not a block device: $disk"
         current_type=$(lsblk -dnro TYPE -- "$disk")
+        # Reject partitions, read-only media, and capacity changes. / 拒绝分区设备、只读介质和容量变化。
         [[ "$current_type" == disk ]] || die "Installation target is not a whole disk: $disk"
         [[ "$(blockdev --getro "$disk")" == 0 ]] || die "Installation disk is read-only: $disk"
         current_size=$(blockdev --getsize64 "$disk")
@@ -16,6 +18,7 @@ verify_disk_identities() {
         current_model=$(lsblk -dno MODEL -- "$disk" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
         current_serial=$(lsblk -dno SERIAL -- "$disk" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
         current_pttype=$(lsblk -dnro PTTYPE -- "$disk")
+        # Empty model or serial fields are not promoted into mandatory identities. / 空型号或序列号字段不会被提升为强制身份条件。
         if [[ -n "${DISK_MODELS[index]}" && "$current_model" != "${DISK_MODELS[index]}" ]]; then
             die "Installation disk model changed: $disk"
         fi
@@ -24,6 +27,7 @@ verify_disk_identities() {
         fi
         if [[ "${DISK_MODES[index]}" == existing &&
               "${current_pttype,,}" != "${DISK_PTTYPES[index],,}" ]]; then
+            # Existing layouts depend on the original partition-table type. / 现有布局依赖原始分区表类型。
             die "Installation disk partition-table type changed: $disk"
         fi
     done
@@ -33,6 +37,7 @@ verify_disk_identities() {
 verify_existing_partition() {
     local device=$1 expected_parent=$2 expected_number=$3 expected_uuid=$4 expected_start=$5 expected_size=$6 expected_type=$7
     local parent actual_number actual_uuid actual_start actual_size actual_type
+    # Device path alone is insufficient; compare parent, geometry, and GPT identity. / 仅设备路径不足以确认身份；需比较父盘、几何信息和 GPT 身份。
     [[ -b "$device" ]] || die "Configured partition is missing: $device"
     parent=$(lsblk -dnrpo PKNAME -- "$device")
     [[ "$parent" == "$expected_parent" ]] ||
@@ -49,6 +54,7 @@ verify_existing_partition() {
         die "PARTUUID changed for $device"
     [[ -n "$expected_type" && "${actual_type,,}" == "${expected_type,,}" ]] ||
         die "GPT partition type changed for $device"
+    # Reused partitions must also be free of mounts and kernel holders. / 复用分区还必须没有挂载和内核 holder。
     ensure_node_idle "$device"
 }
 
@@ -60,6 +66,7 @@ verify_created_partition() {
     local actual_start actual_start_bytes actual_size expected_mib expected_size
     local minimum_size remaining_bytes previous_device='' previous_start previous_size
     local previous_end gap candidate
+    # Capture all observable properties before comparing the new partition. / 比较新分区前收集全部可观察属性。
     [[ -b "$device" ]] || die "Created partition is missing: $device"
     parent=$(lsblk -dnrpo PKNAME -- "$device")
     actual_number=$(lsblk -dnro PARTN -- "$device")
@@ -72,6 +79,7 @@ verify_created_partition() {
         die "Created partition identity mismatch for $device"
     [[ "${disk_pttype,,}" == gpt && -n "$actual_uuid" ]] ||
         die "Created partition has no stable GPT identity: $device"
+    # Partition purpose determines the expected GPT type GUID. / 分区用途决定预期的 GPT 类型 GUID。
     case "$storage_mode:$usage" in
         auto-data:*) expected_type='0fc63daf-8483-4772-8e79-3d69d8477de4' ;;
         *:boot) expected_type='c12a7328-f81f-11d2-ba4b-00a0c93ec93b' ;;
@@ -81,11 +89,14 @@ verify_created_partition() {
     [[ "${actual_type,,}" == "$expected_type" ]] || die "Unexpected GPT type for $device"
     [[ "$actual_start" =~ ^[0-9]+$ ]] ||
         die "Invalid start geometry for $device"
+    # lsblk reports START in 512-byte sectors even on other logical-sector sizes. / lsblk 的 START 以 512 字节扇区报告，不受逻辑扇区大小影响。
     actual_start_bytes=$((actual_start * 512))
     if [[ "$expected_number" -eq 1 ]]; then
+        # Permit normal GPT alignment while rejecting implausible leading gaps. / 允许常规 GPT 对齐，同时拒绝异常的前置空隙。
         (( actual_start_bytes > 0 && actual_start_bytes <= 64 * 1048576 )) ||
             die "Unexpected first-partition offset for $device"
     else
+        # Find the planned predecessor and bound the inter-partition gap. / 查找计划中的前一分区并限制分区间空隙。
         for candidate in "${!PART_NUMBERS[@]}"; do
             if [[ "${PART_DISK_INDEXES[candidate]}" == "$disk_index" &&
                   "${PART_NUMBERS[candidate]}" -eq $((expected_number - 1)) ]]; then
@@ -102,6 +113,7 @@ verify_created_partition() {
         (( gap >= 0 && gap <= 64 * 1048576 )) ||
             die "Unexpected partition gap before $device"
     fi
+    # Fixed-size records require equality; fill-to-end records allow GPT tail slack. / 固定大小记录要求相等；占满剩余空间的记录允许 GPT 尾部余量。
     if [[ "$storage_mode" == auto-data ]]; then
         expected_mib=0
     else
@@ -117,6 +129,7 @@ verify_created_partition() {
         expected_size=$((expected_mib * 1048576))
         [[ "$actual_size" == "$expected_size" ]] || die "Unexpected size for $device"
     else
+        # Account for alignment and backup-GPT space without accepting large loss. / 考虑对齐与备份 GPT 空间，同时不接受明显容量损失。
         minimum_size=$((planned_size - 64 * 1048576))
         remaining_bytes=$((${DISK_SIZES[disk_index]} - actual_start_bytes - actual_size))
         (( actual_size >= minimum_size && actual_size <= planned_size &&
@@ -129,6 +142,7 @@ verify_created_partition() {
 # Revalidate every disk and actionable partition immediately before writes. / 写入前立即重新校验每块磁盘和待处理分区。
 verify_storage_state() {
     local index disk_index disk mode node mounted_target action filesystem actual actual_uuid mount_targets disk_nodes
+    # The target tree must be empty of mounts before installation owns it. / 安装器取得目标树所有权前，其中不能存在任何挂载。
     [[ -d "$TARGET_ROOT" && ! -L "$TARGET_ROOT" ]] ||
         die "Target mountpoint changed or became a symlink: $TARGET_ROOT"
     verify_disk_identities
@@ -138,10 +152,12 @@ verify_storage_state() {
             "$TARGET_ROOT"|"$TARGET_ROOT"/*) die "$mounted_target is mounted below $TARGET_ROOT" ;;
         esac
     done <<<"$mount_targets"
+    # Automatic layouts inspect every descendant because all will be destroyed. / 自动布局检查全部后代设备，因为它们都会被销毁。
     for ((disk_index=0; disk_index<${#INSTALL_DISKS[@]}; ++disk_index)); do
         disk=${INSTALL_DISKS[disk_index]}
         mode=${DISK_MODES[disk_index]}
         if [[ "$mode" == existing ]]; then
+            # Existing mode checks selected partitions separately below. / 现有模式会在下方逐个检查所选分区。
             ensure_node_idle "$disk"
         else
             disk_nodes=$(lsblk -nrpo NAME -- "$disk") ||
@@ -151,6 +167,7 @@ verify_storage_state() {
             done <<<"$disk_nodes"
         fi
     done
+    # Match all reused partitions against the builder-time snapshot. / 将全部复用分区与构造时快照匹配。
     for ((index=0; index<${#PART_DEVICES[@]}; ++index)); do
         disk_index=${PART_DISK_INDEXES[index]}
         if [[ "${DISK_MODES[disk_index]}" == existing ]]; then
@@ -160,6 +177,7 @@ verify_storage_state() {
                 "${PART_SIZES[index]}" "${PART_TYPES[index]}"
         fi
     done
+    # KEEP additionally binds the plan to the original filesystem UUID. / KEEP 还会将计划绑定到原文件系统 UUID。
     for ((index=0; index<${#PART_DEVICES[@]}; ++index)); do
         action=${PART_ACTIONS[index]}
         filesystem=${PART_FILESYSTEMS[index]}

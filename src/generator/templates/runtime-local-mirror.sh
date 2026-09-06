@@ -4,6 +4,7 @@
 
 select_local_mirror_source() {
     local sources=() source_text source_status ancestors filesystem parent_type disk
+    # The legacy mirror contract requires one uniquely labelled partition. / 旧版镜像约定要求恰好一个具有指定卷标的分区。
     if source_text=$(blkid -t LABEL=F2FS-DATA -o device); then
         [[ -z "$source_text" ]] || mapfile -t sources <<<"$source_text"
     else
@@ -12,6 +13,7 @@ select_local_mirror_source() {
     fi
     [[ "${#sources[@]}" -eq 1 ]] ||
         die "Expected exactly one F2FS-DATA partition, found ${#sources[@]}"
+    # Record filesystem identity and the physical parent for later rechecks. / 记录文件系统身份和物理父盘，供后续复核。
     LOCAL_MIRROR_SOURCE=${sources[0]}
     [[ -b "$LOCAL_MIRROR_SOURCE" ]] || die 'The local mirror source is not a block device.'
     filesystem=$(blkid -s TYPE -o value -- "$LOCAL_MIRROR_SOURCE") ||
@@ -30,6 +32,7 @@ select_local_mirror_source() {
         sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
     LOCAL_MIRROR_SIZE=$(blockdev --getsize64 "$LOCAL_MIRROR_SOURCE") ||
         die 'Cannot determine the local mirror size.'
+    # Reject a source whose ancestry intersects any installation disk. / 拒绝祖先链与任何安装盘相交的镜像源。
     ancestors=$(lsblk -snrpo NAME -- "$LOCAL_MIRROR_SOURCE") ||
         die 'Cannot inspect the local-mirror device ancestry.'
     for disk in "${INSTALL_DISKS[@]}"; do
@@ -44,6 +47,7 @@ select_local_mirror_source() {
 verify_local_mirror_identity() {
     local uuid parent size label filesystem serial
     [[ "$USE_LOCAL_MIRROR" == true ]] || return 0
+    # Re-read every captured field instead of trusting an earlier device name. / 重新读取全部已记录字段，不信任先前的设备名。
     [[ -b "$LOCAL_MIRROR_SOURCE" ]] || die 'The selected local mirror disappeared.'
     uuid=$(blkid -s UUID -o value -- "$LOCAL_MIRROR_SOURCE") ||
         die 'Cannot recheck the local mirror UUID.'
@@ -56,6 +60,7 @@ verify_local_mirror_identity() {
     size=$(blockdev --getsize64 "$LOCAL_MIRROR_SOURCE") ||
         die 'Cannot recheck the local mirror size.'
     serial=$(lsblk -dno SERIAL -- "$parent" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+    # All fields must still describe the exact source approved by the operator. / 所有字段必须仍指向操作者确认的同一来源。
     [[ "$uuid" == "$LOCAL_MIRROR_UUID" && "$label" == F2FS-DATA &&
        "${filesystem,,}" == f2fs && "$parent" == "$LOCAL_MIRROR_PARENT" &&
        "$size" == "$LOCAL_MIRROR_SIZE" &&

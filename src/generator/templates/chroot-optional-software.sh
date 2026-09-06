@@ -1,5 +1,6 @@
     # Install shared fonts after the desktop-specific branch. / 桌面专用分支完成后安装共用字体。
     pacman_install "${PKG_FONTS[@]}"
+    # Write the complete language-aware fallback chain shared by every desktop mode. / 写入所有桌面模式共用的完整语言感知字体回退链。
     cat > /etc/fonts/local.conf <<'FONTCONFIG'
 <fontconfig>
     <alias>
@@ -50,6 +51,7 @@ FONTCONFIG
 
 # Optional feature package groups / 可选功能软件包组
 install_optional_software() {
+    # Every flag maps directly to one editable packages.json group. / 每个标志直接对应 packages.json 中一个可编辑的软件包组。
     [[ "$ENABLE_FIREWALL" != true ]] || pacman_install "${PKG_FIREWALL[@]}"
     [[ "$ENABLE_PRINTER" != true ]] || pacman_install "${PKG_PRINTER[@]}"
     [[ "$INSTALL_ARCHIVE_TOOLS" != true ]] || pacman_install "${PKG_ARCHIVE_TOOLS[@]}"
