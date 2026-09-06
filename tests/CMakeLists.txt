@@ -1,14 +1,13 @@
 add_executable(
     arch-install-builder-model-tests
-    "${PROJECT_SOURCE_DIR}/old/tests/test_model.c"
+    "${PROJECT_SOURCE_DIR}/tests/test_model.c"
     ${MODEL_SOURCES}
     ${COMMON_SOURCES}
-    "${PROJECT_SOURCE_DIR}/src/generator/shell.c"
 )
 
 add_executable(
     arch-install-builder-generator-tests
-    "${PROJECT_SOURCE_DIR}/old/tests/test_generator.c"
+    "${PROJECT_SOURCE_DIR}/tests/test_generator.c"
     ${GENERATOR_SOURCES}
     ${PACKAGE_SOURCE}
     ${MODEL_SOURCES}
@@ -22,7 +21,7 @@ add_dependencies(
 
 add_executable(
     arch-install-builder-package-tests
-    "${PROJECT_SOURCE_DIR}/old/tests/test_packages.c"
+    "${PROJECT_SOURCE_DIR}/tests/test_packages.c"
     ${PACKAGE_SOURCE}
     ${COMMON_SOURCES}
 )

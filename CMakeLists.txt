@@ -43,8 +43,7 @@ set(
     "${PROJECT_SOURCE_DIR}/src/detector/storage.c"
 )
 
-# packages 尚未进入职责重构，暂时从只读对照树接入。
-set(PACKAGE_SOURCE "${PROJECT_SOURCE_DIR}/old/src/packages.c")
+set(PACKAGE_SOURCE "${PROJECT_SOURCE_DIR}/src/packages.c")
 set(
     UI_SOURCES
     "${PROJECT_SOURCE_DIR}/src/ui/ui.c"
