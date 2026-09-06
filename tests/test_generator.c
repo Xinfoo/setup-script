@@ -502,6 +502,25 @@ static bool test_automatic_script(void)
     passed &= forbid_fragment(&script,
                               "FALLBACK_FILE",
                               "the removed fallback-initramfs variable");
+    passed &= require_fragment(&script,
+                               "local user_shell",
+                               "the selected Zsh path variable");
+    passed &= require_fragment(&script,
+                               "if [[ -x /usr/bin/zsh ]]; then\n"
+                               "        user_shell=/usr/bin/zsh\n"
+                               "    elif [[ -x /bin/zsh ]]; then\n"
+                               "        user_shell=/bin/zsh\n"
+                               "    else\n"
+                               "        printf 'ERROR: zsh is not executable at /usr/bin/zsh or /bin/zsh.\\n' >&2\n"
+                               "        return 1\n"
+                               "    fi",
+                               "validated Zsh path selection and failure handling");
+    passed &= require_fragment(&script,
+                               "useradd -m -G wheel -s \"$user_shell\" \"$USERNAME\"",
+                               "new-user creation with the selected Zsh path");
+    passed &= forbid_fragment(&script,
+                              "useradd -m -G wheel -s /bin/zsh",
+                              "an unconditional legacy Zsh path");
     passed &= require_fragment(&script, "cleanup() {", "the cleanup function");
     passed &= require_fragment(&script, "trap cleanup EXIT", "the cleanup trap");
     passed &= require_fragment(&script,

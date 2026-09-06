@@ -3,6 +3,8 @@
 # =============================================================================
 
 configure_system() {
+    local user_shell
+
     install -d /etc/NetworkManager/conf.d /etc/systemd/timesyncd.conf.d \
         /etc/systemd/coredump.conf.d /etc/systemd/journald.conf.d
     cat > /etc/NetworkManager/conf.d/wifi_backend.conf <<'NETWORK'
@@ -33,7 +35,16 @@ JOURNAL
         gnome) systemctl enable gdm.service ;;
         hyprland) systemctl enable greetd.service ;;
     esac
-    useradd -m -G wheel -s /bin/zsh "$USERNAME"
+    # Select only a usable login shell and fail if neither supported path works. / 只选择可用的登录 Shell；两个受支持路径都不可用时终止。
+    if [[ -x /usr/bin/zsh ]]; then
+        user_shell=/usr/bin/zsh
+    elif [[ -x /bin/zsh ]]; then
+        user_shell=/bin/zsh
+    else
+        printf 'ERROR: zsh is not executable at /usr/bin/zsh or /bin/zsh.\n' >&2
+        return 1
+    fi
+    useradd -m -G wheel -s "$user_shell" "$USERNAME"
     install -d -m 0750 /etc/sudoers.d
     printf '%%wheel ALL=(ALL:ALL) ALL\n' > /etc/sudoers.d/10-wheel
     chmod 0440 /etc/sudoers.d/10-wheel

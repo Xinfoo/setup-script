@@ -379,7 +379,7 @@ KDE、GNOME 和 Hyprland 的默认软件集合总体沿用旧版。当前实现�
 - 当前 timesyncd 使用 `/etc/systemd/timesyncd.conf.d/custom.conf`，旧版精确替换主配置中的 `#NTP=`；
 - 当前用 `install -d` 幂等创建 coredump/journald drop-in 目录，旧版直接 `mkdir`，目录已存在时可能因 `set -e` 退出；
 - 当前没有旧版为展示进度而加入的多处 `sleep`；
-- 当前创建用户时直接指定 `/bin/zsh`，不再修改 `/etc/default/useradd`；
+- 当前创建用户时优先指定 `/usr/bin/zsh`，该路径不可执行时回退到 `/bin/zsh`，且不再修改 `/etc/default/useradd`；
 - 当前写入 `/etc/sudoers.d/10-wheel` 并用 `visudo -cf /etc/sudoers` 非交互校验；旧版等待 10 秒后打开交互式 `visudo`，具体授权内容完全由用户手工完成。
 
 ### 3.16 systemd-boot 和 initramfs

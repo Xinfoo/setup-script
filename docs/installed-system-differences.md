@@ -205,10 +205,11 @@ cn.ntp.org.cn time.windows.com cn.pool.ntp.org time.cloudflare.com
 
 ### 5.6 用户、默认 Shell 和 sudo
 
-两边都创建同名用户、建立 home、加入 wheel，并把该用户登录 Shell 设为 `/bin/zsh`。差异是：
+两边都创建同名用户、建立 home、加入 wheel，并把该用户登录 Shell 设为 Zsh。差异是：
 
 - 旧版还尝试把 `/etc/default/useradd` 中精确的 `SHELL=/usr/bin/bash` 改成 Zsh；如果该文本匹配，今后由 `useradd` 创建的其他用户默认也会使用 Zsh；
-- 新版不修改全局 useradd 默认值，只为本次账户传递 `-s /bin/zsh`。
+- 旧版为本次账户固定传递 `-s /bin/zsh`；
+- 新版不修改全局 useradd 默认值，只为本次账户传递探测结果：优先 `/usr/bin/zsh`，该路径不可执行时回退到 `/bin/zsh`。
 
 sudo 结果不能简单视为相同。旧版打开交互式 `visudo`，最终权限完全取决于操作者保存了什么；新版固定创建：
 
