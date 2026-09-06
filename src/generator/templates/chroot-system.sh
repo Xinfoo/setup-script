@@ -9,7 +9,7 @@ configure_system() {
 [device]
 wifi.backend=iwd
 NETWORK
-    cat > /etc/systemd/timesyncd.conf.d/local.conf <<'TIME'
+    cat > /etc/systemd/timesyncd.conf.d/custom.conf <<'TIME'
 [Time]
 NTP=cn.ntp.org.cn time.windows.com cn.pool.ntp.org time.cloudflare.com
 TIME

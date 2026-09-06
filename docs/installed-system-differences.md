@@ -200,7 +200,7 @@ cn.ntp.org.cn time.windows.com cn.pool.ntp.org time.cloudflare.com
 旧版用 `sed` 修改 `/etc/systemd/timesyncd.conf` 中恰好匹配的 `#NTP=`；新版不修改主文件，而是创建：
 
 ```text
-/etc/systemd/timesyncd.conf.d/local.conf
+/etc/systemd/timesyncd.conf.d/custom.conf
 ```
 
 只要旧版替换成功，systemd-timesyncd 的有效配置相同，但文件系统 diff 会显示不同。新版也不依赖上游主配置中注释行的精确格式。

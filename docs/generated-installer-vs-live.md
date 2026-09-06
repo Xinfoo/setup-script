@@ -376,7 +376,7 @@ KDE、GNOME 和 Hyprland 的默认软件集合总体沿用旧版。当前实现�
 系统配置方面：
 
 - NetworkManager 的 iwd 后端两版都通过独立配置文件设置；
-- 当前 timesyncd 使用 `/etc/systemd/timesyncd.conf.d/local.conf`，旧版精确替换主配置中的 `#NTP=`；
+- 当前 timesyncd 使用 `/etc/systemd/timesyncd.conf.d/custom.conf`，旧版精确替换主配置中的 `#NTP=`；
 - 当前用 `install -d` 幂等创建 coredump/journald drop-in 目录，旧版直接 `mkdir`，目录已存在时可能因 `set -e` 退出；
 - 当前没有旧版为展示进度而加入的多处 `sleep`；
 - 当前创建用户时直接指定 `/bin/zsh`，不再修改 `/etc/default/useradd`；

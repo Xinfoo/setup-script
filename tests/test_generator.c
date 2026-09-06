@@ -295,6 +295,15 @@ static bool test_automatic_script(void)
                               "<alias><family>",
                               "the compacted fontconfig format");
     passed &= require_fragment(&script,
+                               "cat > /etc/systemd/timesyncd.conf.d/custom.conf <<'TIME'\n"
+                               "[Time]\n"
+                               "NTP=cn.ntp.org.cn time.windows.com cn.pool.ntp.org time.cloudflare.com\n"
+                               "TIME",
+                               "the custom timesyncd drop-in");
+    passed &= forbid_fragment(&script,
+                              "/etc/systemd/timesyncd.conf.d/local.conf",
+                              "the former timesyncd drop-in path");
+    passed &= require_fragment(&script,
                                "# Installation orchestration / 安装流程编排",
                                "a bilingual installation-flow section comment");
     passed &= require_fragment(&script,
