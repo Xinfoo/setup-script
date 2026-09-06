@@ -242,7 +242,7 @@ F2FS 可选择：
 - hostname、username 和 timezone 格式有效；
 - 100 GiB ROOT + HOME 布局有足够空间。
 
-有阻断错误时不能生成脚本。Secure Boot 和可移动磁盘目前作为明确警告显示。在 Base system 页面开启 Secure Boot 时，TUI 会以默认选中 `No` 的对话框要求用户确认：`shim-signed.pkg.tar.zst` 的来源和可用性由用户自行核实。
+有阻断错误时不能生成脚本。Secure Boot、本地镜像和可移动磁盘目前作为明确警告显示。在 Base system 页面开启 Secure Boot 时，TUI 会以默认选中 `No` 的对话框要求用户确认：`shim-signed.pkg.tar.zst` 的来源和可用性由用户自行核实。切换到本地镜像时也会以默认选中 `No` 的对话框提示用户自行验证镜像内容、完整性、兼容性和可用性，并说明唯一 `F2FS-DATA` 分区、F2FS 文件系统、`repo/archlinux` 目录、不得位于安装盘且必须未被使用等识别要求。
 
 审阅页按键：
 
@@ -292,7 +292,7 @@ system
 1. 检查 root、UEFI、命令依赖和 EFI variables；
 2. 核对每个参与安装的目标都是整块磁盘，并比较容量、型号、非空序列号与 GPT 类型；
 3. 核对现有分区的父磁盘、编号、起始扇区、容量、PARTUUID 和 GPT 类型；`KEEP` 还会核对文件系统 UUID 并做只读挂载探测；
-4. 显示存储表；网络源直接刷新 Live 包数据库，本地源则先要求精确输入设备和 UUID，随后预先解析完整软件包集；
+4. 显示存储表；网络源直接刷新 Live 包数据库，本地源则先显示风险和检测到的设备身份，要求选择 `yes/no` 并精确输入 `ACCEPT USE LOCAL MIRROR`，随后预先解析完整软件包集；
 5. 软件源就绪后，以表格列出每个将被擦除、重新分区、格式化、挂载写入或启用为 Swap 的块设备及其父磁盘；用户先选择 `yes/no`，选择 `yes` 后还必须精确输入 `CONFIRM EXECUTE`，然后立即再做一次所有参与磁盘的身份核对；
 6. 分别在选择了引导式布局的磁盘上重建 GPT 并核对新分区；现有分区模式不写对应磁盘的分区表；
 7. 只格式化 `FORMAT`，随后按挂载路径顺序挂载到 `/mnt` 并启用指定 Swap；
@@ -392,7 +392,7 @@ explicit execution
 
 本地镜像模式要求恰好一个标签为 `F2FS-DATA` 的分区，其中包含 `repo/archlinux`。脚本会拒绝使用任意参与安装磁盘上的分区作为本地镜像。
 
-确认文本必须精确输入 `BOOTSTRAP <device> <UUID>`。脚本会确认该分区是目标盘之外、未使用的 F2FS，然后以 `ro,nodev,nosuid,noexec` 挂载。Live 环境临时使用 `file://` 和 `SigLevel = Never` 安装 `local_mirror_live` 组中的 nginx；nginx 启动后立即恢复原签名策略，并将软件源切换为仅监听 `127.0.0.1:2304` 的 HTTP 镜像。`pacstrap` 和 chroot 都通过该 HTTP 地址工作，目标 `pacman.conf` 始终保持标准签名策略。chroot 写入永久镜像后，脚本停止 nginx，并在退出清理时恢复 Live 配置、卸载镜像分区。
+脚本会显示本地镜像内容未经认证、软件包及 hook 可用 root 权限运行等风险，以及检测到的设备、UUID 和父磁盘；用户先选择 `yes/no`，选择 `yes` 后还必须精确输入 `ACCEPT USE LOCAL MIRROR`。随后脚本再次核对镜像身份，确认该分区是目标盘之外、未使用的 F2FS，然后以 `ro,nodev,nosuid,noexec` 挂载。Live 环境临时使用 `file://` 和 `SigLevel = Never` 安装 `local_mirror_live` 组中的 nginx；nginx 启动后立即恢复原签名策略，并将软件源切换为仅监听 `127.0.0.1:2304` 的 HTTP 镜像。`pacstrap` 和 chroot 都通过该 HTTP 地址工作，目标 `pacman.conf` 始终保持标准签名策略。chroot 写入永久镜像后，脚本停止 nginx，并在退出清理时恢复 Live 配置、卸载镜像分区。
 
 ## Secure Boot
 

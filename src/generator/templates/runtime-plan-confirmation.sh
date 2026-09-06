@@ -48,17 +48,27 @@ confirm_package_preparation() {
     [[ "$USE_LOCAL_MIRROR" == true ]] || return 0
     # This confirmation occurs before pacman state in the Live environment changes. / 此确认发生在 Live 环境 pacman 状态变化之前。
     [[ -t 0 ]] || die 'Package preparation requires an interactive terminal.'
-    printf '\nPackage preparation refreshes the Live package databases.\n'
-    # Bind consent to both the selected device path and filesystem UUID. / 将授权同时绑定到所选设备路径和文件系统 UUID。
-    printf 'WARNING: installing the local HTTP server temporarily disables signature verification in the Live environment.\n'
+    printf '\nWARNING: the local mirror is a user-trusted package source.\n'
+    printf 'The installer does not authenticate its contents or guarantee that it is complete, current, compatible, or usable.\n'
+    printf 'Packages and their installation hooks can run with root privileges.\n'
+    printf 'Bootstrapping the local HTTP server temporarily disables signature verification in the Live environment.\n'
     printf 'The target system keeps its standard package signature policy.\n'
-    printf 'The installer will mount %s read-only and temporarily edit the Live pacman configuration.\n' \
-        "$LOCAL_MIRROR_SOURCE"
-    printf 'Type BOOTSTRAP %s %s to trust this exact source for the server bootstrap: ' \
-        "$LOCAL_MIRROR_SOURCE" "$LOCAL_MIRROR_UUID"
+    printf 'Detected source: %s  UUID=%s  parent=%s\n' \
+        "$LOCAL_MIRROR_SOURCE" "$LOCAL_MIRROR_UUID" "$LOCAL_MIRROR_PARENT"
+    printf 'The source must remain an unused F2FS partition labelled F2FS-DATA, contain repo/archlinux, and stay outside every installation disk.\n'
+    while true; do
+        printf 'Accept these risks and use this local mirror? [yes/no]: '
+        IFS= read -r answer || die 'Preparation confirmation was interrupted.'
+        case "${answer,,}" in
+            yes) break ;;
+            no) die 'Local mirror use was declined.' ;;
+            *) printf 'Please enter yes or no.\n' ;;
+        esac
+    done
+    printf 'Type ACCEPT USE LOCAL MIRROR to continue: '
     IFS= read -r answer || die 'Preparation confirmation was interrupted.'
-    [[ "$answer" == "BOOTSTRAP $LOCAL_MIRROR_SOURCE $LOCAL_MIRROR_UUID" ]] ||
-        die 'Local-mirror server bootstrap was not confirmed.'
+    [[ "$answer" == 'ACCEPT USE LOCAL MIRROR' ]] ||
+        die 'Local mirror use was not confirmed.'
     verify_local_mirror_identity
 }
 

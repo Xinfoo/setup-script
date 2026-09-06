@@ -854,8 +854,17 @@ static bool test_local_mirror_script(void)
 
     if (!generate_script(&plan, &script)) return false;
     passed &= require_fragment(&script,
-                               "Type BOOTSTRAP %s %s to trust this exact source",
-                               "an explicit local-server bootstrap confirmation");
+                               "Accept these risks and use this local mirror? [yes/no]:",
+                               "a local-mirror risk decision");
+    passed &= require_fragment(&script,
+                               "Type ACCEPT USE LOCAL MIRROR to continue:",
+                               "an explicit local-mirror acceptance phrase");
+    passed &= require_fragment(&script,
+                               "[[ \"$answer\" == 'ACCEPT USE LOCAL MIRROR' ]]",
+                               "an exact local-mirror acceptance check");
+    passed &= forbid_fragment(&script,
+                              "Type BOOTSTRAP %s %s to trust this exact source",
+                              "the former device-bound bootstrap phrase");
     passed &= require_fragment(&script,
                                "LOCAL_MIRROR_UUID=$(blkid -s UUID",
                                "local mirror UUID capture");

@@ -69,7 +69,24 @@ void handle_base_system(UiState *state, int key)
         case 0: system->platform = (Platform)(((int)system->platform + 1) % 3); changed = true; break;
         case 1: system->kernel = (Kernel)(((int)system->kernel + 1) % 4); changed = true; break;
         case 2: system->locale = system->locale == LOCALE_EN_US ? LOCALE_ZH_CN : LOCALE_EN_US; changed = true; break;
-        case 3: system->local_mirror = !system->local_mirror; changed = true; break;
+        case 3:
+            if (system->local_mirror) {
+                system->local_mirror = false;
+                changed = true;
+            } else if (confirm_dialog(
+                           "Use local mirror",
+                           "Use the local mirror only after independently verifying its "
+                           "contents, completeness, compatibility, and usability. Detection "
+                           "requires exactly one unused F2FS partition labelled F2FS-DATA, "
+                           "containing repo/archlinux, outside every installation disk. The "
+                           "Live environment temporarily disables package signature checking "
+                           "only while bootstrapping the local HTTP server. Continue?")) {
+                system->local_mirror = true;
+                changed = true;
+            } else {
+                set_status(state, "Network mirror retained; local mirror was not accepted.");
+            }
+            break;
         case 4: system->china_mirrors = !system->china_mirrors; changed = true; break;
         case 5: break;
         case 6: system->create_efi_entry = !system->create_efi_entry; changed = true; break;
