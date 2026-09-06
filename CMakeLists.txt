@@ -43,7 +43,7 @@ set(
     "${PROJECT_SOURCE_DIR}/src/detector/storage.c"
 )
 
-# UI、packages 和生成器主体尚未进入本轮职责重构，暂时从只读对照树接入。
+# UI 和 packages 尚未进入本轮职责重构，暂时从只读对照树接入。
 set(PACKAGE_SOURCE "${PROJECT_SOURCE_DIR}/old/src/packages.c")
 set(
     UI_SOURCES
@@ -54,18 +54,21 @@ set(
 )
 set(
     GENERATOR_SOURCES
+    "${PROJECT_SOURCE_DIR}/src/generator/generator.c"
     "${PROJECT_SOURCE_DIR}/src/generator/shell.c"
-    "${PROJECT_SOURCE_DIR}/old/src/generator/generator.c"
-    "${PROJECT_SOURCE_DIR}/old/src/generator/writer.c"
-    "${PROJECT_SOURCE_DIR}/old/src/generator/plan.c"
-    "${PROJECT_SOURCE_DIR}/old/src/generator/runtime.c"
-    "${PROJECT_SOURCE_DIR}/old/src/generator/chroot.c"
-    "${PROJECT_SOURCE_DIR}/old/src/generator/finish.c"
+    "${PROJECT_SOURCE_DIR}/src/generator/writer.c"
+    "${PROJECT_SOURCE_DIR}/src/generator/emitters/disk.c"
+    "${PROJECT_SOURCE_DIR}/src/generator/emitters/package.c"
+    "${PROJECT_SOURCE_DIR}/src/generator/emitters/partition.c"
+    "${PROJECT_SOURCE_DIR}/src/generator/workflow/preamble.c"
+    "${PROJECT_SOURCE_DIR}/src/generator/workflow/live.c"
+    "${PROJECT_SOURCE_DIR}/src/generator/workflow/chroot.c"
+    "${PROJECT_SOURCE_DIR}/src/generator/workflow/finish.c"
 )
 
 set(GENERATOR_TEMPLATE_OUTPUTS)
 function(embed_generator_template output_name source_name)
-    set(source "${PROJECT_SOURCE_DIR}/old/src/generator/templates/${source_name}.sh")
+    set(source "${PROJECT_SOURCE_DIR}/src/generator/templates/${source_name}.sh")
     set(output "${CMAKE_CURRENT_BINARY_DIR}/generated/generator/${output_name}.inc")
     add_custom_command(
         OUTPUT "${output}"

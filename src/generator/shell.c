@@ -1,4 +1,4 @@
-#include "util.h"
+#include "private.h"
 
 #include <stdint.h>
 #include <stdlib.h>
