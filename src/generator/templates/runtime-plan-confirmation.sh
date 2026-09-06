@@ -30,14 +30,15 @@ confirm_package_preparation() {
     [[ -t 0 ]] || die 'Package preparation requires an interactive terminal.'
     printf '\nPackage preparation refreshes the Live package databases.\n'
     if [[ "$USE_LOCAL_MIRROR" == true ]]; then
-        printf 'WARNING: the selected local repository disables package signature verification.\n'
-        printf 'It will mount %s read-only and temporarily edit Live pacman configuration.\n' \
+        printf 'WARNING: installing the local HTTP server temporarily disables signature verification in the Live environment.\n'
+        printf 'The target system keeps its standard package signature policy.\n'
+        printf 'The installer will mount %s read-only and temporarily edit the Live pacman configuration.\n' \
             "$LOCAL_MIRROR_SOURCE"
-        printf 'Type UNSIGNED %s %s to trust this exact source: ' \
+        printf 'Type BOOTSTRAP %s %s to trust this exact source for the server bootstrap: ' \
             "$LOCAL_MIRROR_SOURCE" "$LOCAL_MIRROR_UUID"
         IFS= read -r answer || die 'Preparation confirmation was interrupted.'
-        [[ "$answer" == "UNSIGNED $LOCAL_MIRROR_SOURCE $LOCAL_MIRROR_UUID" ]] ||
-            die 'Unsigned local-mirror preparation was not confirmed.'
+        [[ "$answer" == "BOOTSTRAP $LOCAL_MIRROR_SOURCE $LOCAL_MIRROR_UUID" ]] ||
+            die 'Local-mirror server bootstrap was not confirmed.'
         verify_local_mirror_identity
         return 0
     fi

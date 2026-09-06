@@ -484,7 +484,7 @@ static bool test_existing_keep_and_format_actions(void)
     return passed;
 }
 
-/* 临时本地镜像场景确认信任提示、身份复核和只读绑定挂载顺序。 */
+/* 临时本地镜像场景确认 nginx 引导、HTTP 切换和目标标准签名策略。 */
 static bool test_local_mirror_script(void)
 {
     DiskInfo disk;
@@ -501,8 +501,8 @@ static bool test_local_mirror_script(void)
 
     if (!generate_script(&plan, &script)) return false;
     passed &= require_fragment(&script,
-                               "Type UNSIGNED %s %s to trust this exact source:",
-                               "an explicit unsigned-mirror confirmation");
+                               "Type BOOTSTRAP %s %s to trust this exact source",
+                               "an explicit local-server bootstrap confirmation");
     passed &= require_fragment(&script,
                                "LOCAL_MIRROR_UUID=$(blkid -s UUID",
                                "local mirror UUID capture");
@@ -510,23 +510,32 @@ static bool test_local_mirror_script(void)
                                "verify_local_mirror_identity",
                                "local mirror identity revalidation");
     passed &= require_fragment(&script,
-                               "Server = file:///var/cache/arch-install-repo/",
-                               "the target-visible read-only local repository URL");
+                               "LOCAL_MIRROR_LIVE_PACKAGES=(\n    'nginx'\n)",
+                               "the configurable local-mirror server package");
     passed &= require_fragment(&script,
-                               "mount --bind -- /run/media/root/F2FS-DATA/repo/archlinux",
-                               "an explicit target local-repository bind mount");
+                               "listen 127.0.0.1:2304;",
+                               "a loopback-only temporary nginx server");
     passed &= require_fragment(&script,
-                               "mount -o remount,bind,ro,nodev,nosuid,noexec",
-                               "restrictive target local-repository mount options");
+                               "Server = http://127.0.0.1:2304/$repo/os/$arch",
+                               "the HTTP mirror inherited by the target");
     passed &= require_order(&script,
-                            "genfstab -U \"$TARGET_ROOT\"",
-                            "        setup_target_local_mirror\n",
-                            "fstab generation before the temporary target mirror bind");
+                            "Server = file:///run/media/root/F2FS-DATA/repo/archlinux/",
+                            "pacman -S --needed --noconfirm \"${LOCAL_MIRROR_LIVE_PACKAGES[@]}\"",
+                            "the file-based nginx bootstrap");
+    passed &= require_order(&script,
+                            "pacman -S --needed --noconfirm \"${LOCAL_MIRROR_LIVE_PACKAGES[@]}\"",
+                            "Server = http://127.0.0.1:2304/$repo/os/$arch",
+                            "the switch to HTTP after nginx installation");
+    passed &= require_order(&script,
+                            "arch-chroot \"$TARGET_ROOT\"",
+                            "        stop_local_mirror_server\n",
+                            "the local server lifetime through chroot configuration");
     passed &= forbid_fragment(&script,
-                              "Server = file:///run/media/root/F2FS-DATA/repo/archlinux/$repo/os/$arch' > \"$TARGET_ROOT/etc/pacman.d/mirrorlist\"",
-                              "a local URL hidden from the target chroot");
-    passed &= forbid_fragment(&script, "127.0.0.1:2304", "a dead localhost mirror URL");
-    passed &= forbid_fragment(&script, "nginx", "an unsigned temporary mirror server");
+                              "mount --bind -- /run/media/root/F2FS-DATA/repo/archlinux",
+                              "a target local-repository bind mount");
+    passed &= forbid_fragment(&script,
+                              "\"$TARGET_ROOT/etc/pacman.conf\"",
+                              "a target pacman signature-policy modification");
     generated_script_destroy(&script);
     return passed;
 }
@@ -612,7 +621,7 @@ int main(void)
                  existing ? "PASS" : "FAIL");
     (void)printf("%s output symlink rejection\n",
                  symlink ? "PASS" : "FAIL");
-    (void)printf("%s local mirror hardening\n",
+    (void)printf("%s local mirror HTTP architecture\n",
                  local_mirror ? "PASS" : "FAIL");
     (void)printf("%s custom package configuration\n",
                  custom_packages ? "PASS" : "FAIL");

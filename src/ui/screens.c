@@ -120,7 +120,7 @@ static PackageGroup kernel_package_group(Kernel kernel)
     return PKG_KERNEL_LINUX;
 }
 
-/* 基础系统前三项会改变软件包集合，Enter 展示包名，Space 保留原修改动作。 */
+/* 会改变软件包集合的基础选项用 Enter 展示包名，Space 保留原修改动作。 */
 static bool inspect_system_packages(UiState *state)
 {
     SystemPlan *system = &state->plan->system;
@@ -144,6 +144,9 @@ static bool inspect_system_packages(UiState *state)
             groups[count++] = PKG_LAPTOP_TOOLS;
             if (system->desktop == DESKTOP_GNOME) groups[count++] = PKG_GNOME_LAPTOP;
         }
+    } else if (state->row == 4 && system->local_mirror) {
+        title = "Pacman packages - Local mirror bootstrap";
+        groups[count++] = PKG_LOCAL_MIRROR_LIVE;
     } else {
         return false;
     }
@@ -155,7 +158,7 @@ static bool inspect_system_packages(UiState *state)
 void draw_system(UiState *state)
 {
     SystemPlan *system = &state->plan->system;
-    const char *keys = state->row <= 2
+    const char *keys = state->row <= 2 || (state->row == 4 && system->local_mirror)
         ? "Up/Down move   Enter packages   Space/Left/Right change   Esc back"
         : "Up/Down move   Enter/Space/Left/Right change   Esc back";
     draw_shell(state, "Base system", keys);

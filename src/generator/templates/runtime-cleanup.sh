@@ -82,22 +82,6 @@ cleanup() {
             fi
         fi
     fi
-    # Restore temporary target repository changes after a failed run. / 安装失败时恢复目标系统的临时仓库改动。
-    if [[ "$status" -ne 0 && "$target_active" == true &&
-          "$TARGET_CONFIG_FINALIZED" != true && -n "$WORK_DIR" ]]; then
-        if [[ -f "$WORK_DIR/target-pacman.conf" ]]; then
-            if ! cp -a -- "$WORK_DIR/target-pacman.conf" "$TARGET_ROOT/etc/pacman.conf"; then
-                printf 'WARNING: failed to restore target pacman.conf.\n' >&2
-                cleanup_failed=true
-            fi
-        fi
-        if [[ -f "$WORK_DIR/target-mirrorlist" ]]; then
-            if ! cp -a -- "$WORK_DIR/target-mirrorlist" "$TARGET_ROOT/etc/pacman.d/mirrorlist"; then
-                printf 'WARNING: failed to restore target mirrorlist.\n' >&2
-                cleanup_failed=true
-            fi
-        fi
-    fi
     # Remove staged files before recursively unmounting the target. / 递归卸载目标系统前移除暂存文件。
     if [[ "$target_active" == true ]]; then
         for index in "${!SECURE_BOOT_STAGED_FILES[@]}"; do
@@ -131,6 +115,11 @@ cleanup() {
             cleanup_failed=true
         fi
     done
+    # Stop the loopback HTTP mirror before releasing its source filesystem. / 卸载源文件系统前停止回环 HTTP 镜像。
+    if [[ "$LOCAL_MIRROR_SERVER_RUNNING" == true ]] && ! stop_local_mirror_server; then
+        printf 'WARNING: failed to stop the temporary local mirror server.\n' >&2
+        cleanup_failed=true
+    fi
     # Release the Live-side local mirror mount. / 释放 Live 环境中的本地镜像挂载。
     if [[ "$mirror_active" == true ]]; then
         if ! umount -- '/run/media/root/F2FS-DATA'; then

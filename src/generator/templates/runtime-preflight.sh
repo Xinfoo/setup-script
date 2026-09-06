@@ -6,7 +6,7 @@ preflight() {
     local command filesystem index efi_type efi_options
     [[ "$EUID" -eq 0 ]] || die 'Run this installer as root.'
     [[ -d /sys/firmware/efi ]] || die 'The live environment was not booted in UEFI mode.'
-    for command in bash tee sleep lsblk blockdev sed grep find findmnt wipefs sfdisk blkid mount umount swapon swapoff pacman pacstrap genfstab arch-chroot mktemp mkdir rmdir install cp rm chmod mv sync; do
+    for command in bash cat tee sleep lsblk blockdev sed grep find findmnt wipefs sfdisk blkid mount umount swapon swapoff pacman pacstrap genfstab arch-chroot mktemp mkdir rmdir install cp rm chmod mv sync; do
         require_command "$command"
     done
     [[ ! -L "$TARGET_ROOT" ]] || die "Target mountpoint must not be a symlink: $TARGET_ROOT"

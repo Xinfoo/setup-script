@@ -45,10 +45,6 @@ static const unsigned char runtime_filesystems_template[] = {
 #include "generated/generator/runtime_filesystems.inc"
 };
 
-static const unsigned char runtime_target_mirror_template[] = {
-#include "generated/generator/runtime_target_mirror.inc"
-};
-
 static const unsigned char runtime_package_source_template[] = {
 #include "generated/generator/runtime_package_source.inc"
 };
@@ -73,6 +69,5 @@ void emit_outer_runtime(ScriptWriter *writer)
                  sizeof(runtime_plan_confirmation_template));
     writer_write(writer, runtime_partitioning_template, sizeof(runtime_partitioning_template));
     writer_write(writer, runtime_filesystems_template, sizeof(runtime_filesystems_template));
-    writer_write(writer, runtime_target_mirror_template, sizeof(runtime_target_mirror_template));
     writer_write(writer, runtime_package_source_template, sizeof(runtime_package_source_template));
 }

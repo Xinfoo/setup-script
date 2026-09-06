@@ -24,9 +24,11 @@ main() {
     write_chroot_script
     phase 'Configuring the installed system'
     arch-chroot "$TARGET_ROOT" /bin/bash /root/.arch-install-chroot.sh
-    unmount_target_local_mirror
+    if [[ "$USE_LOCAL_MIRROR" == true ]]; then
+        phase 'Stopping the temporary local mirror server'
+        stop_local_mirror_server
+    fi
     sign_secure_boot_assets
-    finalize_target_package_config
     create_firmware_entry
     rm -f -- "$TARGET_ROOT/root/.arch-install-chroot.sh"
     sync

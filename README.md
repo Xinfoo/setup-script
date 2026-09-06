@@ -47,7 +47,7 @@ VS Code 调试配置默认使用 GDB：
 sudo pacman -S --needed gdb
 ```
 
-运行 TUI 时需要 `lsblk`（由 `util-linux` 提供）；从 Storage 页面启动手动分区器还需要同属 `util-linux` 的 `cfdisk`。生成的脚本面向 Arch Linux Live ISO，并使用该环境中的 `pacstrap`、`arch-chroot`、`sfdisk`、文件系统工具和 systemd-boot 等命令。本地镜像模式直接使用只读的 `F2FS-DATA` 仓库，不需要 nginx。
+运行 TUI 时需要 `lsblk`（由 `util-linux` 提供）；从 Storage 页面启动手动分区器还需要同属 `util-linux` 的 `cfdisk`。生成的脚本面向 Arch Linux Live ISO，并使用该环境中的 `pacstrap`、`arch-chroot`、`sfdisk`、文件系统工具和 systemd-boot 等命令。本地镜像模式从只读的 `F2FS-DATA` 仓库引导安装 nginx，再通过仅监听回环地址的临时 HTTP 镜像同时服务 `pacstrap` 和 chroot。
 
 ## 使用 CMake 构建
 
@@ -147,11 +147,12 @@ CMake 还提供：
 
 ```json
 {
-  "version": 1,
+  "version": 2,
   "groups": {
     "bootstrap": ["base", "base-devel"],
     "core": ["zsh", "networkmanager"],
-    "kernel_linux": ["linux", "linux-headers"]
+    "kernel_linux": ["linux", "linux-headers"],
+    "local_mirror_live": ["nginx"]
   }
 }
 ```
@@ -387,7 +388,7 @@ explicit execution
 
 本地镜像模式要求恰好一个标签为 `F2FS-DATA` 的分区，其中包含 `repo/archlinux`。脚本会拒绝使用任意参与安装磁盘上的分区作为本地镜像。
 
-确认文本必须精确输入 `UNSIGNED <device> <UUID>`。脚本会确认该分区是目标盘之外、未使用的 F2FS，然后以 `ro,nodev,nosuid,noexec` 挂载。`pacstrap` 完成且 `genfstab` 生成后，仓库目录才会临时 bind 到目标系统的 `/var/cache/arch-install-repo`，供 chroot 内的 `file://` 源使用；该挂载不会写入 fstab。这个兼容模式会临时设置 `SigLevel = Never`，因此仓库内容将被视为可以以 root 权限安装的可信输入。成功后目标系统改用选定的永久镜像。
+确认文本必须精确输入 `BOOTSTRAP <device> <UUID>`。脚本会确认该分区是目标盘之外、未使用的 F2FS，然后以 `ro,nodev,nosuid,noexec` 挂载。Live 环境临时使用 `file://` 和 `SigLevel = Never` 安装 `local_mirror_live` 组中的 nginx；nginx 启动后立即恢复原签名策略，并将软件源切换为仅监听 `127.0.0.1:2304` 的 HTTP 镜像。`pacstrap` 和 chroot 都通过该 HTTP 地址工作，目标 `pacman.conf` 始终保持标准签名策略。chroot 写入永久镜像后，脚本停止 nginx，并在退出清理时恢复 Live 配置、卸载镜像分区。
 
 ## Secure Boot
 

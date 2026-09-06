@@ -43,7 +43,7 @@ packages.json ──> ncurses TUI ──> InstallPlan
 ### 2.1 构造阶段
 
 1. 程序在当前工作目录检查 `config/` 和 `config/packages.json`。
-2. `packages.json` 不存在时写出内建默认包组；存在时必须完整符合当前 `version = 1` 格式。
+2. `packages.json` 不存在时写出内建默认包组；存在时必须完整符合当前 `version = 2` 格式。其中 `local_mirror_live` 默认包含用于临时 HTTP 镜像的 `nginx`。
 3. 软件包配置损坏、字段缺失或版本不一致时，交互式终端会询问是否用默认值覆盖；非交互模式不会自行覆盖。
 4. 程序用 `lsblk --json --bytes --paths` 建立磁盘和分区清单，记录路径、容量、型号、序列号、传输方式、只读/可移动状态、分区表、PARTUUID、文件系统 UUID、GPT 类型和起始扇区等信息。
 5. TUI 编辑 `InstallPlan`。普通编辑不会执行 `wipefs`、`sfdisk`、`mkfs`、`mount` 或 `swapon`。
@@ -160,13 +160,15 @@ umask 022
 之后需要一次软件源确认：
 
 - 网络源必须精确输入 `PREPARE`；
-- 本地源必须精确输入 `UNSIGNED <device> <UUID>`，明确承认该仓库关闭包签名检查。
+- 本地源必须精确输入 `BOOTSTRAP <device> <UUID>`，确认仅在 Live 环境中用该来源引导安装 HTTP 服务器。目标系统仍使用标准签名策略。
 
 旧版使用默认 Yes 的 `[Y/n]` 确认，而且在选择目标磁盘之前就可能挂载本地镜像、修改 Live pacman 配置并启动 nginx。
 
 ### 3.5 软件源准备和完整软件包预解析
 
 网络模式直接运行 `pacman -Syy --noconfirm`，不再用 `ping baidu.com` 作为联网判据。网络可达但 ICMP 被禁用的环境不会因为 ping 失败被提前拒绝；真正的 pacman 操作失败仍会中止。
+
+本地模式先以 `ro,nodev,nosuid,noexec` 挂载 `F2FS-DATA`，备份 Live 的 pacman 配置，并临时用 `file://` 和 `SigLevel = Never` 安装 `local_mirror_live` 组中的 nginx。随后启动只监听 `127.0.0.1:2304` 的独立 nginx 配置，立即恢复 Live 原有 `pacman.conf`，将 mirrorlist 切换到 `http://127.0.0.1:2304/$repo/os/$arch` 并重新刷新数据库。由此只有 nginx 引导安装绕过验签，后续 HTTP 操作恢复 Live 的原签名策略。
 
 随后脚本使用 `pacman -Sp --needed --noconfirm` 预解析本次方案的完整软件包并集。桌面、驱动和可选软件如果在仓库中不可解析，会在任何磁盘写入之前失败。
 
@@ -277,6 +279,8 @@ F2FS 挂载配置在方案中提前确定：
 - Intel/AMD microcode，虚拟机为空；
 - Laptop 模式下的固件组。
 
+本地镜像模式下，Live mirrorlist 此时已经指向临时 nginx。`pacstrap -K` 会把该 mirrorlist 带入目标，同时不会把 Live 为引导 nginx 临时修改过的 `pacman.conf` 复制进去，因此目标使用新安装 pacman 的标准签名策略。
+
 挂载和 `swapon` 已经完成，因此紧接着执行：
 
 ```bash
@@ -308,6 +312,8 @@ arch-chroot "$TARGET_ROOT" /bin/bash /root/.arch-install-chroot.sh
 9. `configure_mirrors`。
 
 除 root 和普通用户密码外，时区、Locale、hostname、username、硬件、桌面、镜像和软件组选项都已写进脚本，不再在 chroot 中重新询问。
+
+本地镜像模式下，内层 pacman 通过 `http://127.0.0.1:2304` 访问 Live 侧 nginx。当前 `arch-chroot` 调用没有创建独立网络命名空间，因此该回环服务可见；目标 `pacman.conf` 没有被安装器改成 `SigLevel = Never`。`configure_mirrors` 在内层流程末尾写入永久镜像，返回 Live 后才停止临时 nginx。
 
 旧版把函数目录、信息文件和 `chroot-setup.sh` 复制到目标，运行 `arch-chroot -S /mnt` 后要求用户手工执行 `./setup.sh`。大量选择在内层脚本中才发生；用户还必须手工退出 chroot，外层脚本才能继续。
 
@@ -434,10 +440,10 @@ Secure Boot 与临时本地镜像在当前实现中可以同时启用。此组�
 当前 `cleanup()` 无论正常退出、错误退出还是收到常见终止信号都会运行。它先用 `findmnt` 确认资源身份，拒绝卸载与本次记录不符的“外来挂载”，然后按状态处理：
 
 - 卸载未完成的 KEEP 探测挂载；
-- 安装失败时恢复目标系统临时修改过的 pacman 配置；
 - 删除 Secure Boot 暂存文件和临时 chroot 脚本；
 - 递归卸载 `/mnt`；
 - 只对本次启用且仍活动的 Swap 逆序执行 `swapoff`；
+- 停止本次启动的临时 nginx；
 - 卸载 Live 侧本地镜像；
 - 恢复 Live 环境的 `pacman.conf` 和 mirrorlist；
 - 卸载并删除 Secure Boot tmpfs；
@@ -513,16 +519,16 @@ Secure Boot 与临时本地镜像在当前实现中可以同时启用。此组�
 
 ## 7. 本地镜像的详细差异
 
-两版都约定标签为 `F2FS-DATA`，仓库目录为 `repo/archlinux`，并把它视为不验证软件包签名的可信输入，但实现完全不同。
+两版都约定标签为 `F2FS-DATA`，仓库目录为 `repo/archlinux`，并用 nginx 把 Live 可见的仓库提供给目标 chroot。`file://` 仅用于 Live 端引导安装 nginx；目标安装流程通过 HTTP 保持标准签名策略。
 
 ### 旧版
 
 1. 查找恰好一个同标签分区；
 2. 默认读写挂载到 `/run/media/root/F2FS-DATA`；
-3. 用精确字符串替换 Live `pacman.conf` 的 SigLevel；
+3. 用精确字符串替换 Live `pacman.conf` 的 SigLevel，仅用于引导安装 nginx；
 4. 先从 `file://` 安装 nginx；
 5. 修改系统 nginx 配置并启动服务；
-6. 把 mirrorlist 改为 `http://127.0.0.1:2304/...`；
+6. 把 mirrorlist 改为 `http://127.0.0.1:2304/...`，使 pacstrap 和 chroot 使用 HTTP；
 7. 不保存或恢复 Live pacman 配置；
 8. 不检查镜像是否位于即将擦除的目标盘；
 9. 成功后不卸载镜像、不停止 nginx；
@@ -534,16 +540,17 @@ Secure Boot 与临时本地镜像在当前实现中可以同时启用。此组�
 2. 验证它是 F2FS、有 UUID、有父磁盘，并记录父盘序列号和容量；
 3. 检查其设备祖先，拒绝位于任何参与安装的磁盘上；
 4. 检查未挂载、非活动 Swap、无 holder；
-5. 要求精确输入设备和 UUID 才接受无签名仓库；
+5. 要求精确输入设备和 UUID 才执行 nginx 引导；
 6. 以 `ro,nodev,nosuid,noexec` 挂载；
 7. 备份 Live `pacman.conf` 和 mirrorlist；
-8. Live 侧直接使用 `file://`，不安装或运行 nginx；
-9. `genfstab` 完成后才把仓库只读 bind 到目标的 `/var/cache/arch-install-repo`，临时供 chroot 使用，因此该 bind 不会进入 fstab；
-10. chroot 完成后先验证身份再卸载 bind；
-11. 恢复目标的签名策略，并要求计划选择永久的 China mirror；
-12. EXIT 清理恢复 Live pacman 配置并卸载源分区。
+8. 临时用 `file://` 和 `SigLevel = Never` 安装 `local_mirror_live` 组中的 nginx；
+9. nginx 使用工作目录中的独立配置并只监听 `127.0.0.1:2304`，不修改系统 nginx 配置；
+10. nginx 启动后立即恢复 Live 原有签名策略，后续 pacstrap 通过 HTTP 工作；
+11. 目标 chroot 通过 localhost HTTP 使用镜像，不修改目标 `pacman.conf`，不建立目标 bind mount；
+12. 内层流程结束时写入永久 China mirror，返回 Live 后停止 nginx；
+13. EXIT 清理也会停止本次 nginx、恢复 Live pacman 配置并卸载源分区。
 
-当前验证规则不允许“临时本地镜像开启但目标 China mirrors 关闭”的有效方案，这是为了避免目标系统保留临时 `file://` 地址；它不限制本地镜像与 Secure Boot 同时使用。
+当前验证规则不允许“临时本地镜像开启但目标 China mirrors 关闭”的有效方案，这是为了避免目标系统保留重启后不存在的 localhost HTTP 地址；它不限制本地镜像与 Secure Boot 同时使用。
 
 ## 8. 哪些习惯被保留，哪些行为被有意改变
 
@@ -571,7 +578,7 @@ Secure Boot 与临时本地镜像在当前实现中可以同时启用。此组�
 - 现有分区要求 GPT，并保存强身份字段；
 - 删除自动 `blkdiscard`；
 - 删除 `ping baidu.com` 网络判定；
-- 删除本地 nginx 镜像服务器；
+- 保留本地 nginx 镜像架构，但限制为回环监听、独立临时配置并纳入退出清理；
 - 软件包全部前置选择并预解析；
 - `genfstab` 覆盖生成并全权处理 Swap；
 - chroot 改为自动执行；
@@ -615,4 +622,3 @@ Secure Boot 与临时本地镜像在当前实现中可以同时启用。此组�
 | Secure Boot 收尾 | [finish-secure-boot.sh](../src/generator/templates/finish-secure-boot.sh) | `bootloader-installer.sh` 内部完成 |
 | EFI NVRAM | [finish-firmware.sh](../src/generator/templates/finish-firmware.sh) | `live/setup.sh` chroot 返回后的末段 |
 | 日志和退出清理 | `runtime-logging.sh` + `runtime-cleanup.sh` | 无统一实现 |
-

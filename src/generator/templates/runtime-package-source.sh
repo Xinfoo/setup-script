@@ -31,11 +31,4 @@ install_base_system() {
     phase 'Installing the base system'
     pacstrap -K "$TARGET_ROOT" "${packages[@]}"
     genfstab -U "$TARGET_ROOT" > "$TARGET_ROOT/etc/fstab"
-    if [[ "$USE_LOCAL_MIRROR" == true ]]; then
-        cp -a "$TARGET_ROOT/etc/pacman.conf" "$WORK_DIR/target-pacman.conf"
-        cp -a "$TARGET_ROOT/etc/pacman.d/mirrorlist" "$WORK_DIR/target-mirrorlist"
-        setup_target_local_mirror
-        sed -i -E 's/^[[:space:]#]*SigLevel[[:space:]]*=.*/SigLevel = Never/' "$TARGET_ROOT/etc/pacman.conf"
-        printf '%s\n' 'Server = file:///var/cache/arch-install-repo/$repo/os/$arch' > "$TARGET_ROOT/etc/pacman.d/mirrorlist"
-    fi
 }
