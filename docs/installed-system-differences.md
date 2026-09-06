@@ -27,7 +27,6 @@
 | --- | --- |
 | GPT | 新版自动分区写入 PARTLABEL；旧版不写 `name=` |
 | `/etc/hosts` | 新版生成完整 localhost/IPv6/hostname 映射；旧版只追加 hostname 映射 |
-| 字体 | 新版 fontconfig 回退链更短，旧版显式包含 TC/JP/KR 字体族 |
 | 时间同步 | 新版使用 timesyncd drop-in；旧版修改主配置文件 |
 | sudo | 新版固定生成 wheel sudoers drop-in；旧版结果取决于人工 `visudo` |
 | 新用户默认 Shell | 新版只为本次用户指定 Zsh；旧版还尝试修改 `/etc/default/useradd` |
@@ -225,21 +224,19 @@ sudo 结果不能简单视为相同。旧版打开交互式 `visudo`，最终权
 
 ### 6.1 字体配置
 
-两边默认安装的字体包相同，但 `/etc/fonts/local.conf` 不同。
-
-旧版显式列出：
+两边默认安装的字体包和 `/etc/fonts/local.conf` 均相同，完整回退链显式列出：
 
 - Noto CJK 的 SC、TC、JP、KR；
 - Sarasa Mono 的 SC、TC、J、K；
 - Noto、Emoji、Nerd Font 和 DejaVu 回退。
 
-新版保留 SC 及通用 Noto/Emoji/Nerd Font/DejaVu 回退，移除了显式的 TC、JP、KR 与 Sarasa TC/J/K 优先项。因此简体中文和常规西文的目标基本一致，但繁体中文、日文、韩文及其等宽字体的匹配优先级可能不同。字体包仍然存在，变化的是 fontconfig 选择顺序。
+新版保留旧版的多行 XML 格式以及上述顺序，没有再精简 TC、JP、KR 或 Sarasa TC/J/K 项。这能让 fontconfig 按语言族选择更合适的 CJK 字形，减少中文字符错误回退到日文字形的情况。
 
 ### 6.2 KDE 与 GNOME
 
 使用默认包表并选择相同推荐软件和输入法时，KDE 与 GNOME 的显式包集合相同。显示管理器分别仍为 SDDM 和 GDM；中文输入分别仍为 Fcitx5 和 IBus。
 
-除公共的 hosts、字体、timesyncd、sudoers 等差异外，两边没有额外的 KDE/GNOME 专用配置文件差异。
+除公共的 hosts、timesyncd、sudoers 等差异外，两边没有额外的 KDE/GNOME 专用配置文件差异。
 
 ### 6.3 Hyprland
 
@@ -369,6 +366,7 @@ mirrors.sjtug.sjtu.edu.cn
 - 同语义选择下的文件系统类型和 F2FS 挂载参数；
 - fstab 中普通挂载与 Swap 的有效条目；
 - Fcitx 路径的 `/etc/environment` 正文；
+- 字体包及完整的 `/etc/fonts/local.conf` 回退链；
 - timezone、Locale、hostname、vconsole 和 pacman Color；
 - NetworkManager iwd、coredump 和 journal 配置；
 - 相同选项对应的 systemd enabled units；
@@ -379,7 +377,6 @@ mirrors.sjtug.sjtu.edu.cn
 
 - GPT PARTLABEL、部分自动布局的精确分区边界、SSD 未分配区 discard 状态；
 - `/etc/hosts`；
-- `/etc/fonts/local.conf`；
 - timesyncd 配置文件落点；
 - `/etc/default/useradd` 的处理；
 - sudoers 文件和旧版不确定的人工编辑结果；

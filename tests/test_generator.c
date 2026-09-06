@@ -274,6 +274,27 @@ static bool test_automatic_script(void)
                                "HOSTS",
                                "the complete hosts file with its standard header");
     passed &= require_fragment(&script,
+                               "            <family>Noto Sans CJK SC</family>\n"
+                               "            <family>Noto Sans CJK TC</family>\n"
+                               "            <family>Noto Sans CJK JP</family>\n"
+                               "            <family>Noto Sans CJK KR</family>\n",
+                               "the complete regional sans-serif CJK fallback order");
+    passed &= require_fragment(&script,
+                               "            <family>Noto Serif CJK SC</family>\n"
+                               "            <family>Noto Serif CJK TC</family>\n"
+                               "            <family>Noto Serif CJK JP</family>\n"
+                               "            <family>Noto Serif CJK KR</family>\n",
+                               "the complete regional serif CJK fallback order");
+    passed &= require_fragment(&script,
+                               "            <family>Sarasa Mono SC</family>\n"
+                               "            <family>Sarasa Mono TC</family>\n"
+                               "            <family>Sarasa Mono J</family>\n"
+                               "            <family>Sarasa Mono K</family>\n",
+                               "the complete regional monospace CJK fallback order");
+    passed &= forbid_fragment(&script,
+                              "<alias><family>",
+                              "the compacted fontconfig format");
+    passed &= require_fragment(&script,
                                "# Installation orchestration / 安装流程编排",
                                "a bilingual installation-flow section comment");
     passed &= require_fragment(&script,

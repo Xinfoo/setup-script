@@ -2,9 +2,48 @@
     pacman_install "${PKG_FONTS[@]}"
     cat > /etc/fonts/local.conf <<'FONTCONFIG'
 <fontconfig>
-  <alias><family>sans-serif</family><prefer><family>Noto Sans</family><family>Noto Sans CJK SC</family><family>Noto Color Emoji</family><family>Symbols Nerd Font</family><family>DejaVu Sans</family></prefer></alias>
-  <alias><family>serif</family><prefer><family>Noto Serif</family><family>Noto Serif CJK SC</family><family>Noto Color Emoji</family><family>Symbols Nerd Font</family><family>DejaVu Serif</family></prefer></alias>
-  <alias><family>monospace</family><prefer><family>JetBrains Mono</family><family>Sarasa Mono SC</family><family>Noto Sans Mono</family><family>Noto Color Emoji</family><family>Symbols Nerd Font Mono</family><family>DejaVu Sans Mono</family></prefer></alias>
+    <alias>
+        <family>sans-serif</family>
+        <prefer>
+            <family>Noto Sans</family>
+            <family>Noto Sans CJK SC</family>
+            <family>Noto Sans CJK TC</family>
+            <family>Noto Sans CJK JP</family>
+            <family>Noto Sans CJK KR</family>
+            <family>Noto Color Emoji</family>
+            <family>Symbols Nerd Font</family>
+            <family>DejaVu Sans</family>
+        </prefer>
+    </alias>
+
+    <alias>
+        <family>serif</family>
+        <prefer>
+            <family>Noto Serif</family>
+            <family>Noto Serif CJK SC</family>
+            <family>Noto Serif CJK TC</family>
+            <family>Noto Serif CJK JP</family>
+            <family>Noto Serif CJK KR</family>
+            <family>Noto Color Emoji</family>
+            <family>Symbols Nerd Font</family>
+            <family>DejaVu Serif</family>
+        </prefer>
+    </alias>
+
+    <alias>
+        <family>monospace</family>
+        <prefer>
+            <family>JetBrains Mono</family>
+            <family>Sarasa Mono SC</family>
+            <family>Sarasa Mono TC</family>
+            <family>Sarasa Mono J</family>
+            <family>Sarasa Mono K</family>
+            <family>Noto Sans Mono</family>
+            <family>Noto Color Emoji</family>
+            <family>Symbols Nerd Font Mono</family>
+            <family>DejaVu Sans Mono</family>
+        </prefer>
+    </alias>
 </fontconfig>
 FONTCONFIG
 }
