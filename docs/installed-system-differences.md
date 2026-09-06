@@ -239,7 +239,7 @@ sudo 结果不能简单视为相同。旧版打开交互式 `visudo`，最终权
 
 ### 6.3 Hyprland
 
-默认 Hyprland 包集合、greetd 主配置、ReGreet GTK 主题选择和启动命令保持相同语义。`/etc/greetd/hyprland.lua` 在新版被压缩为更紧凑的 Lua 写法，因此文本不同，但 monitor、启动 ReGreet 和关闭 logo/splash/check 的配置含义相同。
+默认 Hyprland 包集合、greetd 主配置、ReGreet GTK 主题选择和启动命令保持一致。`/etc/greetd/hyprland.lua` 也恢复为旧版的多行结构与缩进格式；在相同选择下，这几份登录管理器配置没有预期的最终内容差异。
 
 ## 7. 服务启用状态
 

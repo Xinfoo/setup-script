@@ -56,11 +56,23 @@ command = "dbus-run-session start-hyprland -- -c /etc/greetd/hyprland.lua"
 user = "greeter"
 GREETD
             cat > /etc/greetd/hyprland.lua <<'HYPRLAND'
-hl.monitor({ output = "", mode = "highrr", position = "auto", scale = "auto" })
+hl.monitor({
+    output   = "",
+    mode     = "highrr",
+    position = "auto",
+    scale    = "auto",
+})
+
 hl.on("hyprland.start", function()
-    hl.exec_cmd("regreet; hyprctl dispatch 'hl.dsp.exit()'")
+	hl.exec_cmd("regreet; hyprctl dispatch 'hl.dsp.exit()'")
 end)
-hl.config({ misc = { disable_hyprland_logo = true, disable_splash_rendering = true, disable_hyprland_guiutils_check = true } })
+hl.config({
+    misc = {
+        disable_hyprland_logo = true,
+        disable_splash_rendering = true,
+        disable_hyprland_guiutils_check = true,
+    },
+})
 HYPRLAND
             cat >> /etc/greetd/regreet.toml <<'REGREET'
 

@@ -521,6 +521,35 @@ static bool test_automatic_script(void)
     passed &= forbid_fragment(&script,
                               "useradd -m -G wheel -s /bin/zsh",
                               "an unconditional legacy Zsh path");
+    passed &= require_fragment(&script,
+                               "cat > /etc/greetd/config.toml <<'GREETD'\n"
+                               "[terminal]\n"
+                               "vt = 1\n\n"
+                               "[default_session]\n"
+                               "command = \"dbus-run-session start-hyprland -- -c /etc/greetd/hyprland.lua\"\n"
+                               "user = \"greeter\"\n"
+                               "GREETD",
+                               "the legacy greetd session configuration");
+    passed &= require_fragment(&script,
+                               "cat > /etc/greetd/hyprland.lua <<'HYPRLAND'\n"
+                               "hl.monitor({\n"
+                               "    output   = \"\",\n"
+                               "    mode     = \"highrr\",\n"
+                               "    position = \"auto\",\n"
+                               "    scale    = \"auto\",\n"
+                               "})\n\n"
+                               "hl.on(\"hyprland.start\", function()\n"
+                               "\thl.exec_cmd(\"regreet; hyprctl dispatch 'hl.dsp.exit()'\")\n"
+                               "end)\n"
+                               "hl.config({\n"
+                               "    misc = {\n"
+                               "        disable_hyprland_logo = true,\n"
+                               "        disable_splash_rendering = true,\n"
+                               "        disable_hyprland_guiutils_check = true,\n"
+                               "    },\n"
+                               "})\n"
+                               "HYPRLAND",
+                               "the legacy maintainable greetd Hyprland configuration");
     passed &= require_fragment(&script, "cleanup() {", "the cleanup function");
     passed &= require_fragment(&script, "trap cleanup EXIT", "the cleanup trap");
     passed &= require_fragment(&script,
