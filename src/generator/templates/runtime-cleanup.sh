@@ -91,7 +91,9 @@ cleanup() {
                 cleanup_failed=true
             fi
         done
-        if ! rm -f -- "$TARGET_ROOT/root/.arch-install-chroot.sh"; then
+        if ! rm -f -- \
+            "$TARGET_ROOT/root/.arch-install-chroot.sh" \
+            "$TARGET_ROOT/root/.arch-install-shim-signed.pkg.tar.zst"; then
             printf 'WARNING: failed to remove temporary target files.\n' >&2
             cleanup_failed=true
         fi

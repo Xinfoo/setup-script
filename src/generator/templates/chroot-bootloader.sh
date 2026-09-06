@@ -3,6 +3,16 @@
 # =============================================================================
 
 configure_bootloader() {
+    # Register shim in the target package database and run its package hooks. / 在目标包数据库登记 shim 并执行软件包 hook。
+    if [[ "$ENABLE_SECURE_BOOT" == true ]]; then
+        if [[ ! -f /root/.arch-install-shim-signed.pkg.tar.zst ||
+              -L /root/.arch-install-shim-signed.pkg.tar.zst ]]; then
+            printf 'ERROR: the staged shim-signed package is missing or unsafe.\n' >&2
+            return 1
+        fi
+        pacman -U --needed --noconfirm /root/.arch-install-shim-signed.pkg.tar.zst
+        rm -f -- /root/.arch-install-shim-signed.pkg.tar.zst
+    fi
     bootctl --no-variables install
     if [[ "$ENABLE_SECURE_BOOT" == true ]]; then
         install -d /boot/EFI/BOOT /boot/EFI/ARCH

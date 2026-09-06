@@ -379,9 +379,24 @@ static bool test_automatic_script(void)
     passed &= require_fragment(&script,
                                "bsdtar -xOf \"$SECURE_BOOT_ASSET_SNAPSHOT/shim-signed.pkg.tar.zst\"",
                                "controlled shim data extraction");
-    passed &= forbid_fragment(&script,
-                              "pacman -U --needed --noconfirm /root/shim-signed.pkg.tar.zst",
-                              "execution of an untrusted shim package in the target");
+    passed &= require_fragment(&script,
+                               "\"$SECURE_BOOT_ASSET_SNAPSHOT/shim-signed.pkg.tar.zst\" \\\n"
+                               "            \"$TARGET_ROOT/root/.arch-install-shim-signed.pkg.tar.zst\"",
+                               "verified shim package staging into the target");
+    passed &= require_fragment(&script,
+                               "pacman -U --needed --noconfirm /root/.arch-install-shim-signed.pkg.tar.zst",
+                               "shim package installation in the target");
+    passed &= require_fragment(&script,
+                               "rm -f -- /root/.arch-install-shim-signed.pkg.tar.zst",
+                               "staged shim package cleanup inside the target");
+    passed &= require_order(&script,
+                            "    snapshot_secure_boot_assets\n",
+                            "    write_chroot_script\n",
+                            "Secure Boot verification before target staging");
+    passed &= require_order(&script,
+                            "        pacman -U --needed --noconfirm /root/.arch-install-shim-signed.pkg.tar.zst\n",
+                            "    bootctl --no-variables install\n",
+                            "shim package installation before bootloader setup");
     passed &= require_fragment(&script,
                                "phase 'Signing boot files outside the target chroot'",
                                "host-side Secure Boot signing");

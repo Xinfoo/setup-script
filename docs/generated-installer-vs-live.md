@@ -187,9 +187,9 @@ umask 022
 - PEM 私钥和 PEM 证书的公钥匹配；
 - PEM 与 DER 证书的 SHA-256 指纹匹配。
 
-通过后，它在私有工作目录下挂载 `nodev,nosuid,noexec,mode=0700,size=64M` 的 tmpfs，把材料以 `0600` 复制进去并再次验证。shim 包不会安装；脚本只用 `bsdtar -xOf` 提取 `shimx64.efi`、`mmx64.efi` 和 `fbx64.efi`，并用 `sbverify --list` 检查它们带有签名。
+通过后，它在私有工作目录下挂载 `nodev,nosuid,noexec,mode=0700,size=64M` 的 tmpfs，把材料以 `0600` 复制进去并再次验证。脚本用 `bsdtar -xOf` 提取 `shimx64.efi`、`mmx64.efi` 和 `fbx64.efi`，并用 `sbverify --list` 检查它们带有签名。完成 pacstrap 后，已验证的 shim 包会临时复制到目标 `/root`，再由 chroot 内的 `pacman -U` 安装并删除临时副本。
 
-旧版只判断 shim 文件和密钥目录是否存在，然后把整个目录复制到目标系统，并在 chroot 内用 `pacman -U` 安装 shim 包。它不比较私钥/证书、不验证 DER 证书、不验证提取的 EFI 文件，也会执行该软件包的安装脚本和 hook。
+旧版只判断 shim 文件和密钥目录是否存在，然后把整个目录复制到目标系统，并在 chroot 内用 `pacman -U` 安装 shim 包。两版都会在目标系统登记该包并执行其安装脚本和 hook；区别是新版安装经过前置验证的 tmpfs 快照副本，而旧版不比较私钥/证书、不验证 DER 证书，也不验证提取的 EFI 文件。
 
 ### 3.7 KEEP 文件系统只读探测
 
@@ -399,7 +399,7 @@ console-mode keep
 
 ### 3.17 Secure Boot 签名
 
-当前 chroot 阶段只安装 systemd-boot、创建目标目录和 `BOOTX64.CSV`；私钥不进入 chroot。chroot 完成后，外层 Live 脚本才执行签名：
+当前 chroot 阶段先通过 `pacman -U` 安装已验证的 `shim-signed` 包并删除临时副本，再安装 systemd-boot、创建目标目录和 `BOOTX64.CSV`；私钥不进入 chroot。chroot 完成后，外层 Live 脚本才执行签名：
 
 1. 在私有工作目录生成签名后的 systemd-boot 和 kernel 临时文件；
 2. 用 `sbverify --cert` 确认签名与 MOK 证书匹配；
@@ -411,14 +411,12 @@ console-mode keep
 
 当前流程不会：
 
-- 在目标系统安装 `shim-signed` 包；
 - 把 `MOK.key` 或 `MOK.crt` 复制/绑定到目标；
 - 清空 `/boot/EFI/BOOT/` 下的所有已有文件。
 
-旧版则会：
+旧版与当前流程一样会在 chroot 内通过 `pacman -U` 安装 shim 包，但它还会：
 
 - 把 shim 包和整个 `secure-boot/` 目录复制到目标；
-- 在 chroot 内 `pacman -U` 安装 shim 包；
 - `rm -f /boot/EFI/BOOT/*`；
 - 把原内核移动为 `.bak` 后直接签名回原路径；
 - 从目标 `/root/secure-boot/` 使用私钥；

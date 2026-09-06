@@ -30,7 +30,9 @@ main() {
     fi
     sign_secure_boot_assets
     create_firmware_entry
-    rm -f -- "$TARGET_ROOT/root/.arch-install-chroot.sh"
+    rm -f -- \
+        "$TARGET_ROOT/root/.arch-install-chroot.sh" \
+        "$TARGET_ROOT/root/.arch-install-shim-signed.pkg.tar.zst"
     sync
     INSTALL_SUCCEEDED=true
     phase 'Installation configured; cleaning up mounts'

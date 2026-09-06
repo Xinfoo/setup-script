@@ -434,7 +434,7 @@ chmod 644 secure-boot/MOK.crt secure-boot/MOK.cer
 > [!IMPORTANT]
 > `MOK.key` 是可以签署启动代码的私钥。不要将 `secure-boot/`、shim 软件包或其中的密钥提交到 Git，也不要将它们嵌入方案 JSON。
 
-材料目录、shim 包和三个 MOK 文件必须是真实文件，不接受符号链接。开启后，脚本会从当前选定的软件源安装 `sbsigntools`，在私有 tmpfs 中校验并仅解包 shim 包中所需的 EFI 文件，不安装该 AUR 包、也不执行其 hook。完成 chroot 配置后再由 Live 环境签名。`MOK.key` 不会被复制或 bind 到目标文件系统；最终只有公开的 `MOK.cer` 会被复制到 EFI 分区。首次启动仍需在 MokManager 中手工注册证书。
+材料目录、shim 包和三个 MOK 文件必须是真实文件，不接受符号链接。开启后，脚本会从当前选定的软件源安装 `sbsigntools`，在私有 tmpfs 中校验 shim 包并提取所需的 EFI 文件；已验证的软件包会临时复制到目标 `/root`，在 chroot 中通过 `pacman -U` 安装，以登记到目标包数据库并执行软件包 hook，安装后立即删除临时副本。完成 chroot 配置后再由 Live 环境使用快照中的材料签名。`MOK.key` 不会被复制或 bind 到目标文件系统；最终只有公开的 `MOK.cer` 会被复制到 EFI 分区。首次启动仍需在 MokManager 中手工注册证书。
 
 Secure Boot 可以与临时本地镜像同时启用。本地镜像模式会临时关闭 pacman 包签名校验，其仓库内容与 `sbsigntools` 的可信性由用户负责。
 

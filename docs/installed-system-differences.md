@@ -31,7 +31,7 @@
 | sudo | 新版固定生成 wheel sudoers drop-in；旧版结果取决于人工 `visudo` |
 | 新用户默认 Shell | 新版只为本次用户指定 Zsh；旧版还尝试修改 `/etc/default/useradd` |
 | initramfs | 新版在全部包安装后明确运行 `mkinitcpio -P` |
-| Secure Boot | 启用时新版不安装 `shim-signed`、不留下私钥；两版都保留未签名内核备份 |
+| Secure Boot | 启用时两版都安装 `shim-signed` 并保留未签名内核备份；新版不留下私钥 |
 
 与此同时，`/etc/fstab` 和 `/etc/environment` 在“全新目标 + 相同选择”前提下预期具有相同的有效内容。两边的写入方法不同，但不应把方法差异误报为成品差异。
 
@@ -106,15 +106,15 @@ ROOT + Swap 和 ROOT + HOME + Swap 布局的精确尾部扇区也可能略有差
 
 `local_mirror_live` 中的 nginx 和 `secure_boot_live` 中的签名工具用于 Live 环境准备，不会因为属于这两个组就自动成为目标系统新增包。目标系统的 `sbsigntools` 仍由两边共同的 core 组安装。
 
-### 4.2 Secure Boot 下的包数据库差异
+### 4.2 Secure Boot 下的 `shim-signed` 包
 
-开启 Secure Boot 后，旧版在目标 chroot 中执行 `pacman -U shim-signed.pkg.tar.zst`。因此旧系统会：
+开启 Secure Boot 后，两版都会在目标 chroot 中执行 `pacman -U` 安装 `shim-signed.pkg.tar.zst`。因此两边安装出的系统都会：
 
 - 在 Pacman 本地数据库中登记 `shim-signed`；
 - 保留该包安装到 `/usr/share/shim-signed/` 等位置的文件；
 - 执行该 AUR 包携带的安装脚本或 hook。
 
-新版只在 Live 环境的私有 tmpfs 中用 `bsdtar` 提取三个 EFI 文件，不向目标系统安装 `shim-signed`。所以即使启动 ESP 上的 shim/MokManager/fallback manager 来自同一个包，新系统的目标 Pacman 数据库也没有 `shim-signed`，目标根文件系统中也没有该包的常规安装内容。
+新版的不同之处在于，它先在 Live 环境的私有 tmpfs 中验证软件包并提取、检查三个 EFI 文件，然后只把已验证的包副本临时放入目标 `/root`。安装完成后该临时副本会被删除。旧版则直接复制输入包和整个密钥目录。两版在 Pacman 包数据库及 `/usr/share/shim-signed/` 内容上没有预期差异。
 
 ## 5. 目标配置文件
 
@@ -301,8 +301,8 @@ MODULES=(nvidia nvidia_modeset nvidia_uvm nvidia_drm)
 
 | 项目 | 新版 | 旧版 |
 | --- | --- | --- |
-| `shim-signed` Pacman 包 | 不安装 | 安装并登记到目标包数据库 |
-| `/usr/share/shim-signed/` | 不因安装器产生 | 由该包安装并保留 |
+| `shim-signed` Pacman 包 | 安装并登记到目标包数据库 | 安装并登记到目标包数据库 |
+| `/usr/share/shim-signed/` | 由该包安装并保留 | 由该包安装并保留 |
 | `/root/secure-boot/` | 不存在 | 保留 MOK 私钥、PEM/DER 证书，目录 `0500`、文件 `0400` |
 | 未签名 kernel 备份 | `/boot/vmlinuz-<kernel>.bak`，签名验证后原子保存 | 同一路径，先移动原内核再签名 |
 | 公开 CER 模式 | 明确安装为 `0644` | `cp -a` 保留源文件被改成的 `0400` 模式 |
@@ -367,7 +367,7 @@ MODULES=(nvidia nvidia_modeset nvidia_uvm nvidia_drm)
 - `/etc/default/useradd` 的处理；
 - sudoers 文件和旧版不确定的人工编辑结果；
 - NVIDIA 配置对上游文件变化的适应性及最终 `mkinitcpio -P`；
-- Secure Boot 的目标包数据库、私钥、备份生成顺序、证书权限和 ESP 旧文件处理；
+- Secure Boot 的私钥留存、备份生成顺序、证书权限和 ESP 旧文件处理；
 - EFI NVRAM 的重复项与多位分区号行为。
 
 ## 14. 维护时如何更新本文
