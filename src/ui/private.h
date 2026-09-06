@@ -17,6 +17,7 @@ typedef enum {
     SCREEN_SOFTWARE,
     SCREEN_IDENTITY,
     SCREEN_REVIEW,
+    SCREEN_OUTPUT,
     SCREEN_OUTPUT_PREVIEW
 } Screen;
 
@@ -83,8 +84,9 @@ void draw_identity(UiState *state);
 void handle_identity(UiState *state, int key);
 void draw_review(UiState *state);
 void handle_review(UiState *state, int key);
+void draw_output(UiState *state);
+void handle_output(UiState *state, int key);
 void draw_output_preview(UiState *state);
 void handle_output_preview(UiState *state, int key);
-void handle_output_request(UiState *state, int key);
 
 #endif

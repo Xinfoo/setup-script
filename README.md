@@ -163,14 +163,15 @@ CMake 还提供：
 
 ## TUI 流程
 
-界面需要至少 `80x24` 的终端。主页将方案拆成六个可随时返回修改的章节：
+界面需要至少 `80x24` 的终端。主页将方案拆成七个可随时返回修改的章节：
 
 1. `Storage`：参与安装的磁盘、各盘布局、文件系统和挂载用途；
 2. `Base system`：CPU 平台、内核、Locale、镜像、systemd-boot、EFI NVRAM 和 Secure Boot；
 3. `Hardware`：Desktop/Laptop 模式、Intel GPU、NVIDIA 和蓝牙；
 4. `Desktop & software`：桌面环境和可选软件组；
 5. `Identity`：hostname、username、时区，以及安装时输入 root 和普通用户密码的说明；
-6. `Review & output`：验证、预览、生成或生成后运行。
+6. `Review`：汇总安装方案并集中显示警告和验证错误；
+7. `Output`：使用启动参数确定的输出位置生成或预览脚本，以及生成后运行。
 
 全局按键：
 

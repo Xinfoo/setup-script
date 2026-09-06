@@ -8,19 +8,33 @@
 #include <string.h>
 #include <sys/types.h>
 
-void handle_output_request(UiState *state, int key)
+/* Output 页面使用启动时确定的路径，集中管理生成、预览和执行请求。 */
+void draw_output(UiState *state)
 {
-    if (key == 'g' || key == 'G') {
-        (void)ui_generate(state);
-    } else if (key == 'p' || key == 'P') {
-        if (ui_generate(state)) {
-            state->screen = SCREEN_OUTPUT_PREVIEW;
-            state->preview_offset = 0;
-        }
-    } else if (key == 'x' || key == 'X') {
-        if (ui_generate(state) &&
-            confirm_dialog("Run generated installer",
-                           "Leave the TUI and execute the generated Bash script now?")) {
+    draw_shell(state, "Output", "Up/Down move   Enter/Space select   Esc back");
+    mvprintw(5, 4, "Output path:");
+    put_clipped(5, 18, COLS - 21, state->script_path);
+    draw_property_row(8, 0, state->row, "Generate script", "Save plan and write the Bash script");
+    draw_property_row(10, 1, state->row, "Preview script", "Generate, then inspect the Bash output");
+    draw_property_row(12, 2, state->row, "Generate and run", "Leave the TUI and start installation");
+}
+
+void handle_output(UiState *state, int key)
+{
+    if (key == 27) { state->screen = SCREEN_HOME; state->row = 6; return; }
+    if (key == KEY_UP && state->row > 0) --state->row;
+    else if (key == KEY_DOWN && state->row < 2) ++state->row;
+    else if (key == ' ' || page_enter_pressed(key)) {
+        if (state->row == 0) {
+            (void)ui_generate(state);
+        } else if (state->row == 1) {
+            if (ui_generate(state)) {
+                state->screen = SCREEN_OUTPUT_PREVIEW;
+                state->preview_offset = 0;
+            }
+        } else if (ui_generate(state) &&
+                   confirm_dialog("Run generated installer",
+                                  "Leave the TUI and execute the generated Bash script now?")) {
             state->running = true;
             state->quit = true;
         }
@@ -55,7 +69,7 @@ void draw_output_preview(UiState *state)
 
 void handle_output_preview(UiState *state, int key)
 {
-    if (key == 27) { state->screen = SCREEN_REVIEW; return; }
+    if (key == 27) { state->screen = SCREEN_OUTPUT; state->row = 1; return; }
     if ((key == KEY_UP || key == KEY_PPAGE) && state->preview_offset > 0)
         state->preview_offset -= key == KEY_PPAGE ? 10 : 1;
     else if (key == KEY_DOWN) ++state->preview_offset;

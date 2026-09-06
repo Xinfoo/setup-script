@@ -8,9 +8,9 @@ void draw_home(UiState *state)
 {
     static const char *const names[] = {
         "Storage", "Base system", "Hardware", "Desktop & software",
-        "Identity", "Review & output", "Exit"
+        "Identity", "Review", "Output", "Exit"
     };
-    char details[7][256];
+    char details[8][256];
     ValidationReport report;
     char size[32];
     const DiskPlan *root_disk;
@@ -48,11 +48,13 @@ void draw_home(UiState *state)
         (void)snprintf(details[5], sizeof(details[5]), "%zu error(s), %zu total issue(s)",
                        report.error_count, report.count);
     }
-    copy_text(details[6], sizeof(details[6]), "Leave the builder");
+    (void)snprintf(details[6], sizeof(details[6]), "Generate or run | %.180s",
+                   state->script_path);
+    copy_text(details[7], sizeof(details[7]), "Leave the builder");
 
     draw_shell(state, "Installation plan",
                "Up/Down move   Enter open   F2 save   F5 review   F10 quit");
-    for (int index = 0; index < 7; ++index) {
+    for (int index = 0; index < 8; ++index) {
         int y = 5 + index * 2;
         if (index == state->row) attron(COLOR_PAIR(COLOR_SELECTED));
         mvprintw(y, 4, " %-21s ", names[index]);
@@ -65,13 +67,13 @@ void handle_home(UiState *state, int key)
 {
     static const Screen screens[] = {
         SCREEN_STORAGE, SCREEN_BASE_SYSTEM, SCREEN_HARDWARE, SCREEN_SOFTWARE,
-        SCREEN_IDENTITY, SCREEN_REVIEW, SCREEN_HOME
+        SCREEN_IDENTITY, SCREEN_REVIEW, SCREEN_OUTPUT, SCREEN_HOME
     };
 
     if (key == KEY_UP && state->row > 0) --state->row;
-    else if (key == KEY_DOWN && state->row < 6) ++state->row;
+    else if (key == KEY_DOWN && state->row < 7) ++state->row;
     else if (page_enter_pressed(key)) {
-        if (state->row == 6) quit_builder(state);
+        if (state->row == 7) quit_builder(state);
         else {
             state->screen = screens[state->row];
             state->row = 0;

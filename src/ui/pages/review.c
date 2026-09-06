@@ -5,8 +5,8 @@
 #include <stdio.h>
 
 /*
- * 审阅页面将存储操作、系统摘要和验证结果整理成一个带颜色的滚动列表。
- * 只有验证通过且磁盘身份仍匹配时，ui_generate() 才会真正生成脚本。
+ * 审阅页面只把存储操作、系统摘要和验证结果整理成带颜色的滚动列表；
+ * 生成、预览和执行操作由独立的 Output 页面负责。
  */
 void draw_review(UiState *state)
 {
@@ -17,7 +17,7 @@ void draw_review(UiState *state)
     size_t count = 0;
     int y = 4;
     validate_plan(state->plan, &report);
-    draw_shell(state, "Review and output", "Up/Down/PgUp/PgDn scroll   P preview   G generate   X generate & run   Esc back");
+    draw_shell(state, "Review", "Up/Down/PgUp/PgDn scroll   Esc back");
     if (report.error_count == 0 && state->target_identity_matches) {
         (void)snprintf(lines[count], sizeof(lines[count]), "Plan is ready (%zu warning(s)).", report.count);
         colors[count++] = COLOR_OK;
@@ -106,7 +106,5 @@ void handle_review(UiState *state, int key)
         if (state->review_offset < 0) state->review_offset = 0;
     } else if (key == KEY_NPAGE) {
         state->review_offset += 10;
-    } else {
-        handle_output_request(state, key);
     }
 }
