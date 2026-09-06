@@ -270,6 +270,23 @@ Filesystem filesystem_from_name(const char *name)
     return FS_NONE;
 }
 
+/*
+ * 分区的“最终文件系统”由动作决定：FORMAT 使用目标格式，KEEP 使用探测到的
+ * 现有格式。验证器、生成器和 TUI 必须共享这一规则，避免三处判断逐渐分叉。
+ */
+Filesystem partition_effective_filesystem(const PartitionPlan *partition)
+{
+    if (partition == NULL) return FS_NONE;
+    return partition->action == ACTION_FORMAT ? partition->target_fs :
+           filesystem_from_name(partition->current_fs);
+}
+
+/* 普通系统挂载点允许的文件系统集合集中维护，boot 和 swap 另有专用规则。 */
+bool filesystem_is_regular(Filesystem filesystem)
+{
+    return filesystem == FS_EXT4 || filesystem == FS_XFS || filesystem == FS_F2FS;
+}
+
 /* 容量只负责适配人类可读显示，不参与方案中的精确字节计算。 */
 void format_size(uint64_t bytes, char *buffer, size_t size)
 {

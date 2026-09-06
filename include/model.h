@@ -188,6 +188,10 @@ const char *locale_name(LocaleChoice value);
 const char *f2fs_mode_name(F2fsMountMode value);
 const char *partition_mountpoint(PartitionUsage value);
 Filesystem filesystem_from_name(const char *name);
+
+/* 分区动作推导和普通挂载格式规则由模型层统一解释。 */
+Filesystem partition_effective_filesystem(const PartitionPlan *partition);
+bool filesystem_is_regular(Filesystem filesystem);
 uint64_t recommended_swap_bytes(void);
 void format_size(uint64_t bytes, char *buffer, size_t size);
 

@@ -39,18 +39,6 @@ static void add_issue(ValidationReport *report, IssueSeverity severity, const ch
     copy_text(issue->message, sizeof(issue->message), message);
 }
 
-static Filesystem effective_filesystem(const PartitionPlan *partition)
-{
-    /* FORMAT 看目标格式，KEEP 看磁盘上现有格式；后面的用途规则只关心最终结果。 */
-    return partition->action == ACTION_FORMAT ? partition->target_fs :
-           filesystem_from_name(partition->current_fs);
-}
-
-static bool is_regular_mount_filesystem(Filesystem filesystem)
-{
-    return filesystem == FS_EXT4 || filesystem == FS_XFS || filesystem == FS_F2FS;
-}
-
 /* 引导式布局必须继续符合固定分区数量、编号、用途和格式化动作。 */
 static bool has_automatic_role(const DiskPlan *storage, PartitionUsage usage,
                                unsigned number)
@@ -252,7 +240,7 @@ void validate_plan(const InstallPlan *plan, ValidationReport *report)
                 }
                 used[part->usage] = true;
             }
-            fs = effective_filesystem(part);
+            fs = partition_effective_filesystem(part);
             /*
              * KEEP 同时依赖文件系统 UUID（挂载身份）和下方的 GPT PARTUUID、
              * 起始扇区及容量（分区身份）；两层身份解决的问题不同，不能互相替代。
@@ -318,7 +306,7 @@ void validate_plan(const InstallPlan *plan, ValidationReport *report)
                 add_issue(report, ISSUE_ERROR, "A mounted filesystem cannot be swap.");
             }
             if (part->usage != PART_UNUSED && part->usage != PART_BOOT &&
-                part->usage != PART_SWAP && !is_regular_mount_filesystem(fs)) {
+                part->usage != PART_SWAP && !filesystem_is_regular(fs)) {
                 add_issue(report, ISSUE_ERROR,
                           "Mounted system partitions must use ext4, XFS, or F2FS.");
             }

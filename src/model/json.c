@@ -1,20 +1,16 @@
 #define _POSIX_C_SOURCE 200809L
 
+#include "atomic_file.h"
 #include "model.h"
 
 #include "util.h"
 
 #include <json-c/json.h>
 
-#include <errno.h>
-#include <fcntl.h>
 #include <inttypes.h>
 #include <limits.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
-#include <sys/stat.h>
-#include <unistd.h>
 
 /* 已通过 schema 检查的 JSON 字段读取器，同时为内部调用保留明确回退值。 */
 static const char *json_string(struct json_object *object, const char *key, const char *fallback)
@@ -262,13 +258,21 @@ bool plan_save_json(const InstallPlan *plan, const char *path, char *error, size
     struct json_object *system = json_object_new_object();
     struct json_object *disks = json_object_new_array();
     const char *serialized;
-    char *temporary = NULL;
-    int descriptor = -1;
-    int path_result;
-    struct stat status;
+
+    if (plan == NULL || path == NULL || path[0] == '\0') {
+        (void)snprintf(error, error_size, "plan and path are required");
+        if (root != NULL) json_object_put(root);
+        if (storage != NULL) json_object_put(storage);
+        if (system != NULL) json_object_put(system);
+        if (disks != NULL) json_object_put(disks);
+        return false;
+    }
     if (root == NULL || storage == NULL || system == NULL || disks == NULL) {
         (void)snprintf(error, error_size, "out of memory while creating JSON");
         if (root != NULL) json_object_put(root);
+        if (storage != NULL) json_object_put(storage);
+        if (system != NULL) json_object_put(system);
+        if (disks != NULL) json_object_put(disks);
         return false;
     }
     /* json-c 的 object_add/array_add 会接管子对象所有权，挂接后不可再单独释放。 */
@@ -336,87 +340,12 @@ bool plan_save_json(const InstallPlan *plan, const char *path, char *error, size
 #undef ADD_SYSTEM_BOOL
     json_object_object_add(root, "system", system);
 
-    /* 只替换普通文件，临时文件与目标同目录以保证最终 rename 原子提交。 */
-    path_result = lstat(path, &status);
-    if (path_result == 0 && !S_ISREG(status.st_mode)) {
-        (void)snprintf(error, error_size, "refusing to replace non-regular plan path: %s", path);
-        json_object_put(root);
-        return false;
-    }
-    if (path_result != 0 && errno != ENOENT) {
-        (void)snprintf(error, error_size, "cannot inspect plan path %s: %s", path,
-                       strerror(errno));
-        json_object_put(root);
-        return false;
-    }
-    temporary = malloc(strlen(path) + 16);
-    if (temporary == NULL) {
-        (void)snprintf(error, error_size, "out of memory while saving plan");
-        json_object_put(root);
-        return false;
-    }
-    (void)snprintf(temporary, strlen(path) + 16, "%s.tmp.XXXXXX", path);
-    descriptor = mkstemp(temporary);
-    if (descriptor < 0) {
-        (void)snprintf(error, error_size, "cannot create temporary plan: %s", strerror(errno));
-        free(temporary);
-        json_object_put(root);
-        return false;
-    }
-    if (fchmod(descriptor, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH) != 0) {
-        (void)snprintf(error, error_size, "cannot set plan permissions: %s", strerror(errno));
-        (void)close(descriptor);
-        (void)unlink(temporary);
-        free(temporary);
-        json_object_put(root);
-        return false;
-    }
     serialized = json_object_to_json_string_ext(root, JSON_C_TO_STRING_PRETTY | JSON_C_TO_STRING_SPACED);
-    {
-        size_t remaining = strlen(serialized);
-        const char *cursor = serialized;
-        /* write 可能只写入一部分或被信号中断，循环直到整个 JSON 已落入临时文件。 */
-        while (remaining > 0) {
-            ssize_t written = write(descriptor, cursor, remaining);
-            if (written < 0 && errno == EINTR) continue;
-            if (written <= 0) {
-                (void)snprintf(error, error_size, "cannot write plan: %s", strerror(errno));
-                (void)close(descriptor);
-                (void)unlink(temporary);
-                free(temporary);
-                json_object_put(root);
-                return false;
-            }
-            cursor += written;
-            remaining -= (size_t)written;
-        }
-    }
-    /* 只有数据同步、关闭和原子替换全部成功，调用方才会看到新的完整方案。 */
-    if (fsync(descriptor) != 0) {
-        (void)snprintf(error, error_size, "cannot commit plan %s: %s", path, strerror(errno));
-        (void)close(descriptor);
-        (void)unlink(temporary);
-        free(temporary);
-        json_object_put(root);
-        return false;
-    }
-    if (close(descriptor) != 0) {
-        (void)snprintf(error, error_size, "cannot close plan %s: %s", path, strerror(errno));
-        (void)unlink(temporary);
-        free(temporary);
-        json_object_put(root);
-        return false;
-    }
-    if (rename(temporary, path) != 0) {
-        (void)snprintf(error, error_size, "cannot commit plan %s: %s", path, strerror(errno));
-        (void)unlink(temporary);
-        free(temporary);
-        json_object_put(root);
-        return false;
-    }
-    free(temporary);
+    /* 公共原子写入器负责普通文件检查、同步、失败清理和最终替换。 */
+    bool saved = atomic_write_text_file(path, 0644, serialized, false, "plan",
+                                        error, error_size);
     json_object_put(root);
-    return true;
+    return saved;
 }
 
 /* schema 验证完成后，加载器按分区、磁盘、系统三层填充已初始化的方案。 */

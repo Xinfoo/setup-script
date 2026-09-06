@@ -153,9 +153,7 @@ static const char *partition_field(const PartitionPlan *partition, PartitionFiel
         return action_name(partition->action);
     case FIELD_FILESYSTEM:
         /* KEEP 输出探测到的格式，FORMAT 输出目标格式，模板无需再次理解动作语义。 */
-        filesystem = partition->action == ACTION_FORMAT
-                         ? partition->target_fs
-                         : filesystem_from_name(partition->current_fs);
+        filesystem = partition_effective_filesystem(partition);
         return filesystem_name(filesystem);
     case FIELD_F2FS_MODE:
         return f2fs_mode_name(partition->f2fs_mode);
@@ -223,17 +221,6 @@ static void emit_package_group(ScriptWriter *writer, const PackageConfig *config
     emit_package_values(writer, packages);
 }
 
-static PackageGroup selected_kernel_group(Kernel kernel)
-{
-    switch (kernel) {
-    case KERNEL_LINUX: return PKG_KERNEL_LINUX;
-    case KERNEL_LTS: return PKG_KERNEL_LTS;
-    case KERNEL_ZEN: return PKG_KERNEL_ZEN;
-    case KERNEL_HARDENED: return PKG_KERNEL_HARDENED;
-    }
-    return PKG_KERNEL_LINUX;
-}
-
 void emit_package_array(ScriptWriter *writer, const char *name,
                                const PackageConfig *config, PackageGroup group)
 {
@@ -246,57 +233,13 @@ void emit_package_array(ScriptWriter *writer, const char *name,
 static void emit_required_packages(ScriptWriter *writer, const InstallPlan *plan,
                                    const PackageConfig *config)
 {
-    PackageGroup kernel_group = selected_kernel_group(plan->system.kernel);
+    PackageGroupList groups;
 
+    packages_collect_required_groups(plan, &groups);
     writer_puts(writer, "REQUIRED_PACKAGES=(\n");
-    emit_package_group(writer, config, PKG_BOOTSTRAP);
-    emit_package_group(writer, config, PKG_CORE);
-    emit_package_group(writer, config, kernel_group);
-    if (plan->system.platform == PLATFORM_INTEL) {
-        emit_package_group(writer, config, PKG_PLATFORM_INTEL);
-    } else if (plan->system.platform == PLATFORM_AMD) {
-        emit_package_group(writer, config, PKG_PLATFORM_AMD);
+    for (size_t index = 0; index < groups.count; ++index) {
+        emit_package_group(writer, config, groups.values[index]);
     }
-    if (plan->system.laptop) {
-        emit_package_group(writer, config, PKG_LAPTOP_FIRMWARE);
-        emit_package_group(writer, config, PKG_LAPTOP_TOOLS);
-    }
-    if (plan->system.intel_graphics) emit_package_group(writer, config, PKG_INTEL_GRAPHICS);
-    if (plan->system.nvidia_graphics) emit_package_group(writer, config, PKG_NVIDIA_GRAPHICS);
-    if (plan->system.bluetooth) emit_package_group(writer, config, PKG_BLUETOOTH);
-    switch (plan->system.desktop) {
-    case DESKTOP_KDE:
-        emit_package_group(writer, config, PKG_KDE);
-        if (plan->system.desktop_recommended)
-            emit_package_group(writer, config, PKG_KDE_RECOMMENDED);
-        if (plan->system.chinese_input) emit_package_group(writer, config, PKG_FCITX);
-        break;
-    case DESKTOP_GNOME:
-        emit_package_group(writer, config, PKG_GNOME);
-        if (plan->system.laptop) emit_package_group(writer, config, PKG_GNOME_LAPTOP);
-        if (plan->system.desktop_recommended)
-            emit_package_group(writer, config, PKG_GNOME_RECOMMENDED);
-        if (plan->system.chinese_input) emit_package_group(writer, config, PKG_IBUS);
-        break;
-    case DESKTOP_HYPRLAND:
-        emit_package_group(writer, config, PKG_HYPRLAND);
-        if (plan->system.chinese_input) emit_package_group(writer, config, PKG_FCITX);
-        break;
-    case DESKTOP_NONE:
-        break;
-    }
-    emit_package_group(writer, config, PKG_FONTS);
-    if (plan->system.firewall) emit_package_group(writer, config, PKG_FIREWALL);
-    if (plan->system.printer) emit_package_group(writer, config, PKG_PRINTER);
-    if (plan->system.archive_tools) emit_package_group(writer, config, PKG_ARCHIVE_TOOLS);
-    if (plan->system.terminal_tools) emit_package_group(writer, config, PKG_TERMINAL_TOOLS);
-    if (plan->system.extra_tools) emit_package_group(writer, config, PKG_EXTRA_TOOLS);
-    if (plan->system.desktop_apps) emit_package_group(writer, config, PKG_DESKTOP_APPS);
-    /* Live 专用组也进入预解析并集，虽然它们不会成为目标系统的常驻软件。 */
-    if (plan->system.local_mirror) {
-        emit_package_group(writer, config, PKG_LOCAL_MIRROR_LIVE);
-    }
-    if (plan->system.secure_boot) emit_package_group(writer, config, PKG_SECURE_BOOT_LIVE);
     writer_puts(writer, ")\n");
 }
 
@@ -469,14 +412,15 @@ bool emit_header_and_plan(ScriptWriter *writer, const InstallPlan *plan,
     emit_partition_number_array(writer, "PART_SIZES", used, used_count, NUMBER_SIZE_BYTES);
     emit_package_array(writer, "BOOTSTRAP_PACKAGES", packages, PKG_BOOTSTRAP);
     emit_package_array(writer, "KERNEL_PACKAGES", packages,
-                       selected_kernel_group(plan->system.kernel));
-    if (plan->system.platform == PLATFORM_INTEL) {
-        emit_package_array(writer, "PLATFORM_PACKAGES", packages, PKG_PLATFORM_INTEL);
-    } else if (plan->system.platform == PLATFORM_AMD) {
-        emit_package_array(writer, "PLATFORM_PACKAGES", packages, PKG_PLATFORM_AMD);
-    } else {
-        /* 虚拟机平台没有额外微码包，但仍输出空数组以保持模板接口稳定。 */
-        writer_puts(writer, "PLATFORM_PACKAGES=(\n)\n");
+                       packages_kernel_group(plan->system.kernel));
+    {
+        PackageGroup platform_group;
+        if (packages_platform_group(plan->system.platform, &platform_group)) {
+            emit_package_array(writer, "PLATFORM_PACKAGES", packages, platform_group);
+        } else {
+            /* 虚拟机平台没有额外微码包，但仍输出空数组以保持模板接口稳定。 */
+            writer_puts(writer, "PLATFORM_PACKAGES=(\n)\n");
+        }
     }
     emit_package_array(writer, "LAPTOP_FIRMWARE_PACKAGES", packages,
                        PKG_LAPTOP_FIRMWARE);

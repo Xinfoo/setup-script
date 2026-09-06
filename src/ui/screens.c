@@ -109,17 +109,6 @@ static void show_packages(UiState *state, const char *title,
     packages_dialog(title, state->packages, groups, group_count);
 }
 
-static PackageGroup kernel_package_group(Kernel kernel)
-{
-    switch (kernel) {
-    case KERNEL_LINUX: return PKG_KERNEL_LINUX;
-    case KERNEL_LTS: return PKG_KERNEL_LTS;
-    case KERNEL_ZEN: return PKG_KERNEL_ZEN;
-    case KERNEL_HARDENED: return PKG_KERNEL_HARDENED;
-    }
-    return PKG_KERNEL_LINUX;
-}
-
 /* 会改变软件包集合的基础选项用 Enter 展示包名，Space 保留原修改动作。 */
 static bool inspect_system_packages(UiState *state)
 {
@@ -130,11 +119,10 @@ static bool inspect_system_packages(UiState *state)
 
     if (state->row == 0) {
         title = "Pacman packages - CPU platform";
-        if (system->platform == PLATFORM_INTEL) groups[count++] = PKG_PLATFORM_INTEL;
-        else if (system->platform == PLATFORM_AMD) groups[count++] = PKG_PLATFORM_AMD;
+        if (packages_platform_group(system->platform, &groups[count])) ++count;
     } else if (state->row == 1) {
         title = "Pacman packages - selected kernel";
-        groups[count++] = kernel_package_group(system->kernel);
+        groups[count++] = packages_kernel_group(system->kernel);
     } else if (state->row == 2) {
         title = system->laptop
             ? "Pacman packages - Laptop mode"
@@ -268,21 +256,13 @@ void handle_software(UiState *state, int key)
 
         switch (state->row) {
         case 0:
-            if (s->desktop == DESKTOP_KDE) group = PKG_KDE;
-            else if (s->desktop == DESKTOP_GNOME) group = PKG_GNOME;
-            else if (s->desktop == DESKTOP_HYPRLAND) group = PKG_HYPRLAND;
-            else available = false;
+            available = packages_desktop_group(s->desktop, &group);
             break;
         case 1:
-            if (s->desktop == DESKTOP_KDE) group = PKG_KDE_RECOMMENDED;
-            else if (s->desktop == DESKTOP_GNOME) group = PKG_GNOME_RECOMMENDED;
-            else available = false;
+            available = packages_desktop_recommended_group(s->desktop, &group);
             break;
         case 2:
-            if (s->desktop == DESKTOP_GNOME) group = PKG_IBUS;
-            else if (s->desktop == DESKTOP_KDE || s->desktop == DESKTOP_HYPRLAND)
-                group = PKG_FCITX;
-            else available = false;
+            available = packages_input_group(s->desktop, &group);
             break;
         case 3: group = PKG_FIREWALL; break;
         case 4: group = PKG_PRINTER; break;

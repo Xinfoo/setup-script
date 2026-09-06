@@ -417,8 +417,7 @@ void draw_storage(UiState *state)
                      (part->current_fs[0] != '\0' ? part->current_fs : "-"),
                      usage_name(part->usage), partition_mountpoint(part->usage));
             if (COLS >= 96) {
-                Filesystem effective = part->action == ACTION_FORMAT ? part->target_fs :
-                                       filesystem_from_name(part->current_fs);
+                Filesystem effective = partition_effective_filesystem(part);
                 printw(" %s", effective == FS_F2FS ? f2fs_mode_name(part->f2fs_mode) : "-");
             }
             if (partition_selected) attroff(COLOR_PAIR(COLOR_SELECTED));
@@ -427,11 +426,6 @@ void draw_storage(UiState *state)
 }
 
 /* 分区编辑分为用途、格式化动作和 F2FS 挂载配置三层。 */
-static bool regular_filesystem(Filesystem filesystem)
-{
-    return filesystem == FS_EXT4 || filesystem == FS_XFS || filesystem == FS_F2FS;
-}
-
 static bool edit_partition_format(UiState *state, PartitionPlan *partition);
 
 static void edit_partition_usage(UiState *state, DiskPlan *disk, PartitionPlan *partition)
@@ -478,14 +472,14 @@ static void edit_partition_usage(UiState *state, DiskPlan *disk, PartitionPlan *
     } else if (partition->usage == PART_ROOT || partition->usage == PART_VAR ||
                partition->usage == PART_USR) {
         partition->action = ACTION_FORMAT;
-        partition->target_fs = regular_filesystem(current) ? current : FS_EXT4;
+        partition->target_fs = filesystem_is_regular(current) ? current : FS_EXT4;
     } else if (partition->usage == PART_BOOT) {
         partition->action = current == FS_VFAT ? ACTION_KEEP : ACTION_FORMAT;
         partition->target_fs = current == FS_VFAT ? FS_NONE : FS_VFAT;
     } else if (partition->usage == PART_SWAP) {
         partition->action = current == FS_SWAP ? ACTION_KEEP : ACTION_FORMAT;
         partition->target_fs = current == FS_SWAP ? FS_NONE : FS_SWAP;
-    } else if (regular_filesystem(current)) {
+    } else if (filesystem_is_regular(current)) {
         partition->action = ACTION_KEEP;
         partition->target_fs = FS_NONE;
     } else {
@@ -548,7 +542,7 @@ static bool edit_partition_format(UiState *state, PartitionPlan *partition)
         ((partition->usage == PART_BOOT && current == FS_VFAT) ||
          (partition->usage == PART_SWAP && current == FS_SWAP) ||
          (partition->usage != PART_BOOT && partition->usage != PART_SWAP &&
-          regular_filesystem(current)))) {
+          filesystem_is_regular(current)))) {
         (void)snprintf(keep_label, sizeof(keep_label),
                        "KEEP current %s filesystem (no formatting)",
                        filesystem_name(current));
@@ -619,8 +613,7 @@ static void edit_f2fs_mode(UiState *state, PartitionPlan *partition)
         "Balanced: noatime, lazytime, GC tuning",
         "Compressed: balanced options plus zstd compression"
     };
-    Filesystem effective = partition->action == ACTION_FORMAT ? partition->target_fs :
-                           filesystem_from_name(partition->current_fs);
+    Filesystem effective = partition_effective_filesystem(partition);
     int choice;
 
     if (effective != FS_F2FS || partition->usage == PART_UNUSED ||
