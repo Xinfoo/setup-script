@@ -39,8 +39,9 @@ void draw_home(UiState *state)
     (void)snprintf(details[3], sizeof(details[3]), "%s | recommended packages %s",
                    desktop_name(state->plan->system.desktop),
                    state->plan->system.desktop_recommended ? "yes" : "no");
-    (void)snprintf(details[4], sizeof(details[4]), "%.48s@%.63s",
-                   state->plan->system.username, state->plan->system.hostname);
+    (void)snprintf(details[4], sizeof(details[4]), "%.48s@%.63s | %.63s",
+                   state->plan->system.username, state->plan->system.hostname,
+                   state->plan->system.timezone);
     if (!state->target_identity_matches) {
         copy_text(details[5], sizeof(details[5]), "Target disk identity changed - reselect it");
     } else {
