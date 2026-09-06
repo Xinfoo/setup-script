@@ -404,7 +404,7 @@ void draw_storage(UiState *state)
     attroff(A_BOLD);
 
     for (size_t disk_index = 0; disk_index < state->active_disk; ++disk_index)
-        selected_line += 1 + (int)storage->disks[disk_index].partition_count;
+        selected_line += 2 + (int)storage->disks[disk_index].partition_count;
     /* 逻辑坐标中表头占一行，所以 row=-1 恰好映射到该组的第一行。 */
     selected_line += 1 + state->row;
     offset = selected_line >= available ? selected_line - available + 1 : 0;
@@ -412,8 +412,11 @@ void draw_storage(UiState *state)
     for (size_t disk_index = 0; disk_index < storage->disk_count; ++disk_index) {
         const DiskPlan *disk = &storage->disks[disk_index];
         bool selected = disk_index == state->active_disk && state->row < 0;
+
+        /* 每个后续磁盘组前保留一行，并让它参与统一的滚动坐标计算。 */
+        if (disk_index > 0) ++visual_line;
         if (visual_line >= offset && visual_line < offset + available) {
-            int y = 6 + visual_line - offset;
+            int y = 7 + visual_line - offset;
             draw_disk_group(y, &disk_table, disk,
                             disk_index == state->active_disk, selected);
         }
@@ -423,7 +426,7 @@ void draw_storage(UiState *state)
             bool partition_selected = disk_index == state->active_disk &&
                                       (int)index == state->row;
             if (visual_line < offset || visual_line >= offset + available) continue;
-            draw_partition_row(6 + visual_line - offset, &table, part,
+            draw_partition_row(7 + visual_line - offset, &table, part,
                                partition_selected);
         }
     }
