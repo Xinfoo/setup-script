@@ -354,7 +354,7 @@ void draw_storage(UiState *state)
                    "Up/Down move   D add disk   C cfdisk   X remove   A layout   E existing   R refresh   Esc back" :
                    "Up/Down move   D add disk   X remove   A layout   E existing   R refresh   Esc back";
         } else {
-            keys = "Up/Down move   D add disk   U/Space mount   F/Enter format   O F2FS   R refresh   Esc back";
+            keys = "Up/Down move   D add disk   U/Space mount   F/Enter format   O options   R refresh   Esc back";
         }
     }
     draw_shell(state, "Storage plan - editing changes only the generated plan", keys);
@@ -370,7 +370,7 @@ void draw_storage(UiState *state)
     attron(A_BOLD);
     mvprintw(5, 2, "%-18s %8s %-8s %-8s %-7s %-7s %-9s",
              "Device", "Size", "Current", "Action", "Target", "Purpose", "Mount");
-    if (COLS >= 96) addstr(" Profile");
+    if (COLS >= 96) addstr(" Options");
     attroff(A_BOLD);
 
     for (size_t disk_index = 0; disk_index < state->active_disk; ++disk_index)
@@ -417,15 +417,16 @@ void draw_storage(UiState *state)
                      (part->current_fs[0] != '\0' ? part->current_fs : "-"),
                      usage_name(part->usage), partition_mountpoint(part->usage));
             if (COLS >= 96) {
-                Filesystem effective = partition_effective_filesystem(part);
-                printw(" %s", effective == FS_F2FS ? f2fs_mode_name(part->f2fs_mode) : "-");
+                bool configurable = partition_supports_mount_profile(
+                    part, MOUNT_PROFILE_DEFAULT);
+                printw(" %s", configurable ? mount_profile_name(part->mount_profile) : "-");
             }
             if (partition_selected) attroff(COLOR_PAIR(COLOR_SELECTED));
         }
     }
 }
 
-/* 分区编辑分为用途、格式化动作和 F2FS 挂载配置三层。 */
+/* 分区编辑分为用途、格式化动作和挂载选项三层。 */
 static bool edit_partition_format(UiState *state, PartitionPlan *partition);
 
 static void edit_partition_usage(UiState *state, DiskPlan *disk, PartitionPlan *partition)
@@ -462,6 +463,7 @@ static void edit_partition_usage(UiState *state, DiskPlan *disk, PartitionPlan *
      * 格式匹配时可 KEEP，普通数据挂载点则尽量保留已识别的文件系统。
      */
     if (partition->usage == PART_UNUSED) {
+        partition->mount_profile = MOUNT_PROFILE_DEFAULT;
         if (partition->planned && disk->mode == STORAGE_AUTO_DATA) {
             partition->action = ACTION_FORMAT;
             if (partition->target_fs == FS_NONE) partition->target_fs = FS_EXT4;
@@ -593,8 +595,10 @@ static bool edit_partition_format(UiState *state, PartitionPlan *partition)
         partition->target_fs = filesystems[choice];
         state->dirty = true;
     }
+    if (!partition_supports_mount_profile(partition, partition->mount_profile)) {
+        partition->mount_profile = MOUNT_PROFILE_DEFAULT;
+    }
     if (partition->action == ACTION_KEEP) {
-        partition->f2fs_mode = F2FS_DEFAULT;
         (void)snprintf(state->status, sizeof(state->status),
                        "%.180s will be kept without formatting.", partition->device);
     } else {
@@ -605,31 +609,47 @@ static bool edit_partition_format(UiState *state, PartitionPlan *partition)
     return true;
 }
 
-/* F2FS 配置只对将被格式化且分配了挂载点的 F2FS 分区开放。 */
-static void edit_f2fs_mode(UiState *state, PartitionPlan *partition)
+/*
+ * O 键统一编辑挂载选项。当前非默认配置只属于新格式化的 F2FS，其他可挂载
+ * 文件系统仍进入同一对话框，但只提供 Default，便于以后直接扩充各自选项。
+ */
+static void edit_mount_options(UiState *state, PartitionPlan *partition)
 {
-    static const char *const options[] = {
-        "Default mount options",
-        "Balanced: noatime, lazytime, GC tuning",
-        "Compressed: balanced options plus zstd compression"
-    };
+    const char *options[3] = {"Default mount options"};
+    MountProfile profiles[3] = {MOUNT_PROFILE_DEFAULT};
     Filesystem effective = partition_effective_filesystem(partition);
+    size_t count = 1;
+    int current_choice = 0;
     int choice;
 
-    if (effective != FS_F2FS || partition->usage == PART_UNUSED ||
-        partition->action != ACTION_FORMAT) {
-        set_status(state, "Mount profiles apply only when formatting an F2FS partition.");
+    if (!partition_supports_mount_profile(partition, MOUNT_PROFILE_DEFAULT)) {
+        set_status(state, "Mount options apply only to partitions with a mount point.");
         return;
     }
-    choice = choose_dialog("F2FS mount profile", options,
-                           sizeof(options) / sizeof(options[0]), (int)partition->f2fs_mode);
+
+    for (MountProfile profile = MOUNT_PROFILE_BALANCED;
+         profile <= MOUNT_PROFILE_COMPRESSED;
+         profile = (MountProfile)((int)profile + 1)) {
+        if (!partition_supports_mount_profile(partition, profile)) continue;
+        options[count] = profile == MOUNT_PROFILE_BALANCED
+            ? "Balanced: noatime, lazytime, GC tuning"
+            : "Compressed: balanced options plus zstd compression";
+        profiles[count++] = profile;
+    }
+    for (size_t index = 0; index < count; ++index) {
+        if (profiles[index] == partition->mount_profile) {
+            current_choice = (int)index;
+            break;
+        }
+    }
+    choice = choose_dialog("Mount options", options, count, current_choice);
     if (choice < 0) return;
-    if (partition->f2fs_mode != (F2fsMountMode)choice) {
-        partition->f2fs_mode = (F2fsMountMode)choice;
+    if (partition->mount_profile != profiles[choice]) {
+        partition->mount_profile = profiles[choice];
         state->dirty = true;
     }
-    (void)snprintf(state->status, sizeof(state->status), "F2FS mount profile: %s",
-                   f2fs_mode_name(partition->f2fs_mode));
+    (void)snprintf(state->status, sizeof(state->status), "%s mount options: %s",
+                   filesystem_name(effective), mount_profile_name(partition->mount_profile));
 }
 
 /*
@@ -690,6 +710,6 @@ void handle_storage(UiState *state, int key)
     } else if (key == 'f' || key == 'F' || key == '\n' || key == KEY_ENTER) {
         edit_partition_format(state, &disk->partitions[state->row]);
     } else if (key == 'o' || key == 'O') {
-        edit_f2fs_mode(state, &disk->partitions[state->row]);
+        edit_mount_options(state, &disk->partitions[state->row]);
     }
 }

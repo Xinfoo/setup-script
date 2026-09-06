@@ -33,7 +33,7 @@ void model_partition_device(char *output, size_t size, const char *disk, unsigne
 void plan_init(InstallPlan *plan)
 {
     memset(plan, 0, sizeof(*plan));
-    plan->version = 3;
+    plan->version = AI_PLAN_VERSION;
     plan->system.platform = PLATFORM_INTEL;
     plan->system.kernel = KERNEL_LINUX;
     plan->system.locale = LOCALE_EN_US;
@@ -84,7 +84,7 @@ void disk_plan_use_existing(DiskPlan *plan, const DiskInfo *disk)
         target->usage = PART_UNUSED;
         target->action = ACTION_KEEP;
         target->target_fs = FS_NONE;
-        target->f2fs_mode = F2FS_DEFAULT;
+        target->mount_profile = MOUNT_PROFILE_DEFAULT;
     }
 }
 
@@ -150,7 +150,8 @@ static void auto_partition(DiskPlan *storage, size_t index, unsigned number,
     partition->usage = usage;
     partition->action = ACTION_FORMAT;
     partition->target_fs = filesystem;
-    partition->f2fs_mode = F2FS_BALANCED;
+    partition->mount_profile = filesystem == FS_F2FS ?
+                               MOUNT_PROFILE_BALANCED : MOUNT_PROFILE_DEFAULT;
 }
 
 void disk_plan_use_automatic(DiskPlan *storage, const DiskInfo *disk, StorageMode mode)
@@ -253,10 +254,11 @@ const char *locale_name(LocaleChoice value)
     return value == LOCALE_ZH_CN ? "zh_CN.UTF-8" : "en_US.UTF-8";
 }
 
-const char *f2fs_mode_name(F2fsMountMode value)
+const char *mount_profile_name(MountProfile value)
 {
     static const char *const names[] = {"default", "balanced", "compressed"};
-    return value >= F2FS_DEFAULT && value <= F2FS_COMPRESSED ? names[value] : "default";
+    return value >= MOUNT_PROFILE_DEFAULT && value <= MOUNT_PROFILE_COMPRESSED ?
+           names[value] : "default";
 }
 
 Filesystem filesystem_from_name(const char *name)
@@ -285,6 +287,24 @@ Filesystem partition_effective_filesystem(const PartitionPlan *partition)
 bool filesystem_is_regular(Filesystem filesystem)
 {
     return filesystem == FS_EXT4 || filesystem == FS_XFS || filesystem == FS_F2FS;
+}
+
+/*
+ * 挂载配置能力由模型统一判断，UI 和验证器无需分别了解各文件系统的支持表。
+ * 当前所有可挂载文件系统都有 default，非默认配置暂时只开放给新建 F2FS。
+ */
+bool partition_supports_mount_profile(const PartitionPlan *partition,
+                                      MountProfile profile)
+{
+    Filesystem filesystem;
+
+    if (partition == NULL || profile < MOUNT_PROFILE_DEFAULT ||
+        profile > MOUNT_PROFILE_COMPRESSED || partition->usage == PART_UNUSED ||
+        partition->usage == PART_SWAP) return false;
+    filesystem = partition_effective_filesystem(partition);
+    if (filesystem == FS_NONE || filesystem == FS_SWAP) return false;
+    if (profile == MOUNT_PROFILE_DEFAULT) return true;
+    return filesystem == FS_F2FS && partition->action == ACTION_FORMAT;
 }
 
 /* 容量只负责适配人类可读显示，不参与方案中的精确字节计算。 */

@@ -27,7 +27,7 @@ typedef enum {
     FIELD_USAGE,
     FIELD_ACTION,
     FIELD_FILESYSTEM,
-    FIELD_F2FS_MODE,
+    FIELD_MOUNT_PROFILE,
     FIELD_MOUNTPOINT,
     FIELD_FS_UUID,
     FIELD_PART_UUID,
@@ -155,8 +155,8 @@ static const char *partition_field(const PartitionPlan *partition, PartitionFiel
         /* KEEP 输出探测到的格式，FORMAT 输出目标格式，模板无需再次理解动作语义。 */
         filesystem = partition_effective_filesystem(partition);
         return filesystem_name(filesystem);
-    case FIELD_F2FS_MODE:
-        return f2fs_mode_name(partition->f2fs_mode);
+    case FIELD_MOUNT_PROFILE:
+        return mount_profile_name(partition->mount_profile);
     case FIELD_MOUNTPOINT:
         return partition_mountpoint(partition->usage);
     case FIELD_FS_UUID:
@@ -401,7 +401,8 @@ bool emit_header_and_plan(ScriptWriter *writer, const InstallPlan *plan,
     emit_partition_array(writer, "PART_USAGES", used, used_count, FIELD_USAGE);
     emit_partition_array(writer, "PART_ACTIONS", used, used_count, FIELD_ACTION);
     emit_partition_array(writer, "PART_FILESYSTEMS", used, used_count, FIELD_FILESYSTEM);
-    emit_partition_array(writer, "PART_F2FS_MODES", used, used_count, FIELD_F2FS_MODE);
+    emit_partition_array(writer, "PART_MOUNT_PROFILES", used, used_count,
+                         FIELD_MOUNT_PROFILE);
     emit_partition_array(writer, "PART_MOUNTPOINTS", used, used_count, FIELD_MOUNTPOINT);
     emit_partition_array(writer, "PART_FS_UUIDS", used, used_count, FIELD_FS_UUID);
     emit_partition_array(writer, "PART_UUIDS", used, used_count, FIELD_PART_UUID);

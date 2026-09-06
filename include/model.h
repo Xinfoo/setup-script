@@ -12,8 +12,9 @@
 #define AI_MAX_ISSUES 32
 #define AI_PATH_LEN 256
 #define AI_TEXT_LEN 128
+#define AI_PLAN_VERSION 4U
 
-/* 分区文件系统、用途、执行动作和磁盘布局模式。 */
+/* 分区文件系统、用途、执行动作、挂载配置档和磁盘布局模式。 */
 typedef enum {
     FS_NONE,
     FS_VFAT,
@@ -51,7 +52,11 @@ typedef enum { PLATFORM_INTEL, PLATFORM_AMD, PLATFORM_VM } Platform;
 typedef enum { KERNEL_LINUX, KERNEL_LTS, KERNEL_ZEN, KERNEL_HARDENED } Kernel;
 typedef enum { DESKTOP_KDE, DESKTOP_GNOME, DESKTOP_HYPRLAND, DESKTOP_NONE } Desktop;
 typedef enum { LOCALE_EN_US, LOCALE_ZH_CN } LocaleChoice;
-typedef enum { F2FS_DEFAULT, F2FS_BALANCED, F2FS_COMPRESSED } F2fsMountMode;
+typedef enum {
+    MOUNT_PROFILE_DEFAULT,
+    MOUNT_PROFILE_BALANCED,
+    MOUNT_PROFILE_COMPRESSED
+} MountProfile;
 
 /* 硬件探测快照：只描述当前系统看到的磁盘和分区，不表达安装意图。 */
 typedef struct {
@@ -85,7 +90,8 @@ typedef struct {
 
 /*
  * 安装方案中的分区。planned 表示由引导式布局新建；usage/action/target_fs
- * 分别描述挂载用途、是否格式化以及格式化后的文件系统。
+ * 分别描述挂载用途、是否格式化以及格式化后的文件系统，mount_profile 保存
+ * 与最终文件系统配套的挂载配置档。
  */
 typedef struct {
     char device[AI_PATH_LEN];
@@ -100,7 +106,7 @@ typedef struct {
     PartitionUsage usage;
     PartitionAction action;
     Filesystem target_fs;
-    F2fsMountMode f2fs_mode;
+    MountProfile mount_profile;
 } PartitionPlan;
 
 typedef struct {
@@ -185,13 +191,15 @@ const char *platform_name(Platform value);
 const char *kernel_name(Kernel value);
 const char *desktop_name(Desktop value);
 const char *locale_name(LocaleChoice value);
-const char *f2fs_mode_name(F2fsMountMode value);
+const char *mount_profile_name(MountProfile value);
 const char *partition_mountpoint(PartitionUsage value);
 Filesystem filesystem_from_name(const char *name);
 
 /* 分区动作推导和普通挂载格式规则由模型层统一解释。 */
 Filesystem partition_effective_filesystem(const PartitionPlan *partition);
 bool filesystem_is_regular(Filesystem filesystem);
+bool partition_supports_mount_profile(const PartitionPlan *partition,
+                                      MountProfile profile);
 uint64_t recommended_swap_bytes(void);
 void format_size(uint64_t bytes, char *buffer, size_t size);
 

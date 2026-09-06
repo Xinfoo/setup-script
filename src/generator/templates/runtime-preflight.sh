@@ -20,7 +20,7 @@ preflight() {
        "${#PART_DEVICES[@]}" -eq "${#PART_DISK_INDEXES[@]}" &&
        "${#PART_DEVICES[@]}" -eq "${#PART_ACTIONS[@]}" &&
        "${#PART_DEVICES[@]}" -eq "${#PART_FILESYSTEMS[@]}" &&
-       "${#PART_DEVICES[@]}" -eq "${#PART_F2FS_MODES[@]}" &&
+       "${#PART_DEVICES[@]}" -eq "${#PART_MOUNT_PROFILES[@]}" &&
        "${#PART_DEVICES[@]}" -eq "${#PART_MOUNTPOINTS[@]}" &&
        "${#PART_DEVICES[@]}" -eq "${#PART_FS_UUIDS[@]}" &&
        "${#PART_DEVICES[@]}" -eq "${#PART_UUIDS[@]}" &&

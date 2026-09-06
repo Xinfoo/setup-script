@@ -115,7 +115,7 @@ static bool validate_partition_array(struct json_object *parts, const char *pref
         {"part_uuid", json_type_string}, {"part_type", json_type_string},
         {"start_sector", json_type_int}, {"planned", json_type_boolean},
         {"usage", json_type_int}, {"action", json_type_int},
-        {"target_fs", json_type_int}, {"f2fs_mode", json_type_int}
+        {"target_fs", json_type_int}, {"mount_profile", json_type_int}
     };
 
     if (!json_object_is_type(parts, json_type_array)) {
@@ -146,8 +146,8 @@ static bool validate_partition_array(struct json_object *parts, const char *pref
                                     error, error_size) ||
             !require_json_int_range(item, section, "target_fs", FS_NONE, FS_SWAP,
                                     error, error_size) ||
-            !require_json_int_range(item, section, "f2fs_mode", F2FS_DEFAULT,
-                                    F2FS_COMPRESSED, error, error_size)) return false;
+            !require_json_int_range(item, section, "mount_profile", MOUNT_PROFILE_DEFAULT,
+                                    MOUNT_PROFILE_COMPRESSED, error, error_size)) return false;
     }
     return true;
 }
@@ -313,7 +313,8 @@ bool plan_save_json(const InstallPlan *plan, const char *path, char *error, size
             json_object_object_add(item, "usage", json_object_new_int((int)part->usage));
             json_object_object_add(item, "action", json_object_new_int((int)part->action));
             json_object_object_add(item, "target_fs", json_object_new_int((int)part->target_fs));
-            json_object_object_add(item, "f2fs_mode", json_object_new_int((int)part->f2fs_mode));
+            json_object_object_add(item, "mount_profile",
+                                   json_object_new_int((int)part->mount_profile));
             json_object_array_add(partitions, item);
         }
         json_object_object_add(disk_object, "partitions", partitions);
@@ -374,7 +375,8 @@ static void load_partitions_json(DiskPlan *disk, struct json_object *parts)
         part->usage = (PartitionUsage)json_int(item, "usage", PART_UNUSED);
         part->action = (PartitionAction)json_int(item, "action", ACTION_KEEP);
         part->target_fs = (Filesystem)json_int(item, "target_fs", FS_NONE);
-        part->f2fs_mode = (F2fsMountMode)json_int(item, "f2fs_mode", F2FS_BALANCED);
+        part->mount_profile = (MountProfile)json_int(
+            item, "mount_profile", MOUNT_PROFILE_DEFAULT);
     }
 }
 
@@ -417,7 +419,7 @@ bool plan_load_json(InstallPlan *plan, const char *path, char *error, size_t err
         return false;
     }
     version = json_object_get_int64(version_value);
-    if (version != 3) {
+    if (version != (int64_t)AI_PLAN_VERSION) {
         (void)snprintf(error, error_size, "unsupported plan version: %" PRId64, version);
         json_object_put(root);
         return false;
@@ -428,7 +430,7 @@ bool plan_load_json(InstallPlan *plan, const char *path, char *error, size_t err
     }
     /* 完整验证成功后才清空并重建目标模型，格式错误不会留下半加载状态。 */
     plan_init(plan);
-    plan->version = 3;
+    plan->version = AI_PLAN_VERSION;
     {
         size_t count = json_object_array_length(parts);
         plan->storage.disk_count = count > AI_MAX_PLAN_DISKS ? AI_MAX_PLAN_DISKS : count;

@@ -48,7 +48,7 @@ packages.json ──> ncurses TUI ──> InstallPlan
 4. 程序用 `lsblk --json --bytes --paths` 建立磁盘和分区清单，记录路径、容量、型号、序列号、传输方式、只读/可移动状态、分区表、PARTUUID、文件系统 UUID、GPT 类型和起始扇区等信息。
 5. TUI 编辑 `InstallPlan`。普通编辑不会执行 `wipefs`、`sfdisk`、`mkfs`、`mount` 或 `swapon`。
 6. Storage 页面主动启动 `cfdisk` 是唯一例外：它要求 root、只允许用于“使用现有分区”模式，先显示破坏性确认，退出后重新探测磁盘并清空该盘旧的分区用途分派。
-7. 保存方案时写入版本 3 的 JSON。旧版 JSON 不做兼容迁移，版本不符直接拒绝。
+7. 保存方案时写入版本 4 的 JSON。旧版 JSON 不做兼容迁移，版本不符直接拒绝。
 8. 生成前运行集中验证。存在阻断错误时不会产生脚本。
 
 构造器本身可以在普通用户环境运行。只有从 Storage 页面拉起 `cfdisk` 或实际执行生成脚本时才需要特权。
@@ -262,15 +262,14 @@ umask 022
 
 因此多盘挂载也会合并为一个确定的全局顺序，而不是依赖 Bash 关联数组遍历。`unused + FORMAT` 会创建文件系统但不挂载；如果它的目标文件系统是 Swap，也不会启用 Swap。
 
-F2FS 挂载配置在方案中提前确定：
+挂载配置在方案中提前确定。目前 Ext4、XFS 和 VFAT 只使用 `default`，F2FS 还提供：
 
-- `default`：不附加专用选项；
 - `balanced`：`noatime,lazytime,gc_merge,atgc,nodiscard,fsync_mode=nobarrier`；
 - `compressed`：在 balanced 基础上增加 `compress_algorithm=zstd:6,compress_chksum`。
 
 所有普通挂载完成后，脚本才逐个 `swapon`，并把本次启用的设备记入清理数组。
 
-旧版格式化顺序来自关联数组，顺序未定义；挂载顺序硬编码为 `/`、`/boot`、`/usr`、`/var`、`/home`、`/opt`，然后遍历关联数组启用 Swap。旧版 F2FS 挂载参数是在磁盘已经格式化后现场询问。旧界面中的“Optimized mount options(read only)”实际并不是只读挂载，而是当前所称的 balanced 参数。
+旧版格式化顺序来自关联数组，顺序未定义；挂载顺序硬编码为 `/`、`/boot`、`/usr`、`/var`、`/home`、`/opt`，然后遍历关联数组启用 Swap。旧版 F2FS 挂载参数是在磁盘已经格式化后现场询问。当前 Builder 通过通用的 Mount options 对话框提前选择，其中暂时只有 F2FS 存在非默认配置。旧界面中的“Optimized mount options(read only)”实际并不是只读挂载，而是当前所称的 balanced 参数。
 
 ### 3.11 `pacstrap` 与 `fstab`
 

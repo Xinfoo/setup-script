@@ -761,7 +761,7 @@ static bool test_existing_keep_and_format_actions(void)
     plan.storage.disks[0].partitions[1].usage = PART_ROOT;
     plan.storage.disks[0].partitions[1].action = ACTION_FORMAT;
     plan.storage.disks[0].partitions[1].target_fs = FS_F2FS;
-    plan.storage.disks[0].partitions[1].f2fs_mode = F2FS_COMPRESSED;
+    plan.storage.disks[0].partitions[1].mount_profile = MOUNT_PROFILE_COMPRESSED;
     plan.storage.disks[0].partitions[2].usage = PART_HOME;
 
     if (!generate_script(&plan, &script)) return false;
@@ -774,6 +774,17 @@ static bool test_existing_keep_and_format_actions(void)
     passed &= require_fragment(&script,
                                "PART_FILESYSTEMS=(\n    'f2fs'\n    'vfat'\n    'xfs'\n)",
                                "filesystem preservation and replacement choices");
+    passed &= require_fragment(&script,
+                               "PART_MOUNT_PROFILES=(\n    'compressed'\n    'default'\n    'default'\n)",
+                               "generic mount profiles for every mounted filesystem");
+    passed &= forbid_fragment(&script, "PART_F2FS_MODES",
+                              "the former F2FS-only profile array");
+    passed &= require_fragment(&script,
+                               "case \"$filesystem:$profile\" in",
+                               "filesystem-aware mount profile dispatch");
+    passed &= require_fragment(&script,
+                               "ext4:default|xfs:default|vfat:default|f2fs:default) ;;",
+                               "default profiles without extra mount arguments");
     passed &= require_fragment(&script,
                                "verify_existing_partition \"${PART_DEVICES[index]}\"",
                                "existing-partition runtime validation");
