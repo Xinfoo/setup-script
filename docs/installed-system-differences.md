@@ -1,6 +1,6 @@
 # 相同选项下旧、新安装脚本的最终系统差异
 
-本文只比较一次**成功完成的全新安装最终留下了什么**。旧版指 [`live/`](../live/) 中的 Bash 安装器，新版指当前 C Builder 生成的安装脚本。安装过程、交互方式、写盘前检查和失败清理的完整差异见 [generated-installer-vs-live.md](generated-installer-vs-live.md)。
+本文只比较一次**成功完成的全新安装最终留下了什么**。旧版指 `legacy` 分支 `live/` 目录中的 Bash 安装器，新版指当前 C Builder 生成的安装脚本。旧 Bash 文件可用 `git show legacy:live/<path>` 查看。安装过程、交互方式、写盘前检查和失败清理的完整差异见 [generated-installer-vs-live.md](generated-installer-vs-live.md)。
 
 ## 1. 比较口径
 
@@ -365,14 +365,16 @@ MODULES=(nvidia nvidia_modeset nvidia_uvm nvidia_drm)
 
 下列文件改变后，应重新检查本文：
 
+旧版列中的 `live/...` 路径均相对于 `legacy` 分支。
+
 | 主题 | 新版 | 旧版 |
 | --- | --- | --- |
-| 默认包组 | [`src/packages.c`](../src/packages.c) | [`live/functions/chroot/`](../live/functions/chroot/) 与 [`basic-software-installer.sh`](../live/functions/actuator/basic-software-installer.sh) |
-| 分区与格式化 | [`runtime-partitioning.sh`](../src/generator/templates/runtime-partitioning.sh)、[`runtime-filesystems.sh`](../src/generator/templates/runtime-filesystems.sh) | [`automatic-partitioner.sh`](../live/functions/actuator/automatic-partitioner.sh)、[`partition-formatter.sh`](../live/functions/actuator/partition-formatter.sh)、[`mounter.sh`](../live/functions/actuator/mounter.sh) |
-| 基础配置 | [`chroot-base.sh`](../src/generator/templates/chroot-base.sh) | [`basic-setter.sh`](../live/functions/chroot/basic-setter.sh) |
-| 桌面与字体 | [`chroot-desktop.sh`](../src/generator/templates/chroot-desktop.sh)、[`chroot-optional-software.sh`](../src/generator/templates/chroot-optional-software.sh) | [`desktop-environment-installer.sh`](../live/functions/chroot/desktop-environment-installer.sh) |
-| 服务与用户 | [`chroot-system.sh`](../src/generator/templates/chroot-system.sh) | [`final-setter.sh`](../live/functions/chroot/final-setter.sh) |
-| 引导与 Secure Boot | [`chroot-bootloader.sh`](../src/generator/templates/chroot-bootloader.sh)、[`finish-secure-boot.sh`](../src/generator/templates/finish-secure-boot.sh)、[`finish-firmware.sh`](../src/generator/templates/finish-firmware.sh) | [`bootloader-installer.sh`](../live/functions/chroot/bootloader-installer.sh) 与 [`live/setup.sh`](../live/setup.sh) |
-| fstab 与包源 | [`runtime-package-source.sh`](../src/generator/templates/runtime-package-source.sh)、[`chroot-system.sh`](../src/generator/templates/chroot-system.sh) | [`live/setup.sh`](../live/setup.sh)、[`live/chroot-setup.sh`](../live/chroot-setup.sh) |
+| 默认包组 | [`src/packages.c`](../src/packages.c) | `live/functions/chroot/` 与 `live/functions/actuator/basic-software-installer.sh` |
+| 分区与格式化 | [`runtime-partitioning.sh`](../src/generator/templates/runtime-partitioning.sh)、[`runtime-filesystems.sh`](../src/generator/templates/runtime-filesystems.sh) | `automatic-partitioner.sh`、`partition-formatter.sh`、`mounter.sh` |
+| 基础配置 | [`chroot-base.sh`](../src/generator/templates/chroot-base.sh) | `live/functions/chroot/basic-setter.sh` |
+| 桌面与字体 | [`chroot-desktop.sh`](../src/generator/templates/chroot-desktop.sh)、[`chroot-optional-software.sh`](../src/generator/templates/chroot-optional-software.sh) | `live/functions/chroot/desktop-environment-installer.sh` |
+| 服务与用户 | [`chroot-system.sh`](../src/generator/templates/chroot-system.sh) | `live/functions/chroot/final-setter.sh` |
+| 引导与 Secure Boot | [`chroot-bootloader.sh`](../src/generator/templates/chroot-bootloader.sh)、[`finish-secure-boot.sh`](../src/generator/templates/finish-secure-boot.sh)、[`finish-firmware.sh`](../src/generator/templates/finish-firmware.sh) | `live/functions/chroot/bootloader-installer.sh` 与 `live/setup.sh` |
+| fstab 与包源 | [`runtime-package-source.sh`](../src/generator/templates/runtime-package-source.sh)、[`chroot-system.sh`](../src/generator/templates/chroot-system.sh) | `live/setup.sh`、`live/chroot-setup.sh` |
 
-本文描述的是当前代码行为，不承诺未来版本继续与 `live/` 保持结果兼容；`live/` 仍只是迁移参考。
+本文描述的是当前代码行为，不承诺未来版本继续与 `legacy` 分支的 Bash 实现保持结果兼容；`legacy` 只用于维护和追溯旧流程。
