@@ -253,6 +253,27 @@ static bool test_automatic_script(void)
                                "# Generated target-system settings / 自动生成的目标系统设置",
                                "a bilingual nested chroot section comment");
     passed &= require_fragment(&script,
+                               "cat > /etc/environment <<'ENVIRONMENT'\n#\n"
+                               "# This file is parsed by pam_env module\n#\n"
+                               "# Syntax: simple \"KEY=VAL\" pairs on separate lines\n#\n\n"
+                               "XMODIFIERS=@im=fcitx\n"
+                               "SDL_IM_MODULE=fcitx\n"
+                               "GLFW_IM_MODULE=ibus\n"
+                               "ENVIRONMENT\n}",
+                               "the complete Arch environment file with its standard header");
+    passed &= forbid_fragment(&script,
+                              "cat >> /etc/environment",
+                              "append-only environment configuration");
+    passed &= require_fragment(&script,
+                               "cat > /etc/hosts <<HOSTS\n"
+                               "# Static table lookup for hostnames.\n"
+                               "# See hosts(5) for details.\n\n"
+                               "127.0.0.1 localhost\n"
+                               "::1 localhost\n"
+                               "127.0.1.1 $HOSTNAME_VALUE.localdomain $HOSTNAME_VALUE\n"
+                               "HOSTS",
+                               "the complete hosts file with its standard header");
+    passed &= require_fragment(&script,
                                "# Installation orchestration / 安装流程编排",
                                "a bilingual installation-flow section comment");
     passed &= require_fragment(&script,

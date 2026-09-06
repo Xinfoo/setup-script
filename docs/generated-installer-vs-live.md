@@ -331,7 +331,7 @@ arch-chroot "$TARGET_ROOT" /bin/bash /root/.arch-install-chroot.sh
 | 时区 | TUI 中选择并提前验证 zoneinfo 文件，chroot 再检查一次 | chroot 中循环输入，依赖 `ln -sf` 成败判断 |
 | Locale | TUI 预选，生成脚本固定写入 | chroot 中 `select` 询问 |
 | hostname | 生成前校验并 Shell 转义 | chroot 中读取任意非受控文本 |
-| `/etc/hosts` | 重写完整 localhost、IPv6 localhost 和 `127.0.1.1 hostname` | 只向现有文件追加 `127.0.0.1 hostname` |
+| `/etc/hosts` | 保留发行版标准注释头，并重写完整 localhost、IPv6 localhost 和 `127.0.1.1 hostname` | 只向现有文件追加 `127.0.0.1 hostname` |
 | 密码失败 | root 和用户分别最多尝试 3 次 | 无限循环直到 `passwd` 成功 |
 | pacman 数据库 | 明确 `--noconfirm` | 重定向输出并依据命令状态判断 |
 

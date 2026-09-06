@@ -2,6 +2,22 @@
 # Desktop environment and input method / 桌面环境与输入法
 # =============================================================================
 
+# Write the complete Fcitx environment file with Arch's standard header.
+# 写入完整的 Fcitx 环境变量文件，并保留 Arch 的标准文件头。
+configure_fcitx_environment() {
+    cat > /etc/environment <<'ENVIRONMENT'
+#
+# This file is parsed by pam_env module
+#
+# Syntax: simple "KEY=VAL" pairs on separate lines
+#
+
+XMODIFIERS=@im=fcitx
+SDL_IM_MODULE=fcitx
+GLFW_IM_MODULE=ibus
+ENVIRONMENT
+}
+
 install_desktop() {
     case "$DESKTOP" in
         kde)
@@ -11,11 +27,7 @@ install_desktop() {
             fi
             if [[ "$CHINESE_INPUT" == true ]]; then
                 pacman_install "${PKG_FCITX[@]}"
-                cat >> /etc/environment <<'FCITX'
-XMODIFIERS=@im=fcitx
-SDL_IM_MODULE=fcitx
-GLFW_IM_MODULE=ibus
-FCITX
+                configure_fcitx_environment
             fi
             ;;
         gnome)
@@ -32,11 +44,7 @@ FCITX
             pacman_install "${PKG_HYPRLAND[@]}"
             if [[ "$CHINESE_INPUT" == true ]]; then
                 pacman_install "${PKG_FCITX[@]}"
-                cat >> /etc/environment <<'FCITX'
-XMODIFIERS=@im=fcitx
-SDL_IM_MODULE=fcitx
-GLFW_IM_MODULE=ibus
-FCITX
+                configure_fcitx_environment
             fi
             install -d /etc/greetd
             cat > /etc/greetd/config.toml <<'GREETD'
