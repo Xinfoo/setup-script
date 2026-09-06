@@ -243,6 +243,68 @@ static bool require_order(const GeneratedScript *script, const char *first,
     return false;
 }
 
+/* 用真实 sed 验证 kms 位于数组各位置时都能得到规范的单空格结果。 */
+static bool test_mkinitcpio_kms_rewrite(void)
+{
+    static const char input[] =
+        "HOOKS=(kms keyboard filesystems)\n"
+        "HOOKS=(base modconf kms keyboard filesystems)\n"
+        "HOOKS=(base modconf keyboard kms)\n"
+        "HOOKS=(kms)\n";
+    static const char expected[] =
+        "HOOKS=(keyboard filesystems)\n"
+        "HOOKS=(base modconf keyboard filesystems)\n"
+        "HOOKS=(base modconf keyboard)\n"
+        "HOOKS=()\n";
+    static const char expression[] =
+        "/^HOOKS=/ {"
+        "s/[[:space:]]+kms[[:space:]]+/ /g;"
+        "s/\\([[:space:]]*kms[[:space:]]+/(/g;"
+        "s/[[:space:]]+kms[[:space:]]*\\)/)/g;"
+        "s/\\([[:space:]]*kms[[:space:]]*\\)/()/g;"
+        "}";
+    char path[] = "/tmp/arch-install-mkinitcpio-test-XXXXXX";
+    char error[256] = {0};
+    ProcessResult result = {0};
+    char *contents;
+    char *const arguments[] = {
+        "/usr/bin/sed", "-i", "-E", (char *)expression, path, NULL
+    };
+    FILE *file;
+    int descriptor = mkstemp(path);
+    bool write_ok;
+    bool passed;
+
+    if (descriptor < 0) return false;
+    file = fdopen(descriptor, "w");
+    if (file == NULL) {
+        (void)close(descriptor);
+        (void)unlink(path);
+        return false;
+    }
+    write_ok = fputs(input, file) != EOF;
+    if (fclose(file) != 0) write_ok = false;
+    if (!write_ok) {
+        (void)unlink(path);
+        return false;
+    }
+    if (!run_capture(arguments[0], arguments, &result, error, sizeof(error))) {
+        (void)fprintf(stderr, "cannot test mkinitcpio HOOKS rewrite: %s\n", error);
+        (void)unlink(path);
+        return false;
+    }
+    passed = result.status == 0;
+    process_result_free(&result);
+    contents = read_file(path);
+    if (contents == NULL || strcmp(contents, expected) != 0) {
+        (void)fprintf(stderr, "mkinitcpio HOOKS rewrite produced an unexpected result\n");
+        passed = false;
+    }
+    free(contents);
+    if (unlink(path) != 0) passed = false;
+    return passed;
+}
+
 /* 自动分区场景覆盖生成脚本的主体流程、运行时复核、清理和 Secure Boot。 */
 static bool test_automatic_script(void)
 {
@@ -502,6 +564,17 @@ static bool test_automatic_script(void)
     passed &= forbid_fragment(&script,
                               "FALLBACK_FILE",
                               "the removed fallback-initramfs variable");
+    passed &= require_fragment(&script,
+                               "sed -i -E '/^HOOKS=/ {\n"
+                               "            s/[[:space:]]+kms[[:space:]]+/ /g\n"
+                               "            s/\\([[:space:]]*kms[[:space:]]+/(/g\n"
+                               "            s/[[:space:]]+kms[[:space:]]*\\)/)/g\n"
+                               "            s/\\([[:space:]]*kms[[:space:]]*\\)/()/g\n"
+                               "        }' /etc/mkinitcpio.conf",
+                               "position-aware kms hook removal");
+    passed &= forbid_fragment(&script,
+                              "/^HOOKS=/s/(^|[ (])kms([ )]|$)/\\1\\2/",
+                              "the doubled-whitespace kms rewrite");
     passed &= require_fragment(&script,
                                "local user_shell",
                                "the selected Zsh path variable");
@@ -823,6 +896,7 @@ static bool test_multi_disk_format_only_script(void)
 int main(void)
 {
     /* 汇总各集成场景，保留独立结果以便一次运行显示全部失败项。 */
+    bool mkinitcpio_rewrite = test_mkinitcpio_kms_rewrite();
     bool automatic = test_automatic_script();
     bool existing = test_existing_keep_and_format_actions();
     bool symlink = test_output_symlink_is_rejected();
@@ -830,6 +904,8 @@ int main(void)
     bool custom_packages = test_custom_package_config_is_emitted();
     bool multi_disk = test_multi_disk_format_only_script();
 
+    (void)printf("%s mkinitcpio kms rewrite\n",
+                 mkinitcpio_rewrite ? "PASS" : "FAIL");
     (void)printf("%s automatic generator integration\n",
                  automatic ? "PASS" : "FAIL");
     (void)printf("%s existing KEEP/FORMAT integration\n",
@@ -842,6 +918,7 @@ int main(void)
                  custom_packages ? "PASS" : "FAIL");
     (void)printf("%s multi-disk format-only generation\n",
                  multi_disk ? "PASS" : "FAIL");
-    return automatic && existing && symlink && local_mirror && custom_packages && multi_disk
+    return mkinitcpio_rewrite && automatic && existing && symlink && local_mirror &&
+                   custom_packages && multi_disk
                ? EXIT_SUCCESS : EXIT_FAILURE;
 }

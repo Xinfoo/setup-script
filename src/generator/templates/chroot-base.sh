@@ -68,7 +68,13 @@ install_drivers() {
     fi
     if [[ "$NVIDIA_GRAPHICS" == true ]]; then
         sed -i -E 's/^MODULES=.*/MODULES=(nvidia nvidia_modeset nvidia_uvm nvidia_drm)/' /etc/mkinitcpio.conf
-        sed -i -E '/^HOOKS=/s/(^|[ (])kms([ )]|$)/\1\2/' /etc/mkinitcpio.conf
+        # Remove kms without leaving doubled or edge whitespace. / 移除 kms，同时避免留下连续空格或括号边缘空格。
+        sed -i -E '/^HOOKS=/ {
+            s/[[:space:]]+kms[[:space:]]+/ /g
+            s/\([[:space:]]*kms[[:space:]]+/(/g
+            s/[[:space:]]+kms[[:space:]]*\)/)/g
+            s/\([[:space:]]*kms[[:space:]]*\)/()/g
+        }' /etc/mkinitcpio.conf
         pacman_install "${PKG_NVIDIA_GRAPHICS[@]}"
     fi
     if [[ "$HAS_BLUETOOTH" == true ]]; then

@@ -356,7 +356,7 @@ arch-chroot "$TARGET_ROOT" /bin/bash /root/.arch-install-chroot.sh
 
 NVIDIA 处理也有差别：
 
-- 当前脚本用较宽松的正则重写 `MODULES=`，并从任意 `HOOKS=` 中移除 `kms`；
+- 当前脚本用较宽松的正则重写 `MODULES=`，并按 `kms` 位于 `HOOKS` 开头、中间、末尾或作为唯一项四种位置移除它，不在相邻 hook 之间留下连续空格；
 - 旧脚本只替换两条完全匹配的默认文本，Arch 默认配置变化后可能不生效；
 - 当前脚本在驱动安装后明确运行 `mkinitcpio -P`；
 - 旧版没有显式重新生成全部 initramfs。
