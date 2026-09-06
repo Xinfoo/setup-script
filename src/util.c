@@ -27,9 +27,8 @@ void copy_text(char *destination, size_t size, const char *source)
     (void)snprintf(destination, size, "%s", source);
 }
 
-static bool run_capture_internal(const char *program, char *const argv[],
-                                 bool merge_standard_error, ProcessResult *result,
-                                 char *error, size_t error_size)
+bool run_capture_stdout(const char *program, char *const argv[], ProcessResult *result,
+                        char *error, size_t error_size)
 {
     int pipefd[2];
     pid_t child;
@@ -59,15 +58,11 @@ static bool run_capture_internal(const char *program, char *const argv[],
         if (dup2(pipefd[1], STDOUT_FILENO) < 0) {
             _exit(126);
         }
-        if (merge_standard_error) {
-            if (dup2(pipefd[1], STDERR_FILENO) < 0) _exit(126);
-        } else {
-            null_descriptor = open("/dev/null", O_WRONLY);
-            if (null_descriptor < 0 || dup2(null_descriptor, STDERR_FILENO) < 0) {
-                _exit(126);
-            }
-            (void)close(null_descriptor);
+        null_descriptor = open("/dev/null", O_WRONLY);
+        if (null_descriptor < 0 || dup2(null_descriptor, STDERR_FILENO) < 0) {
+            _exit(126);
         }
+        (void)close(null_descriptor);
         (void)close(pipefd[1]);
         /* execv 不经过 PATH 搜索或 Shell；126/127 分别保留给重定向和执行失败。 */
         execv(program, argv);
@@ -141,18 +136,6 @@ static bool run_capture_internal(const char *program, char *const argv[],
     result->status = WIFEXITED(wait_status) ? WEXITSTATUS(wait_status) : 128;
     result->output = buffer;
     return true;
-}
-
-bool run_capture(const char *program, char *const argv[], ProcessResult *result,
-                 char *error, size_t error_size)
-{
-    return run_capture_internal(program, argv, true, result, error, error_size);
-}
-
-bool run_capture_stdout(const char *program, char *const argv[], ProcessResult *result,
-                        char *error, size_t error_size)
-{
-    return run_capture_internal(program, argv, false, result, error, error_size);
 }
 
 void process_result_free(ProcessResult *result)

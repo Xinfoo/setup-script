@@ -49,7 +49,6 @@ typedef struct {
 } PackageList;
 
 typedef struct {
-    unsigned version;
     PackageList groups[PKG_GROUP_COUNT];
 } PackageConfig;
 

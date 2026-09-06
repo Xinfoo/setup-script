@@ -136,7 +136,6 @@ void packages_init_defaults(PackageConfig *config)
     static const char *const secure_boot_live[] = {"sbsigntools"};
 
     memset(config, 0, sizeof(*config));
-    config->version = 2;
     SET_DEFAULT(config, PKG_BOOTSTRAP, bootstrap);
     SET_DEFAULT(config, PKG_CORE, core);
     SET_DEFAULT(config, PKG_KERNEL_LINUX, kernel_linux);
@@ -225,7 +224,6 @@ bool packages_load_json(PackageConfig *config, const char *path,
         return false;
     }
     /* 当前格式要求所有已知组完整存在，缺项不会静默回退到内建默认值。 */
-    loaded.version = 2;
     for (int group = PKG_BOOTSTRAP; group < PKG_GROUP_COUNT; ++group) {
         const char *name = package_group_name((PackageGroup)group);
         struct json_object *array = NULL;

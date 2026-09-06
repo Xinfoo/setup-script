@@ -26,11 +26,9 @@ typedef struct {
 static void make_disk(DiskInfo *disk, size_t partition_count)
 {
     memset(disk, 0, sizeof(*disk));
-    copy_text(disk->name, sizeof(disk->name), "nvme0n1");
     copy_text(disk->path, sizeof(disk->path), "/dev/nvme0n1");
     copy_text(disk->model, sizeof(disk->model), "Integration Test NVMe");
     copy_text(disk->serial, sizeof(disk->serial), "GENERATOR-TEST-001");
-    copy_text(disk->transport, sizeof(disk->transport), "nvme");
     copy_text(disk->partition_table, sizeof(disk->partition_table), "gpt");
     disk->size_bytes = UINT64_C(2) * TIB;
     disk->partition_count = partition_count;
@@ -59,10 +57,26 @@ static void make_partition(PartitionInfo *partition, unsigned number,
 static void make_second_disk(DiskInfo *disk)
 {
     make_disk(disk, 0);
-    copy_text(disk->name, sizeof(disk->name), "sdb");
     copy_text(disk->path, sizeof(disk->path), "/dev/sdb");
     copy_text(disk->model, sizeof(disk->model), "Integration Test Data Disk");
     copy_text(disk->serial, sizeof(disk->serial), "GENERATOR-TEST-002");
+}
+
+/* 生成器测试自行构造方案，避免为测试夹具保留生产程序不使用的包装 API。 */
+static bool select_test_disk(InstallPlan *plan, const DiskInfo *disk)
+{
+    memset(&plan->storage, 0, sizeof(plan->storage));
+    return plan_add_disk(plan, disk);
+}
+
+static bool use_test_automatic_layout(InstallPlan *plan, const DiskInfo *disk,
+                                      StorageMode mode)
+{
+    DiskPlan *target = plan_find_disk(plan, disk->path);
+
+    if (target == NULL) return false;
+    disk_plan_use_automatic(target, disk, mode);
+    return true;
 }
 
 /* 读取生成结果并用 bash -n 做独立语法检查。 */
@@ -122,7 +136,7 @@ static bool bash_syntax_is_valid(const char *path)
     char *const arguments[] = {"/usr/bin/bash", "-n", (char *)path, NULL};
     bool valid;
 
-    if (!run_capture(arguments[0], arguments, &result, error, sizeof(error))) {
+    if (!run_capture_stdout(arguments[0], arguments, &result, error, sizeof(error))) {
         (void)fprintf(stderr, "cannot run bash -n: %s\n", error);
         return false;
     }
@@ -288,7 +302,7 @@ static bool test_mkinitcpio_kms_rewrite(void)
         (void)unlink(path);
         return false;
     }
-    if (!run_capture(arguments[0], arguments, &result, error, sizeof(error))) {
+    if (!run_capture_stdout(arguments[0], arguments, &result, error, sizeof(error))) {
         (void)fprintf(stderr, "cannot test mkinitcpio HOOKS rewrite: %s\n", error);
         (void)unlink(path);
         return false;
@@ -315,8 +329,8 @@ static bool test_automatic_script(void)
 
     make_disk(&disk, 0);
     plan_init(&plan);
-    plan_select_disk(&plan, &disk);
-    plan_use_automatic(&plan, &disk, STORAGE_AUTO_HOME_SWAP);
+    if (!select_test_disk(&plan, &disk)) return false;
+    if (!use_test_automatic_layout(&plan, &disk, STORAGE_AUTO_HOME_SWAP)) return false;
     plan.system.kernel = KERNEL_LTS;
 
     if (!generate_script(&plan, &script)) return false;
@@ -685,8 +699,8 @@ static bool test_output_symlink_is_rejected(void)
 
     make_disk(&disk, 0);
     plan_init(&plan);
-    plan_select_disk(&plan, &disk);
-    plan_use_automatic(&plan, &disk, STORAGE_AUTO_ROOT_ONLY);
+    if (!select_test_disk(&plan, &disk)) return false;
+    if (!use_test_automatic_layout(&plan, &disk, STORAGE_AUTO_ROOT_ONLY)) return false;
     packages_init_defaults(&packages);
     if (mkdtemp(directory) == NULL) return false;
     (void)snprintf(victim, sizeof(victim), "%s/victim", directory);
@@ -741,7 +755,7 @@ static bool test_existing_keep_and_format_actions(void)
     make_partition(&disk.partitions[1], 2, UINT64_C(100) * GIB, "ext4");
     make_partition(&disk.partitions[2], 3, UINT64_C(500) * GIB, "xfs");
     plan_init(&plan);
-    plan_select_disk(&plan, &disk);
+    if (!select_test_disk(&plan, &disk)) return false;
     plan.storage.disks[0].partitions[0].usage = PART_BOOT;
     plan.storage.disks[0].partitions[1].usage = PART_ROOT;
     plan.storage.disks[0].partitions[1].action = ACTION_FORMAT;
@@ -782,8 +796,8 @@ static bool test_local_mirror_script(void)
 
     make_disk(&disk, 0);
     plan_init(&plan);
-    plan_select_disk(&plan, &disk);
-    plan_use_automatic(&plan, &disk, STORAGE_AUTO_ROOT_ONLY);
+    if (!select_test_disk(&plan, &disk)) return false;
+    if (!use_test_automatic_layout(&plan, &disk, STORAGE_AUTO_ROOT_ONLY)) return false;
     plan.system.local_mirror = true;
     plan.system.china_mirrors = true;
 
@@ -840,8 +854,8 @@ static bool test_custom_package_config_is_emitted(void)
 
     make_disk(&disk, 0);
     plan_init(&plan);
-    plan_select_disk(&plan, &disk);
-    plan_use_automatic(&plan, &disk, STORAGE_AUTO_ROOT_ONLY);
+    if (!select_test_disk(&plan, &disk)) return false;
+    if (!use_test_automatic_layout(&plan, &disk, STORAGE_AUTO_ROOT_ONLY)) return false;
     packages_init_defaults(&packages);
     core = &packages.groups[PKG_CORE];
     if (core->count >= AI_MAX_PACKAGES_PER_GROUP) return false;
@@ -868,8 +882,8 @@ static bool test_multi_disk_format_only_script(void)
     make_disk(&system_disk, 0);
     make_second_disk(&data_disk);
     plan_init(&plan);
-    plan_select_disk(&plan, &system_disk);
-    plan_use_automatic(&plan, &system_disk, STORAGE_AUTO_ROOT_ONLY);
+    if (!select_test_disk(&plan, &system_disk)) return false;
+    if (!use_test_automatic_layout(&plan, &system_disk, STORAGE_AUTO_ROOT_ONLY)) return false;
     if (!plan_add_disk(&plan, &data_disk)) return false;
     disk_plan_use_automatic(&plan.storage.disks[1], &data_disk, STORAGE_AUTO_DATA);
 

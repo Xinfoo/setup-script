@@ -73,10 +73,8 @@ static void collect_partitions(struct json_object *children, DiskInfo *disk)
             copy_text(part->path, sizeof(part->path), object_string(item, "path"));
             copy_text(part->current_fs, sizeof(part->current_fs), object_string(item, "fstype"));
             copy_text(part->fs_uuid, sizeof(part->fs_uuid), object_string(item, "uuid"));
-            copy_text(part->label, sizeof(part->label), object_string(item, "label"));
             copy_text(part->part_uuid, sizeof(part->part_uuid), object_string(item, "partuuid"));
             copy_text(part->part_type, sizeof(part->part_type), object_string(item, "parttype"));
-            first_mountpoint(item, part->mountpoint, sizeof(part->mountpoint));
             part->size_bytes = object_uint64(item, "size");
             part->start_sector = object_uint64(item, "start");
             part->number = (unsigned)object_uint64(item, "partn");
@@ -106,7 +104,8 @@ bool detect_hardware(HardwareInventory *inventory, char *error, size_t error_siz
     struct json_object *devices = NULL;
     char *const arguments[] = {
         "/usr/bin/lsblk", "--json", "--bytes", "--paths",
-        "--output", "NAME,PATH,TYPE,SIZE,FSTYPE,UUID,LABEL,MOUNTPOINTS,MODEL,SERIAL,TRAN,RM,RO,PARTN,PTTYPE,PARTUUID,PARTTYPE,START",
+        /* NAME 虽不存入模型，却是 lsblk 生成 children 树结构所必需的控制列。 */
+        "--output", "NAME,PATH,TYPE,SIZE,FSTYPE,UUID,MOUNTPOINTS,MODEL,SERIAL,TRAN,RM,RO,PARTN,PTTYPE,PARTUUID,PARTTYPE,START",
         NULL
     };
 
@@ -132,18 +131,18 @@ bool detect_hardware(HardwareInventory *inventory, char *error, size_t error_siz
         struct json_object *item = json_object_array_get_idx(devices, index);
         struct json_object *children = NULL;
         DiskInfo *disk;
+        const char *transport;
         if (strcmp(object_string(item, "type"), "disk") != 0) continue;
         if (inventory->disk_count >= AI_MAX_DISKS) break;
         disk = &inventory->disks[inventory->disk_count++];
         memset(disk, 0, sizeof(*disk));
-        copy_text(disk->name, sizeof(disk->name), object_string(item, "name"));
         copy_text(disk->path, sizeof(disk->path), object_string(item, "path"));
         copy_text(disk->model, sizeof(disk->model), object_string(item, "model"));
         copy_text(disk->serial, sizeof(disk->serial), object_string(item, "serial"));
-        copy_text(disk->transport, sizeof(disk->transport), object_string(item, "tran"));
         copy_text(disk->partition_table, sizeof(disk->partition_table), object_string(item, "pttype"));
         disk->size_bytes = object_uint64(item, "size");
-        disk->removable = object_bool(item, "rm") || strcmp(disk->transport, "usb") == 0;
+        transport = object_string(item, "tran");
+        disk->removable = object_bool(item, "rm") || strcmp(transport, "usb") == 0;
         disk->read_only = object_bool(item, "ro");
         {
             char mounted[AI_PATH_LEN];

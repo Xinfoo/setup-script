@@ -48,13 +48,6 @@ void plan_init(InstallPlan *plan)
     plan->system.create_efi_entry = true;
 }
 
-/* 磁盘方案操作只修改内存模型；加入磁盘时先复制完整的探测身份。 */
-void plan_select_disk(InstallPlan *plan, const DiskInfo *disk)
-{
-    memset(&plan->storage, 0, sizeof(plan->storage));
-    (void)plan_add_disk(plan, disk);
-}
-
 DiskPlan *plan_find_disk(InstallPlan *plan, const char *path)
 {
     for (size_t index = 0; index < plan->storage.disk_count; ++index) {
@@ -114,13 +107,6 @@ bool plan_add_disk(InstallPlan *plan, const DiskInfo *disk)
     target->in_use = disk->in_use;
     disk_plan_use_existing(target, disk);
     return true;
-}
-
-void plan_use_existing(InstallPlan *plan, const DiskInfo *disk)
-{
-    DiskPlan *target = plan_find_disk(plan, disk->path);
-    if (target == NULL && plan_add_disk(plan, disk)) target = plan_find_disk(plan, disk->path);
-    if (target != NULL) disk_plan_use_existing(target, disk);
 }
 
 /* 推荐 Swap 大小根据当前内存分段计算，读取失败时回退到 8 GiB。 */
@@ -208,13 +194,6 @@ void disk_plan_use_automatic(DiskPlan *storage, const DiskInfo *disk, StorageMod
     }
 }
 
-void plan_use_automatic(InstallPlan *plan, const DiskInfo *disk, StorageMode mode)
-{
-    DiskPlan *target = plan_find_disk(plan, disk->path);
-    if (target == NULL && plan_add_disk(plan, disk)) target = plan_find_disk(plan, disk->path);
-    if (target != NULL) disk_plan_use_automatic(target, disk, mode);
-}
-
 /* 枚举名称是界面显示和 Shell 序列化共同使用的稳定表示。 */
 const char *filesystem_name(Filesystem value)
 {
@@ -289,116 +268,6 @@ Filesystem filesystem_from_name(const char *name)
     if (strcmp(name, "f2fs") == 0) return FS_F2FS;
     if (strcmp(name, "swap") == 0) return FS_SWAP;
     return FS_NONE;
-}
-
-/*
- * TUI 的分区编辑状态机：用途变化会同步修正允许的动作和文件系统，
- * 格式化选择则区分现有分区、引导式分区和无挂载点数据分区。
- */
-void plan_cycle_usage(PartitionPlan *partition)
-{
-    partition->usage = (PartitionUsage)(((int)partition->usage + 1) % ((int)PART_SWAP + 1));
-    /* 新建分区没有可保留的旧文件系统，一旦分配用途就必须格式化。 */
-    if (partition->planned && partition->usage != PART_UNUSED) {
-        partition->action = ACTION_FORMAT;
-    }
-    /* boot/swap 的用途本身就限定文件系统，切换用途时同步收敛状态。 */
-    if (partition->usage == PART_SWAP) {
-        partition->action = ACTION_FORMAT;
-        partition->target_fs = FS_SWAP;
-    } else if (partition->usage == PART_BOOT && partition->action == ACTION_FORMAT) {
-        partition->target_fs = FS_VFAT;
-    } else if (partition->usage == PART_UNUSED) {
-        /* “无用途”对两类分区含义不同：现有分区忽略，新建数据分区仍会格式化。 */
-        partition->action = partition->planned ? ACTION_FORMAT : ACTION_KEEP;
-        if (partition->planned) {
-            if (partition->target_fs == FS_NONE) partition->target_fs = FS_EXT4;
-        } else {
-            partition->target_fs = FS_NONE;
-        }
-    } else if (partition->action == ACTION_FORMAT &&
-               (partition->target_fs == FS_NONE || partition->target_fs == FS_SWAP ||
-                partition->target_fs == FS_VFAT)) {
-        /* 普通挂载点不能沿用仅适合 boot/swap 的格式，回到通用默认值。 */
-        partition->target_fs = FS_EXT4;
-    }
-}
-
-void plan_cycle_format(PartitionPlan *partition)
-{
-    /*
-     * 无挂载点分区允许在“忽略”和各种纯格式化操作间循环；引导式数据盘
-     * 没有旧内容可 KEEP，因此走到末尾时回到 ext4。
-     */
-    if (partition->usage == PART_UNUSED) {
-        if (partition->action == ACTION_KEEP) {
-            partition->action = ACTION_FORMAT;
-            partition->target_fs = FS_EXT4;
-            return;
-        }
-        switch (partition->target_fs) {
-        case FS_EXT4: partition->target_fs = FS_XFS; break;
-        case FS_XFS: partition->target_fs = FS_F2FS; break;
-        case FS_F2FS: partition->target_fs = FS_VFAT; break;
-        case FS_VFAT: partition->target_fs = FS_SWAP; break;
-        default:
-            if (partition->planned) {
-                partition->target_fs = FS_EXT4;
-            } else {
-                partition->action = ACTION_KEEP;
-                partition->target_fs = FS_NONE;
-            }
-            break;
-        }
-        return;
-    }
-    /*
-     * 引导式分区始终为 FORMAT。boot/swap 的格式固定，普通分区只在三种
-     * 可挂载文件系统之间循环，避免产生与固定布局互相矛盾的动作。
-     */
-    if (partition->planned) {
-        if (partition->usage == PART_BOOT) {
-            partition->target_fs = FS_VFAT;
-            return;
-        }
-        if (partition->usage == PART_SWAP) {
-            partition->target_fs = FS_SWAP;
-            return;
-        }
-        switch (partition->target_fs) {
-        case FS_EXT4: partition->target_fs = FS_XFS; break;
-        case FS_XFS: partition->target_fs = FS_F2FS; break;
-        default: partition->target_fs = FS_EXT4; break;
-        }
-        partition->action = ACTION_FORMAT;
-        return;
-    }
-    /* 现有分区第一次切换从无损 KEEP 进入 FORMAT，并选择与用途匹配的默认值。 */
-    if (partition->action == ACTION_KEEP) {
-        partition->action = ACTION_FORMAT;
-        partition->target_fs = partition->usage == PART_BOOT ? FS_VFAT :
-                               partition->usage == PART_SWAP ? FS_SWAP : FS_EXT4;
-        return;
-    }
-    if (partition->usage == PART_BOOT) {
-        /* boot/swap 各只有一种合法目标格式，第二次切换直接回到 KEEP。 */
-        partition->action = ACTION_KEEP;
-        partition->target_fs = FS_NONE;
-        return;
-    }
-    if (partition->usage == PART_SWAP) {
-        partition->action = ACTION_KEEP;
-        partition->target_fs = FS_NONE;
-        return;
-    }
-    switch (partition->target_fs) {
-    case FS_EXT4: partition->target_fs = FS_XFS; break;
-    case FS_XFS: partition->target_fs = FS_F2FS; break;
-    default:
-        partition->action = ACTION_KEEP;
-        partition->target_fs = FS_NONE;
-        break;
-    }
 }
 
 /* 容量只负责适配人类可读显示，不参与方案中的精确字节计算。 */

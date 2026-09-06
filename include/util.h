@@ -10,9 +10,7 @@ typedef struct {
     char *output;
 } ProcessResult;
 
-/* 执行外部程序并捕获输出；两个入口分别合并或丢弃标准错误。 */
-bool run_capture(const char *program, char *const argv[], ProcessResult *result,
-                 char *error, size_t error_size);
+/* 执行外部程序、捕获标准输出并丢弃标准错误。 */
 bool run_capture_stdout(const char *program, char *const argv[], ProcessResult *result,
                         char *error, size_t error_size);
 void process_result_free(ProcessResult *result);
