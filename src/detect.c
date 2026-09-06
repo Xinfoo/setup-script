@@ -84,11 +84,16 @@ static void collect_partitions(struct json_object *children, DiskInfo *disk)
         {
             char mounted[AI_PATH_LEN];
             first_mountpoint(item, mounted, sizeof(mounted));
+            /*
+             * 非 part 子节点通常是 dm-crypt、LVM 等叠加层；即使自身没报告
+             * 挂载点，也说明该物理盘正在被上层设备使用，整盘操作需给出警告。
+             */
             if (mounted[0] != '\0' || (type[0] != '\0' && strcmp(type, "part") != 0)) {
                 disk->in_use = true;
             }
         }
         if (json_object_object_get_ex(item, "children", &nested)) {
+            /* lsblk 的树可能是 disk -> part -> crypt -> lvm，递归确保不漏深层占用。 */
             collect_partitions(nested, disk);
         }
     }

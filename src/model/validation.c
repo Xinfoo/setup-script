@@ -31,6 +31,7 @@ static bool valid_block_device_path(const char *value)
 static void add_issue(ValidationReport *report, IssueSeverity severity, const char *message)
 {
     ValidationIssue *issue;
+    /* 展示缓冲区满后仍继续累计错误数，不能因 UI 容量上限误判方案为可执行。 */
     if (severity == ISSUE_ERROR) ++report->error_count;
     if (report->count >= AI_MAX_ISSUES) return;
     issue = &report->issues[report->count++];
@@ -40,6 +41,7 @@ static void add_issue(ValidationReport *report, IssueSeverity severity, const ch
 
 static Filesystem effective_filesystem(const PartitionPlan *partition)
 {
+    /* FORMAT 看目标格式，KEEP 看磁盘上现有格式；后面的用途规则只关心最终结果。 */
     return partition->action == ACTION_FORMAT ? partition->target_fs :
            filesystem_from_name(partition->current_fs);
 }
@@ -65,6 +67,10 @@ static bool has_automatic_role(const DiskPlan *storage, PartitionUsage usage,
 
 static bool automatic_layout_matches_mode(const DiskPlan *storage)
 {
+    /*
+     * 引导式布局虽然由 UI 生成，仍可能来自手工修改的 JSON；在此重新核对
+     * 固定角色可防止生成器按某个模式输出与实际分区数组不一致的 sfdisk 配置。
+     */
     switch (storage->mode) {
     case STORAGE_AUTO_ROOT_SWAP:
         return storage->partition_count == 3 &&
@@ -207,6 +213,7 @@ void validate_plan(const InstallPlan *plan, ValidationReport *report)
                 add_issue(report, ISSUE_ERROR, "A partition has an invalid F2FS profile value.");
                 continue;
             }
+            /* 未使用且保持原样的现有分区不进入安装流程，其余三类都必须完整校验。 */
             actionable = part->usage != PART_UNUSED || part->action == ACTION_FORMAT || part->planned;
             if (!actionable) continue;
             if (disk->mode == STORAGE_EXISTING && part->planned) {
@@ -217,6 +224,7 @@ void validate_plan(const InstallPlan *plan, ValidationReport *report)
                 add_issue(report, ISSUE_ERROR, "An active partition has no valid partition number.");
             } else {
                 char expected[AI_PATH_LEN];
+                /* 用磁盘路径和分区号重建名称，阻止分区记录悄悄指向另一块盘。 */
                 model_partition_device(expected, sizeof(expected), disk->path, part->number);
                 if (!valid_block_device_path(part->device) || strcmp(expected, part->device) != 0) {
                     add_issue(report, ISSUE_ERROR, "A partition does not belong to its installation disk.");
@@ -236,6 +244,7 @@ void validate_plan(const InstallPlan *plan, ValidationReport *report)
             if (part->usage == PART_BOOT) { ++boots; boot_disk = disk; }
             if (part->usage == PART_SWAP) ++swaps;
             if (part->usage != PART_UNUSED) {
+                /* 用途枚举直接充当唯一挂载目标索引，因此可一次覆盖所有磁盘。 */
                 if (used[part->usage]) {
                     (void)snprintf(message, sizeof(message), "Mount target %s is assigned more than once.",
                                    partition_mountpoint(part->usage));
@@ -244,6 +253,10 @@ void validate_plan(const InstallPlan *plan, ValidationReport *report)
                 used[part->usage] = true;
             }
             fs = effective_filesystem(part);
+            /*
+             * KEEP 同时依赖文件系统 UUID（挂载身份）和下方的 GPT PARTUUID、
+             * 起始扇区及容量（分区身份）；两层身份解决的问题不同，不能互相替代。
+             */
             if (part->action == ACTION_KEEP && fs == FS_NONE) {
                 add_issue(report, ISSUE_ERROR, "A kept partition has no recognized filesystem.");
             }
@@ -282,6 +295,7 @@ void validate_plan(const InstallPlan *plan, ValidationReport *report)
                 add_issue(report, ISSUE_ERROR, "Every automatic partition must be at least 1 MiB.");
             }
             if (part->planned) {
+                /* 先防止无符号加法回绕，再用总和检查自动布局是否覆盖整盘。 */
                 if (UINT64_MAX - planned_bytes < part->size_bytes) {
                     add_issue(report, ISSUE_ERROR, "Planned partition sizes overflow their supported range.");
                 } else {
@@ -289,6 +303,7 @@ void validate_plan(const InstallPlan *plan, ValidationReport *report)
                 }
             }
             if (part->usage == PART_BOOT && fs != FS_VFAT) {
+                /* 用途约束基于 effective filesystem，因而同时覆盖 KEEP 与 FORMAT。 */
                 add_issue(report, ISSUE_ERROR, "The /boot partition must use FAT32/vfat.");
             }
             if (disk->mode == STORAGE_EXISTING && part->usage == PART_BOOT &&
@@ -349,6 +364,7 @@ void validate_plan(const InstallPlan *plan, ValidationReport *report)
         if (disk->mode != STORAGE_EXISTING && planned_bytes > disk->size_bytes) {
             add_issue(report, ISSUE_ERROR, "Planned partitions exceed an installation disk's capacity.");
         } else if (disk->mode != STORAGE_EXISTING && planned_bytes != disk->size_bytes) {
+            /* 模型必须精确记满整盘；GPT 对齐余量只在脚本序列化阶段扣除。 */
             add_issue(report, ISSUE_ERROR,
                       "Automatic partition sizes must account for the entire installation disk.");
         }
@@ -357,6 +373,7 @@ void validate_plan(const InstallPlan *plan, ValidationReport *report)
     /* 最后检查跨磁盘的全局不变量以及系统文本和选项之间的组合约束。 */
     if (roots != 1) add_issue(report, ISSUE_ERROR, "Exactly one root (/) partition is required.");
     if (boots != 1) add_issue(report, ISSUE_ERROR, "Exactly one EFI (/boot) partition is required.");
+    /* 指针指向各自所属 DiskPlan，直接比较即可落实跨盘的 root/boot 共盘约束。 */
     if (roots == 1 && boots == 1 && root_disk != boot_disk) {
         add_issue(report, ISSUE_ERROR, "The root (/) and EFI (/boot) partitions must be on the same disk.");
     }

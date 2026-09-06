@@ -100,6 +100,7 @@ static int partition_order(const PartitionRef *left, const PartitionRef *right)
     if (right_part->usage == PART_SWAP && left_part->usage != PART_SWAP) {
         return -1;
     }
+    /* root 已被单独置顶，其余普通挂载点按路径字典序获得确定的处理顺序。 */
     left_mount = partition_mountpoint(left_part->usage);
     right_mount = partition_mountpoint(right_part->usage);
     return strcmp(left_mount, right_mount);
@@ -122,6 +123,10 @@ static size_t collect_actionable_partitions(const InstallPlan *plan,
             entry.disk_index = disk_index;
             size_t position = count;
 
+            /*
+             * 分区上限很小，边收集边插入排序比额外分配和 qsort 回调更直观；
+             * 比较结果相等时不移动，磁盘内原有顺序也会保留下来。
+             */
             while (position > 0 &&
                    partition_order(&entry, &partitions[position - 1]) < 0) {
                 partitions[position] = partitions[position - 1];
@@ -147,6 +152,7 @@ static const char *partition_field(const PartitionPlan *partition, PartitionFiel
     case FIELD_ACTION:
         return action_name(partition->action);
     case FIELD_FILESYSTEM:
+        /* KEEP 输出探测到的格式，FORMAT 输出目标格式，模板无需再次理解动作语义。 */
         filesystem = partition->action == ACTION_FORMAT
                          ? partition->target_fs
                          : filesystem_from_name(partition->current_fs);
@@ -286,6 +292,7 @@ static void emit_required_packages(ScriptWriter *writer, const InstallPlan *plan
     if (plan->system.terminal_tools) emit_package_group(writer, config, PKG_TERMINAL_TOOLS);
     if (plan->system.extra_tools) emit_package_group(writer, config, PKG_EXTRA_TOOLS);
     if (plan->system.desktop_apps) emit_package_group(writer, config, PKG_DESKTOP_APPS);
+    /* Live 专用组也进入预解析并集，虽然它们不会成为目标系统的常驻软件。 */
     if (plan->system.local_mirror) {
         emit_package_group(writer, config, PKG_LOCAL_MIRROR_LIVE);
     }
@@ -344,13 +351,17 @@ static uint64_t flexible_size_mib(const DiskPlan *disk, PartitionUsage usage)
 {
     uint64_t size = disk_partition_size_mib(disk, usage);
 
-    /* Leave room for the aligned first sector and the backup GPT header. */
+    /*
+     * 模型按完整磁盘容量记账；这里只有吸收尾部空间的分区少报 2 MiB，
+     * 为首扇区对齐和备用 GPT 表留出位置，避免 sfdisk 因边界取整失败。
+     */
     return size > UINT64_C(2) ? size - UINT64_C(2) : 0;
 }
 
 static void emit_disk_string_array(ScriptWriter *writer, const char *name,
                                    const InstallPlan *plan, unsigned field)
 {
+    /* field 是本文件内部的紧凑选择器：path/model/serial/pttype/mode 依次为 0..4。 */
     writer_printf(writer, "%s=(\n", name);
     for (size_t index = 0; index < plan->storage.disk_count; ++index) {
         const DiskPlan *disk = &plan->storage.disks[index];
@@ -368,6 +379,7 @@ static void emit_disk_string_array(ScriptWriter *writer, const char *name,
 static void emit_disk_number_array(ScriptWriter *writer, const char *name,
                                    const InstallPlan *plan, unsigned field)
 {
+    /* 数值选择器依次对应整盘字节数以及 EFI/root/home/swap 的 MiB 大小。 */
     writer_printf(writer, "%s=(\n", name);
     for (size_t index = 0; index < plan->storage.disk_count; ++index) {
         const DiskPlan *disk = &plan->storage.disks[index];
@@ -412,6 +424,7 @@ bool emit_header_and_plan(ScriptWriter *writer, const InstallPlan *plan,
     char kernel_image[AI_TEXT_LEN];
     char initramfs_image[AI_TEXT_LEN];
 
+    /* TARGET_DISK 由根分区反查；正常入口已验证 /boot 与它位于同一块磁盘。 */
     (void)snprintf(kernel_image, sizeof(kernel_image), "vmlinuz-%s", kernel);
     (void)snprintf(initramfs_image, sizeof(initramfs_image), "initramfs-%s.img", kernel);
 
@@ -436,6 +449,10 @@ bool emit_header_and_plan(ScriptWriter *writer, const InstallPlan *plan,
     emit_disk_number_array(writer, "DISK_SWAP_SIZE_MIB", plan, 4);
     emit_boolean(writer, "USE_LOCAL_MIRROR", plan->system.local_mirror);
     emit_boolean(writer, "CREATE_EFI_ENTRY", plan->system.create_efi_entry);
+    /*
+     * 以下 PART_* 数组全部由同一张已排序的 used 表生成。Shell 运行时以相同
+     * 下标读取各项，新增字段时也必须保持这一对齐关系。
+     */
     emit_partition_disk_indexes(writer, used, used_count);
     emit_partition_array(writer, "PART_DEVICES", used, used_count, FIELD_DEVICE);
     emit_partition_array(writer, "PART_USAGES", used, used_count, FIELD_USAGE);
@@ -458,6 +475,7 @@ bool emit_header_and_plan(ScriptWriter *writer, const InstallPlan *plan,
     } else if (plan->system.platform == PLATFORM_AMD) {
         emit_package_array(writer, "PLATFORM_PACKAGES", packages, PKG_PLATFORM_AMD);
     } else {
+        /* 虚拟机平台没有额外微码包，但仍输出空数组以保持模板接口稳定。 */
         writer_puts(writer, "PLATFORM_PACKAGES=(\n)\n");
     }
     emit_package_array(writer, "LAPTOP_FIRMWARE_PACKAGES", packages,

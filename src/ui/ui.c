@@ -105,6 +105,7 @@ bool generate(UiState *state)
     ValidationReport report;
     char error[512] = {0};
     validate_plan(state->plan, &report);
+    /* 先检查实时身份，再验证静态方案；两者都通过才允许落盘生成脚本。 */
     if (!state->target_identity_matches) {
         set_status(state, "Cannot generate: target disk identity changed; select the disk again.");
         return false;
@@ -205,6 +206,7 @@ int run_tui(InstallPlan *plan, HardwareInventory *inventory,
     curs_set(0);
     init_colors();
     set_status(&state, "No system changes are made until a generated script is explicitly run.");
+    /* 短超时让没有键盘输入时也能及时响应信号，而无需在处理器中调用 ncurses。 */
     while (!state.quit && !stop_requested) {
         draw_current(&state);
         int key = getch();
@@ -217,6 +219,7 @@ int run_tui(InstallPlan *plan, HardwareInventory *inventory,
     }
     endwin();
     if (state.running && !stop_requested) {
+        /* exec 保留当前终端和退出码语义，让安装脚本成为唯一前台进程。 */
         execl("/usr/bin/bash", "bash", "--", script_path, (char *)NULL);
         (void)fprintf(stderr, "Cannot execute %s: %s\n", script_path, strerror(errno));
         return EXIT_FAILURE;

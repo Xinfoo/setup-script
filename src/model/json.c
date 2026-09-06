@@ -195,6 +195,10 @@ static bool validate_json_schema(struct json_object *root,
     struct json_object *system = NULL;
     struct json_object *disks = NULL;
 
+    /*
+     * 先把对象层级和所有必需字段的类型锁定，后续读取器的 fallback 只作为
+     * 内部防御，不会把缺字段的配置悄悄解释成默认配置。
+     */
     if (root == NULL || !json_object_is_type(root, json_type_object) ||
         !require_json_fields(root, "root", root_fields,
                              sizeof(root_fields) / sizeof(root_fields[0]), error, error_size)) {
@@ -221,6 +225,7 @@ static bool validate_json_schema(struct json_object *root,
         (void)snprintf(error, error_size, "storage.disks exceeds the supported limit");
         return false;
     }
+    /* 数组长度先受模型容量约束，再逐个递归验证磁盘及其完整分区数组。 */
     for (size_t index = 0; index < json_object_array_length(disks); ++index) {
         struct json_object *disk = json_object_array_get_idx(disks, index);
         struct json_object *parts = NULL;
@@ -266,6 +271,7 @@ bool plan_save_json(const InstallPlan *plan, const char *path, char *error, size
         if (root != NULL) json_object_put(root);
         return false;
     }
+    /* json-c 的 object_add/array_add 会接管子对象所有权，挂接后不可再单独释放。 */
     json_object_object_add(root, "version", json_object_new_int((int)plan->version));
     for (size_t disk_index = 0; disk_index < plan->storage.disk_count; ++disk_index) {
         const DiskPlan *disk = &plan->storage.disks[disk_index];
@@ -319,6 +325,7 @@ bool plan_save_json(const InstallPlan *plan, const char *path, char *error, size
     json_object_object_add(system, "timezone", json_object_new_string(plan->system.timezone));
     json_object_object_add(system, "hostname", json_object_new_string(plan->system.hostname));
     json_object_object_add(system, "username", json_object_new_string(plan->system.username));
+    /* 字段名由成员名直接生成，避免布尔选项在模型与 JSON 之间手工拼写漂移。 */
 #define ADD_SYSTEM_BOOL(field) add_bool(system, #field, plan->system.field)
     ADD_SYSTEM_BOOL(laptop); ADD_SYSTEM_BOOL(intel_graphics); ADD_SYSTEM_BOOL(nvidia_graphics);
     ADD_SYSTEM_BOOL(bluetooth); ADD_SYSTEM_BOOL(desktop_recommended); ADD_SYSTEM_BOOL(chinese_input);
@@ -368,6 +375,7 @@ bool plan_save_json(const InstallPlan *plan, const char *path, char *error, size
     {
         size_t remaining = strlen(serialized);
         const char *cursor = serialized;
+        /* write 可能只写入一部分或被信号中断，循环直到整个 JSON 已落入临时文件。 */
         while (remaining > 0) {
             ssize_t written = write(descriptor, cursor, remaining);
             if (written < 0 && errno == EINTR) continue;
@@ -383,6 +391,7 @@ bool plan_save_json(const InstallPlan *plan, const char *path, char *error, size
             remaining -= (size_t)written;
         }
     }
+    /* 只有数据同步、关闭和原子替换全部成功，调用方才会看到新的完整方案。 */
     if (fsync(descriptor) != 0) {
         (void)snprintf(error, error_size, "cannot commit plan %s: %s", path, strerror(errno));
         (void)close(descriptor);
@@ -420,6 +429,7 @@ static void load_partitions_json(DiskPlan *disk, struct json_object *parts)
     for (size_t index = 0; index < disk->partition_count; ++index) {
         struct json_object *item = json_object_array_get_idx(parts, index);
         PartitionPlan *part = &disk->partitions[index];
+        /* 每个目标槽先清零，重复加载时不会残留上一个方案的身份字段。 */
         memset(part, 0, sizeof(*part));
         copy_text(part->device, sizeof(part->device), json_string(item, "device", ""));
         copy_text(part->current_fs, sizeof(part->current_fs), json_string(item, "current_fs", ""));
@@ -487,6 +497,7 @@ bool plan_load_json(InstallPlan *plan, const char *path, char *error, size_t err
         json_object_put(root);
         return false;
     }
+    /* 完整验证成功后才清空并重建目标模型，格式错误不会留下半加载状态。 */
     plan_init(plan);
     plan->version = 3;
     {
@@ -500,6 +511,7 @@ bool plan_load_json(InstallPlan *plan, const char *path, char *error, size_t err
         }
     }
     {
+        /* 范围判断是读取边界的第二层保护；正常情况下 schema 已保证这些条件。 */
         int platform = json_int(system, "platform", PLATFORM_INTEL);
         int kernel = json_int(system, "kernel", KERNEL_LINUX);
         int locale = json_int(system, "locale", LOCALE_EN_US);
@@ -515,6 +527,7 @@ bool plan_load_json(InstallPlan *plan, const char *path, char *error, size_t err
         copy_text(plan->system.timezone, sizeof(plan->system.timezone), json_string(system, "timezone", "Asia/Shanghai"));
         copy_text(plan->system.hostname, sizeof(plan->system.hostname), json_string(system, "hostname", "ARCH-LINUX"));
         copy_text(plan->system.username, sizeof(plan->system.username), json_string(system, "username", "user"));
+        /* 与保存端使用同一成员名生成 JSON 键，布尔字段保持机械对称。 */
 #define LOAD_SYSTEM_BOOL(field) plan->system.field = json_boolean_value(system, #field, plan->system.field)
         LOAD_SYSTEM_BOOL(laptop); LOAD_SYSTEM_BOOL(intel_graphics); LOAD_SYSTEM_BOOL(nvidia_graphics);
         LOAD_SYSTEM_BOOL(bluetooth); LOAD_SYSTEM_BOOL(desktop_recommended); LOAD_SYSTEM_BOOL(chinese_input);

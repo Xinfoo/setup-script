@@ -67,6 +67,10 @@ DiskPlan *plan_find_disk(InstallPlan *plan, const char *path)
 
 void disk_plan_use_existing(DiskPlan *plan, const DiskInfo *disk)
 {
+    /*
+     * 这里保存的是一次探测快照，而不只是界面上可见的文件系统名称。
+     * 后续生成前会用起始扇区、容量和 GPT 身份重新确认它仍是同一分区。
+     */
     plan->mode = STORAGE_EXISTING;
     plan->partition_count = disk->partition_count;
     if (plan->partition_count > AI_MAX_PARTITIONS) {
@@ -95,6 +99,7 @@ bool plan_add_disk(InstallPlan *plan, const DiskInfo *disk)
 {
     DiskPlan *target;
 
+    /* 重复添加视为成功，使调用方可以把“确保磁盘已加入”当作幂等操作。 */
     if (plan_find_disk(plan, disk->path) != NULL) return true;
     if (plan->storage.disk_count >= AI_MAX_PLAN_DISKS) return false;
     target = &plan->storage.disks[plan->storage.disk_count++];
@@ -171,6 +176,7 @@ void disk_plan_use_automatic(DiskPlan *storage, const DiskInfo *disk, StorageMod
     storage->mode = mode;
     storage->partition_count = 0;
     if (mode == STORAGE_AUTO_DATA) {
+        /* 数据盘先保持无挂载点；用户之后可选择挂载用途，也可只格式化。 */
         auto_partition(storage, storage->partition_count++, 1, disk->size_bytes,
                        PART_UNUSED, FS_EXT4);
         return;
@@ -179,15 +185,18 @@ void disk_plan_use_automatic(DiskPlan *storage, const DiskInfo *disk, StorageMod
     auto_partition(storage, storage->partition_count++, 1, efi, PART_BOOT, FS_VFAT);
 
     if (mode == STORAGE_AUTO_ROOT_ONLY) {
+        /* 模型记录完整剩余容量；生成 sfdisk 输入时才为 GPT 尾部留出余量。 */
         auto_partition(storage, storage->partition_count++, 2, remaining, PART_ROOT, FS_EXT4);
         return;
     }
+    /* Swap 从可分配容量中先扣除，剩余空间再由 root/home 方案分配。 */
     if (remaining > swap) {
         remaining -= swap;
     } else {
         remaining = 0;
     }
     if (mode == STORAGE_AUTO_HOME_SWAP) {
+        /* 此布局固定 root 为 100 GiB，home 吸收其余空间，便于校验器精确复核。 */
         uint64_t root = UINT64_C(100) * GIB;
         uint64_t home = remaining > root ? remaining - root : 0;
         auto_partition(storage, storage->partition_count++, 2, root, PART_ROOT, FS_EXT4);
@@ -289,15 +298,18 @@ Filesystem filesystem_from_name(const char *name)
 void plan_cycle_usage(PartitionPlan *partition)
 {
     partition->usage = (PartitionUsage)(((int)partition->usage + 1) % ((int)PART_SWAP + 1));
+    /* 新建分区没有可保留的旧文件系统，一旦分配用途就必须格式化。 */
     if (partition->planned && partition->usage != PART_UNUSED) {
         partition->action = ACTION_FORMAT;
     }
+    /* boot/swap 的用途本身就限定文件系统，切换用途时同步收敛状态。 */
     if (partition->usage == PART_SWAP) {
         partition->action = ACTION_FORMAT;
         partition->target_fs = FS_SWAP;
     } else if (partition->usage == PART_BOOT && partition->action == ACTION_FORMAT) {
         partition->target_fs = FS_VFAT;
     } else if (partition->usage == PART_UNUSED) {
+        /* “无用途”对两类分区含义不同：现有分区忽略，新建数据分区仍会格式化。 */
         partition->action = partition->planned ? ACTION_FORMAT : ACTION_KEEP;
         if (partition->planned) {
             if (partition->target_fs == FS_NONE) partition->target_fs = FS_EXT4;
@@ -307,12 +319,17 @@ void plan_cycle_usage(PartitionPlan *partition)
     } else if (partition->action == ACTION_FORMAT &&
                (partition->target_fs == FS_NONE || partition->target_fs == FS_SWAP ||
                 partition->target_fs == FS_VFAT)) {
+        /* 普通挂载点不能沿用仅适合 boot/swap 的格式，回到通用默认值。 */
         partition->target_fs = FS_EXT4;
     }
 }
 
 void plan_cycle_format(PartitionPlan *partition)
 {
+    /*
+     * 无挂载点分区允许在“忽略”和各种纯格式化操作间循环；引导式数据盘
+     * 没有旧内容可 KEEP，因此走到末尾时回到 ext4。
+     */
     if (partition->usage == PART_UNUSED) {
         if (partition->action == ACTION_KEEP) {
             partition->action = ACTION_FORMAT;
@@ -335,6 +352,10 @@ void plan_cycle_format(PartitionPlan *partition)
         }
         return;
     }
+    /*
+     * 引导式分区始终为 FORMAT。boot/swap 的格式固定，普通分区只在三种
+     * 可挂载文件系统之间循环，避免产生与固定布局互相矛盾的动作。
+     */
     if (partition->planned) {
         if (partition->usage == PART_BOOT) {
             partition->target_fs = FS_VFAT;
@@ -352,6 +373,7 @@ void plan_cycle_format(PartitionPlan *partition)
         partition->action = ACTION_FORMAT;
         return;
     }
+    /* 现有分区第一次切换从无损 KEEP 进入 FORMAT，并选择与用途匹配的默认值。 */
     if (partition->action == ACTION_KEEP) {
         partition->action = ACTION_FORMAT;
         partition->target_fs = partition->usage == PART_BOOT ? FS_VFAT :
@@ -359,6 +381,7 @@ void plan_cycle_format(PartitionPlan *partition)
         return;
     }
     if (partition->usage == PART_BOOT) {
+        /* boot/swap 各只有一种合法目标格式，第二次切换直接回到 KEEP。 */
         partition->action = ACTION_KEEP;
         partition->target_fs = FS_NONE;
         return;

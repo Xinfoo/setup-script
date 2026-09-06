@@ -69,6 +69,7 @@ static bool run_capture_internal(const char *program, char *const argv[],
             (void)close(null_descriptor);
         }
         (void)close(pipefd[1]);
+        /* execv 不经过 PATH 搜索或 Shell；126/127 分别保留给重定向和执行失败。 */
         execv(program, argv);
         _exit(127);
     }
@@ -82,7 +83,10 @@ static bool run_capture_internal(const char *program, char *const argv[],
         return false;
     }
 
-    /* 按需扩展缓冲区，完整读取输出后再等待子进程并记录退出状态。 */
+    /*
+     * 按需扩展并在 waitpid 前持续排空管道，否则大量输出可能填满管道，
+     * 造成父进程等待子进程、子进程等待父进程读取的互锁。
+     */
     for (;;) {
         ssize_t count;
         if (capacity - used < 2048) {
@@ -133,6 +137,7 @@ static bool run_capture_internal(const char *program, char *const argv[],
             return false;
         }
     }
+    /* 调用方主要区分成功与失败；被信号终止统一映射为非零的 128。 */
     result->status = WIFEXITED(wait_status) ? WEXITSTATUS(wait_status) : 128;
     result->output = buffer;
     return true;

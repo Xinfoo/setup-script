@@ -28,6 +28,7 @@ bool disk_identity_matches(const InstallPlan *plan, const HardwareInventory *inv
             return false;
         if (planned_disk->model[0] != '\0' && strcmp(disk->model, planned_disk->model) != 0)
             return false;
+        /* 自动布局之后会重建分区表，只需确认整盘；现有布局还要逐分区确认。 */
         if (planned_disk->mode != STORAGE_EXISTING) continue;
         if (strcasecmp(disk->partition_table, planned_disk->partition_table) != 0) return false;
         for (size_t index = 0; index < planned_disk->partition_count; ++index) {
@@ -43,6 +44,10 @@ bool disk_identity_matches(const InstallPlan *plan, const HardwareInventory *inv
             }
             if (current == NULL || current->size_bytes != planned->size_bytes ||
                 current->start_sector != planned->start_sector) return false;
+            /*
+             * 路径、编号、边界和 GPT 身份共同防止热插拔或重新分区后误用同名节点；
+             * KEEP 还需复核文件系统类型与 UUID，FORMAT 则不依赖旧文件系统内容。
+             */
             if (planned->part_uuid[0] != '\0' &&
                 strcasecmp(current->part_uuid, planned->part_uuid) != 0) return false;
             if (planned->part_type[0] != '\0' &&
@@ -177,6 +182,7 @@ static void use_existing(UiState *state)
 
 static bool refresh_disks(UiState *state)
 {
+    /* HardwareInventory 较大，临时放在堆上，成功后再整体替换当前探测快照。 */
     HardwareInventory *inventory = calloc(1, sizeof(*inventory));
     char error[512] = {0};
     if (inventory == NULL) {
@@ -208,10 +214,12 @@ static int run_cfdisk_process(const char *device, char *error, size_t error_size
     pid_t child;
     int wait_status = 0;
 
+    /* 保存 ncurses 的终端模式后 endwin，避免 cfdisk 继承半初始化的屏幕状态。 */
     (void)def_prog_mode();
     (void)endwin();
     child = fork();
     if (child == 0) {
+        /* 使用固定绝对路径和参数向量，不经过 Shell 展开设备名。 */
         execl("/usr/bin/cfdisk", "cfdisk", device, (char *)NULL);
         _exit(127);
     }
@@ -225,6 +233,7 @@ static int run_cfdisk_process(const char *device, char *error, size_t error_size
             break;
         }
     }
+    /* 无论子进程如何退出，都先恢复终端并标记整屏失效，再交回事件循环。 */
     (void)reset_prog_mode();
     (void)curs_set(0);
     clearok(stdscr, TRUE);
@@ -267,6 +276,10 @@ static void launch_cfdisk(UiState *state)
     if (!confirm_dialog(title, warning)) return;
 
     status = run_cfdisk_process(planned_disk->path, error, sizeof(error));
+    /*
+     * cfdisk 可能改变分区数量和所有身份字段，因此不尝试合并旧分派；
+     * 重新探测后整盘装载为“现有分区、全部忽略”的干净状态。
+     */
     if (!refresh_disks(state)) return;
     detected_disk = inventory_find_disk(state->inventory, planned_disk->path);
     if (detected_disk == NULL) {
@@ -362,6 +375,7 @@ void draw_storage(UiState *state)
 
     for (size_t disk_index = 0; disk_index < state->active_disk; ++disk_index)
         selected_line += 1 + (int)storage->disks[disk_index].partition_count;
+    /* 逻辑坐标中表头占一行，所以 row=-1 恰好映射到该组的第一行。 */
     selected_line += 1 + state->row;
     offset = selected_line >= available ? selected_line - available + 1 : 0;
 
@@ -449,6 +463,10 @@ static void edit_partition_usage(UiState *state, DiskPlan *disk, PartitionPlan *
 
     partition->usage = (PartitionUsage)choice;
     current = filesystem_from_name(partition->current_fs);
+    /*
+     * 先根据用途推导一个安全动作：关键系统目录强制重建，boot/swap 在已有
+     * 格式匹配时可 KEEP，普通数据挂载点则尽量保留已识别的文件系统。
+     */
     if (partition->usage == PART_UNUSED) {
         if (partition->planned && disk->mode == STORAGE_AUTO_DATA) {
             partition->action = ACTION_FORMAT;
@@ -479,6 +497,7 @@ static void edit_partition_usage(UiState *state, DiskPlan *disk, PartitionPlan *
         !(partition->planned &&
           (partition->usage == PART_BOOT || partition->usage == PART_SWAP)) &&
         !edit_partition_format(state, partition)) {
+        /* 第二个对话框取消时恢复整份结构，避免只改了用途却没确认格式化动作。 */
         *partition = original;
         set_status(state, "Purpose change canceled; no partition action was changed.");
         return;
@@ -520,6 +539,10 @@ static bool edit_partition_format(UiState *state, PartitionPlan *partition)
         return false;
     }
 
+    /*
+     * KEEP 仅在现有格式能承担当前用途时出现；root、/var、/usr 为全新系统的
+     * 关键目录，即使格式可识别也只提供 FORMAT。
+     */
     if (!partition->planned && partition->usage != PART_ROOT &&
         partition->usage != PART_VAR && partition->usage != PART_USR &&
         ((partition->usage == PART_BOOT && current == FS_VFAT) ||
@@ -633,6 +656,7 @@ void handle_storage(UiState *state, int key)
     if (state->row >= 0 && (size_t)state->row >= disk->partition_count)
         state->row = disk->partition_count == 0 ? -1 : (int)disk->partition_count - 1;
     if (key == KEY_UP) {
+        /* 从分区 0 再向上即落到本盘表头；从表头向上进入上一盘的末行。 */
         if (state->row >= 0) {
             --state->row;
         } else if (state->active_disk > 0) {
@@ -643,6 +667,7 @@ void handle_storage(UiState *state, int key)
         return;
     }
     if (key == KEY_DOWN) {
+        /* 向下越过末分区时进入下一盘表头，形成跨磁盘的单一连续导航。 */
         if (state->row < (int)disk->partition_count - 1) {
             ++state->row;
         } else if (state->active_disk + 1 < storage->disk_count) {
