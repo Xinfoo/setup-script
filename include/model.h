@@ -147,8 +147,19 @@ typedef struct {
 void plan_init(InstallPlan *plan);
 bool plan_add_disk(InstallPlan *plan, const DiskInfo *disk);
 DiskPlan *plan_find_disk(InstallPlan *plan, const char *path);
+const DiskPlan *plan_find_disk_for_usage(const InstallPlan *plan, PartitionUsage usage);
+bool plan_remove_disk_at(InstallPlan *plan, size_t index);
+bool plan_storage_matches_inventory(const InstallPlan *plan,
+                                    const HardwareInventory *inventory);
 void disk_plan_use_existing(DiskPlan *plan, const DiskInfo *disk);
 void disk_plan_use_automatic(DiskPlan *plan, const DiskInfo *disk, StorageMode mode);
+bool partition_plan_assign_usage(PartitionPlan *partition, StorageMode mode,
+                                 PartitionUsage usage);
+bool partition_plan_action_allowed(const PartitionPlan *partition,
+                                   PartitionAction action, Filesystem filesystem);
+bool partition_plan_set_action(PartitionPlan *partition,
+                               PartitionAction action, Filesystem filesystem);
+bool partition_plan_set_mount_profile(PartitionPlan *partition, MountProfile profile);
 
 /* 枚举与界面、JSON 及 Shell 使用的稳定文本之间的转换。 */
 const char *filesystem_name(Filesystem value);

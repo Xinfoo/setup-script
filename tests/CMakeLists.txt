@@ -27,10 +27,19 @@ add_executable(
     ${COMMON_SOURCES}
 )
 
+add_executable(
+    arch-install-builder-storage-model-tests
+    "${PROJECT_SOURCE_DIR}/tests/test_storage_model.c"
+    "${PROJECT_SOURCE_DIR}/src/model/init.c"
+    "${PROJECT_SOURCE_DIR}/src/model/storage.c"
+    "${PROJECT_SOURCE_DIR}/src/common/text.c"
+)
+
 foreach(target
         arch-install-builder-model-tests
         arch-install-builder-generator-tests
-        arch-install-builder-package-tests)
+        arch-install-builder-package-tests
+        arch-install-builder-storage-model-tests)
     target_include_directories(
         ${target}
         PRIVATE
@@ -44,11 +53,12 @@ endforeach()
 add_test(NAME model COMMAND arch-install-builder-model-tests)
 add_test(NAME generator-integration COMMAND arch-install-builder-generator-tests)
 add_test(NAME packages COMMAND arch-install-builder-package-tests)
+add_test(NAME storage-model COMMAND arch-install-builder-storage-model-tests)
 
 # 某些沙箱或调试器环境不允许 LeakSanitizer 检查进程；其余检查保持启用。
 if(ENABLE_SANITIZERS)
     set_tests_properties(
-        model generator-integration packages
+        model generator-integration packages storage-model
         PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0"
     )
 endif()

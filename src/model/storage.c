@@ -7,6 +7,7 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <strings.h>
 
 #define MIB (UINT64_C(1024) * UINT64_C(1024))
 #define GIB (UINT64_C(1024) * UINT64_C(1024) * UINT64_C(1024))
@@ -37,6 +38,137 @@ DiskPlan *plan_find_disk(InstallPlan *plan, const char *path)
         }
     }
     return NULL;
+}
+
+const DiskPlan *plan_find_disk_for_usage(const InstallPlan *plan, PartitionUsage usage)
+{
+    if (plan == NULL) return NULL;
+    for (size_t disk_index = 0; disk_index < plan->storage.disk_count; ++disk_index) {
+        const DiskPlan *disk = &plan->storage.disks[disk_index];
+        for (size_t partition_index = 0;
+             partition_index < disk->partition_count; ++partition_index) {
+            if (disk->partitions[partition_index].usage == usage) return disk;
+        }
+    }
+    return NULL;
+}
+
+bool plan_remove_disk_at(InstallPlan *plan, size_t index)
+{
+    StoragePlan *storage;
+
+    if (plan == NULL || index >= plan->storage.disk_count) return false;
+    storage = &plan->storage;
+    if (index + 1 < storage->disk_count) {
+        memmove(&storage->disks[index], &storage->disks[index + 1],
+                (storage->disk_count - index - 1) * sizeof(storage->disks[0]));
+    }
+    --storage->disk_count;
+    memset(&storage->disks[storage->disk_count], 0, sizeof(storage->disks[0]));
+    return true;
+}
+
+static const DiskInfo *find_inventory_disk(const HardwareInventory *inventory,
+                                           const char *path)
+{
+    if (inventory == NULL) return NULL;
+    for (size_t index = 0; index < inventory->disk_count; ++index) {
+        if (strcmp(inventory->disks[index].path, path) == 0) {
+            return &inventory->disks[index];
+        }
+    }
+    return NULL;
+}
+
+/*
+ * 生成前把方案所依据的探测快照与当前设备重新比对。自动布局只依赖整盘
+ * 身份；复用现有分区时还要确认边界、GPT 身份以及 KEEP 文件系统未变化。
+ */
+bool plan_storage_matches_inventory(const InstallPlan *plan,
+                                    const HardwareInventory *inventory)
+{
+    if (plan == NULL || inventory == NULL) return false;
+    for (size_t disk_index = 0; disk_index < plan->storage.disk_count; ++disk_index) {
+        const DiskPlan *planned_disk = &plan->storage.disks[disk_index];
+        const DiskInfo *disk = find_inventory_disk(inventory, planned_disk->path);
+
+        if (disk == NULL || disk->read_only || disk->size_bytes != planned_disk->size_bytes)
+            return false;
+        if (planned_disk->serial[0] != '\0' &&
+            strcmp(disk->serial, planned_disk->serial) != 0) return false;
+        if (planned_disk->model[0] != '\0' &&
+            strcmp(disk->model, planned_disk->model) != 0) return false;
+        if (planned_disk->mode != STORAGE_EXISTING) continue;
+        if (strcasecmp(disk->partition_table, planned_disk->partition_table) != 0)
+            return false;
+
+        for (size_t index = 0; index < planned_disk->partition_count; ++index) {
+            const PartitionPlan *planned = &planned_disk->partitions[index];
+            const PartitionInfo *current = NULL;
+
+            if (planned->usage == PART_UNUSED && planned->action != ACTION_FORMAT) continue;
+            for (size_t part = 0; part < disk->partition_count; ++part) {
+                if (disk->partitions[part].number == planned->number &&
+                    strcmp(disk->partitions[part].path, planned->device) == 0) {
+                    current = &disk->partitions[part];
+                    break;
+                }
+            }
+            if (current == NULL || current->size_bytes != planned->size_bytes ||
+                current->start_sector != planned->start_sector) return false;
+            if (planned->part_uuid[0] != '\0' &&
+                strcasecmp(current->part_uuid, planned->part_uuid) != 0) return false;
+            if (planned->part_type[0] != '\0' &&
+                strcasecmp(current->part_type, planned->part_type) != 0) return false;
+            if (planned->action == ACTION_KEEP &&
+                filesystem_from_name(current->current_fs) !=
+                filesystem_from_name(planned->current_fs)) return false;
+            if (planned->action == ACTION_KEEP &&
+                strcasecmp(current->fs_uuid, planned->fs_uuid) != 0) return false;
+        }
+    }
+    return true;
+}
+
+/* 根据用途统一推导默认格式化动作，UI 只负责选择和后续确认。 */
+bool partition_plan_assign_usage(PartitionPlan *partition, StorageMode mode,
+                                 PartitionUsage usage)
+{
+    Filesystem current;
+
+    if (partition == NULL || usage < PART_UNUSED || usage > PART_SWAP) return false;
+    if (partition->planned && mode != STORAGE_AUTO_DATA) return false;
+    partition->usage = usage;
+    current = filesystem_from_name(partition->current_fs);
+    if (usage == PART_UNUSED) {
+        partition->mount_profile = MOUNT_PROFILE_DEFAULT;
+        if (partition->planned && mode == STORAGE_AUTO_DATA) {
+            partition->action = ACTION_FORMAT;
+            if (partition->target_fs == FS_NONE) partition->target_fs = FS_EXT4;
+        } else {
+            partition->action = ACTION_KEEP;
+            partition->target_fs = FS_NONE;
+        }
+    } else if (usage == PART_ROOT || usage == PART_VAR || usage == PART_USR) {
+        partition->action = ACTION_FORMAT;
+        partition->target_fs = filesystem_is_regular(current) ? current : FS_EXT4;
+    } else if (usage == PART_BOOT) {
+        partition->action = current == FS_VFAT ? ACTION_KEEP : ACTION_FORMAT;
+        partition->target_fs = current == FS_VFAT ? FS_NONE : FS_VFAT;
+    } else if (usage == PART_SWAP) {
+        partition->action = current == FS_SWAP ? ACTION_KEEP : ACTION_FORMAT;
+        partition->target_fs = current == FS_SWAP ? FS_NONE : FS_SWAP;
+    } else if (filesystem_is_regular(current)) {
+        partition->action = ACTION_KEEP;
+        partition->target_fs = FS_NONE;
+    } else {
+        partition->action = ACTION_FORMAT;
+        partition->target_fs = FS_EXT4;
+    }
+    if (!partition_supports_mount_profile(partition, partition->mount_profile)) {
+        partition->mount_profile = MOUNT_PROFILE_DEFAULT;
+    }
+    return true;
 }
 
 void disk_plan_use_existing(DiskPlan *plan, const DiskInfo *disk)
@@ -263,6 +395,52 @@ bool partition_supports_mount_profile(const PartitionPlan *partition,
     if (filesystem == FS_NONE || filesystem == FS_SWAP) return false;
     if (profile == MOUNT_PROFILE_DEFAULT) return true;
     return filesystem == FS_F2FS && partition->action == ACTION_FORMAT;
+}
+
+/* UI 根据这一接口构造可选动作，验证器仍负责拒绝外部 JSON 中的非法组合。 */
+bool partition_plan_action_allowed(const PartitionPlan *partition,
+                                   PartitionAction action, Filesystem filesystem)
+{
+    Filesystem current;
+
+    if (partition == NULL || partition->usage < PART_UNUSED ||
+        partition->usage > PART_SWAP) return false;
+    if (partition->planned &&
+        (partition->usage == PART_BOOT || partition->usage == PART_SWAP)) return false;
+    if (action == ACTION_KEEP) {
+        if (filesystem != FS_NONE || partition->planned ||
+            partition->usage == PART_ROOT || partition->usage == PART_VAR ||
+            partition->usage == PART_USR) return false;
+        current = filesystem_from_name(partition->current_fs);
+        if (partition->usage == PART_BOOT) return current == FS_VFAT;
+        if (partition->usage == PART_SWAP) return current == FS_SWAP;
+        return filesystem_is_regular(current);
+    }
+    if (action != ACTION_FORMAT) return false;
+    if (partition->usage == PART_BOOT) return filesystem == FS_VFAT;
+    if (partition->usage == PART_SWAP) return filesystem == FS_SWAP;
+    if (filesystem_is_regular(filesystem)) return true;
+    return partition->usage == PART_UNUSED &&
+           (filesystem == FS_VFAT || filesystem == FS_SWAP);
+}
+
+bool partition_plan_set_action(PartitionPlan *partition,
+                               PartitionAction action, Filesystem filesystem)
+{
+    if (!partition_plan_action_allowed(partition, action, filesystem)) return false;
+    partition->action = action;
+    partition->target_fs = action == ACTION_KEEP ? FS_NONE : filesystem;
+    if (!partition_supports_mount_profile(partition, partition->mount_profile)) {
+        partition->mount_profile = MOUNT_PROFILE_DEFAULT;
+    }
+    return true;
+}
+
+bool partition_plan_set_mount_profile(PartitionPlan *partition, MountProfile profile)
+{
+    if (!partition_supports_mount_profile(partition, profile)) return false;
+    partition->mount_profile = profile;
+    return true;
 }
 
 /* 容量只负责适配人类可读显示，不参与方案中的精确字节计算。 */

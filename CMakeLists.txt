@@ -43,14 +43,21 @@ set(
     "${PROJECT_SOURCE_DIR}/src/detector/storage.c"
 )
 
-# UI 和 packages 尚未进入本轮职责重构，暂时从只读对照树接入。
+# packages 尚未进入职责重构，暂时从只读对照树接入。
 set(PACKAGE_SOURCE "${PROJECT_SOURCE_DIR}/old/src/packages.c")
 set(
     UI_SOURCES
-    "${PROJECT_SOURCE_DIR}/old/src/ui/ui.c"
-    "${PROJECT_SOURCE_DIR}/old/src/ui/dialogs.c"
-    "${PROJECT_SOURCE_DIR}/old/src/ui/storage.c"
-    "${PROJECT_SOURCE_DIR}/old/src/ui/screens.c"
+    "${PROJECT_SOURCE_DIR}/src/ui/ui.c"
+    "${PROJECT_SOURCE_DIR}/src/ui/dialogs.c"
+    "${PROJECT_SOURCE_DIR}/src/ui/layout.c"
+    "${PROJECT_SOURCE_DIR}/src/ui/pages/home.c"
+    "${PROJECT_SOURCE_DIR}/src/ui/pages/storage.c"
+    "${PROJECT_SOURCE_DIR}/src/ui/pages/base_system.c"
+    "${PROJECT_SOURCE_DIR}/src/ui/pages/hardware.c"
+    "${PROJECT_SOURCE_DIR}/src/ui/pages/software.c"
+    "${PROJECT_SOURCE_DIR}/src/ui/pages/identity.c"
+    "${PROJECT_SOURCE_DIR}/src/ui/pages/review.c"
+    "${PROJECT_SOURCE_DIR}/src/ui/pages/output_and_execute.c"
 )
 set(
     GENERATOR_SOURCES

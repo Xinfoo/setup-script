@@ -614,7 +614,7 @@ Secure Boot 与临时本地镜像在当前实现中可以同时启用。此组�
 | 主执行顺序 | [finish-main.sh](../src/generator/templates/finish-main.sh) | [live/setup.sh](../live/setup.sh) |
 | 方案序列化到 Shell | [src/generator/plan.c](../src/generator/plan.c) | 关联数组和 `/mnt/info/*.txt` |
 | 硬件探测 | [src/detect.c](../src/detect.c) | [disk-detector.sh](../live/functions/processor/disk-detector.sh) |
-| TUI 存储编辑/cfdisk | [src/ui/storage.c](../src/ui/storage.c) | [manual-partitioner.sh](../live/functions/actuator/manual-partitioner.sh) |
+| TUI 存储编辑/cfdisk | [src/ui/pages/storage.c](../src/ui/pages/storage.c) | [manual-partitioner.sh](../live/functions/actuator/manual-partitioner.sh) |
 | 自动分区 | [runtime-partitioning.sh](../src/generator/templates/runtime-partitioning.sh) | [automatic-partitioner.sh](../live/functions/actuator/automatic-partitioner.sh) |
 | 身份和占用复核 | [runtime-storage-validation.sh](../src/generator/templates/runtime-storage-validation.sh) | `mount-detector.sh` 的单项挂载检查 |
 | KEEP 探测 | [runtime-keep-probe.sh](../src/generator/templates/runtime-keep-probe.sh) | 无 |
