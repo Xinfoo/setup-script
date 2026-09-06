@@ -31,7 +31,7 @@
 | sudo | 新版固定生成 wheel sudoers drop-in；旧版结果取决于人工 `visudo` |
 | 新用户默认 Shell | 新版只为本次用户指定 Zsh；旧版还尝试修改 `/etc/default/useradd` |
 | initramfs | 新版在全部包安装后明确运行 `mkinitcpio -P` |
-| Secure Boot | 启用时新版不安装 `shim-signed`、不留下私钥和未签名内核备份；旧版会留下这些内容 |
+| Secure Boot | 启用时新版不安装 `shim-signed`、不留下私钥；两版都保留未签名内核备份 |
 
 与此同时，`/etc/fstab` 和 `/etc/environment` 在“全新目标 + 相同选择”前提下预期具有相同的有效内容。两边的写入方法不同，但不应把方法差异误报为成品差异。
 
@@ -304,7 +304,7 @@ MODULES=(nvidia nvidia_modeset nvidia_uvm nvidia_drm)
 | `shim-signed` Pacman 包 | 不安装 | 安装并登记到目标包数据库 |
 | `/usr/share/shim-signed/` | 不因安装器产生 | 由该包安装并保留 |
 | `/root/secure-boot/` | 不存在 | 保留 MOK 私钥、PEM/DER 证书，目录 `0500`、文件 `0400` |
-| 未签名 kernel 备份 | 不保留 | `/boot/vmlinuz-<kernel>.bak` |
+| 未签名 kernel 备份 | `/boot/vmlinuz-<kernel>.bak`，签名验证后原子保存 | 同一路径，先移动原内核再签名 |
 | 公开 CER 模式 | 明确安装为 `0644` | `cp -a` 保留源文件被改成的 `0400` 模式 |
 | ESP 既有文件 | 只替换安装器管理的目标 | 先执行 `rm -f /boot/EFI/BOOT/*` |
 | 签名提交 | 验证后逐文件原子替换 | 直接生成到最终路径 |
@@ -335,7 +335,7 @@ MODULES=(nvidia nvidia_modeset nvidia_uvm nvidia_drm)
 - 新版会删除 `/root/.arch-install-chroot.sh`；
 - 两边都不应在目标中留下各自的常规安装脚本树。
 
-启用 Secure Boot 时，旧版未删除 `/root/secure-boot/` 和 `vmlinuz-*.bak`，因此前述私钥与内核备份成为持久残留；新版不会产生这两类残留。
+启用 Secure Boot 时，两版都会保留 `vmlinuz-*.bak` 作为未签名内核的人工恢复材料。旧版还会留下 `/root/secure-boot/` 私钥目录，新版不会。
 
 新版的安装日志留在 Live 环境 `/tmp` 或用户指定的 Live 路径，不会自动复制进目标系统。
 
@@ -356,6 +356,7 @@ MODULES=(nvidia nvidia_modeset nvidia_uvm nvidia_drm)
 - 相同选项对应的 systemd enabled units；
 - 普通 systemd-boot entry 和 loader.conf；
 - 使用普通 initramfs 的参数回退启动项；
+- Secure Boot 下同路径的未签名 kernel `.bak` 备份；
 - 本次创建用户的 home、wheel 组和 Zsh 登录 Shell。
 
 ### 最终内容或行为不同
@@ -366,7 +367,7 @@ MODULES=(nvidia nvidia_modeset nvidia_uvm nvidia_drm)
 - `/etc/default/useradd` 的处理；
 - sudoers 文件和旧版不确定的人工编辑结果；
 - NVIDIA 配置对上游文件变化的适应性及最终 `mkinitcpio -P`；
-- Secure Boot 的目标包数据库、私钥、kernel backup、证书权限和 ESP 旧文件处理；
+- Secure Boot 的目标包数据库、私钥、备份生成顺序、证书权限和 ESP 旧文件处理；
 - EFI NVRAM 的重复项与多位分区号行为。
 
 ## 14. 维护时如何更新本文

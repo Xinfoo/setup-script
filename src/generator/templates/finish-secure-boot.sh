@@ -66,6 +66,8 @@ sign_secure_boot_assets() {
         --output "$kernel_signed" "$kernel_original"
     sbverify --cert "$secure_root/secure-boot/MOK.crt" "$boot_signed" >/dev/null
     sbverify --cert "$secure_root/secure-boot/MOK.crt" "$kernel_signed" >/dev/null
+    # Keep the original unsigned kernel as a manual recovery image. / 保留原始未签名内核，供手工恢复使用。
+    atomic_install_file "$kernel_original" "$kernel_original.bak" 0644
     atomic_install_file "$kernel_signed" "$kernel_original" 0644
     atomic_install_file "$boot_signed" \
         "$TARGET_ROOT/boot/EFI/BOOT/GRUBX64.EFI" 0644

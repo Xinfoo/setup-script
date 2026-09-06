@@ -402,6 +402,17 @@ static bool test_automatic_script(void)
                               "sbsign --key \"$ASSET_DIR/secure-boot/MOK.key\"",
                               "signing directly from mutable source assets");
     passed &= forbid_fragment(&script, ".unsigned", "a renamed-away original kernel");
+    passed &= require_fragment(&script,
+                               "atomic_install_file \"$kernel_original\" \"$kernel_original.bak\" 0644",
+                               "the retained unsigned kernel backup");
+    passed &= require_order(&script,
+                            "    sbverify --cert \"$secure_root/secure-boot/MOK.crt\" \"$kernel_signed\" >/dev/null\n",
+                            "    atomic_install_file \"$kernel_original\" \"$kernel_original.bak\" 0644\n",
+                            "signature verification before retaining the unsigned kernel");
+    passed &= require_order(&script,
+                            "    atomic_install_file \"$kernel_original\" \"$kernel_original.bak\" 0644\n",
+                            "    atomic_install_file \"$kernel_signed\" \"$kernel_original\" 0644\n",
+                            "unsigned backup before signed-kernel replacement");
     passed &= require_order(&script,
                             "    atomic_install_file \"$kernel_signed\" \"$kernel_original\" 0644\n",
                             "    atomic_install_file \"$secure_root/shimx64.efi\" \\\n        \"$TARGET_ROOT/boot/EFI/BOOT/BOOTX64.EFI\" 0644\n",

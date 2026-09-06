@@ -403,16 +403,16 @@ console-mode keep
 
 1. 在私有工作目录生成签名后的 systemd-boot 和 kernel 临时文件；
 2. 用 `sbverify --cert` 确认签名与 MOK 证书匹配；
-3. 在每个目标目录旁创建暂存文件；
-4. 用原子 `mv -fT` 替换内核和指定 EFI 文件；
-5. 安装 shim、MokManager、fallback manager 和公开的 `MOK.cer`；
-6. 签名完成后卸载 tmpfs 并删除快照目录。
+3. 原子保存原始未签名 kernel 为 `/boot/vmlinuz-<kernel>.bak`；
+4. 在每个目标目录旁创建暂存文件；
+5. 用原子 `mv -fT` 替换内核和指定 EFI 文件；
+6. 安装 shim、MokManager、fallback manager 和公开的 `MOK.cer`；
+7. 签名完成后卸载 tmpfs 并删除快照目录。
 
 当前流程不会：
 
 - 在目标系统安装 `shim-signed` 包；
 - 把 `MOK.key` 或 `MOK.crt` 复制/绑定到目标；
-- 把原内核改名为长期保留的 `.bak`；
 - 清空 `/boot/EFI/BOOT/` 下的所有已有文件。
 
 旧版则会：
@@ -423,6 +423,8 @@ console-mode keep
 - 把原内核移动为 `.bak` 后直接签名回原路径；
 - 从目标 `/root/secure-boot/` 使用私钥；
 - 在外层清理时不删除 `/root/secure-boot/`，因此私钥会留在安装后的系统。
+
+两版最终都会保留同名的未签名 `.bak` 内核。区别在于旧版先移动原内核再直接签名，新版先完成签名与验证，再原子写入备份和已签名正式内核。
 
 两版都只签名 EFI 可执行文件和内核，不把外置 initramfs 纳入完整验证链；内核或 systemd-boot 更新后的自动重签名也都不在当前实现范围内。当前模型会对此给出警告，并在同时选择 NVIDIA 时提醒 DKMS 模块未自动签名。
 
