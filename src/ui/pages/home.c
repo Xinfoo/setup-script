@@ -15,6 +15,7 @@ void draw_home(UiState *state)
     char size[32];
     const DiskPlan *root_disk;
 
+    /* 首页只生成紧凑摘要；完整问题文本留给 Review 页面滚动显示。 */
     validate_plan(state->plan, &report);
     root_disk = plan_find_disk_for_usage(state->plan, PART_ROOT);
     if (root_disk != NULL) format_size(root_disk->size_bytes, size, sizeof(size));
@@ -43,6 +44,7 @@ void draw_home(UiState *state)
                    state->plan->system.username, state->plan->system.hostname,
                    state->plan->system.timezone);
     if (!state->target_identity_matches) {
+        /* 实时磁盘身份不匹配比静态模型错误更需要在入口处优先显示。 */
         copy_text(details[5], sizeof(details[5]), "Target disk identity changed - reselect it");
     } else {
         (void)snprintf(details[5], sizeof(details[5]), "%zu error(s), %zu total issue(s)",
@@ -65,6 +67,7 @@ void draw_home(UiState *state)
 
 void handle_home(UiState *state, int key)
 {
+    /* 数组顺序与 draw_home 中的菜单顺序固定对应，Exit 由末项单独处理。 */
     static const Screen screens[] = {
         SCREEN_STORAGE, SCREEN_BASE_SYSTEM, SCREEN_HARDWARE, SCREEN_SOFTWARE,
         SCREEN_IDENTITY, SCREEN_REVIEW, SCREEN_OUTPUT, SCREEN_HOME

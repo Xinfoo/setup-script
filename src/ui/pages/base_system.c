@@ -19,6 +19,7 @@ static bool inspect_packages(UiState *state)
     }
     if (state->row == 3) {
         group = PKG_LOCAL_MIRROR_LIVE;
+        /* 网络源不需要 Live 引导包；仅在本地镜像开启时展示实际安装组。 */
         page_show_packages(state, "Pacman packages - Local mirror bootstrap",
                            system->local_mirror ? &group : NULL,
                            system->local_mirror ? 1 : 0);
@@ -35,6 +36,7 @@ static bool inspect_packages(UiState *state)
 void draw_base_system(UiState *state)
 {
     SystemPlan *system = &state->plan->system;
+    /* 可预览软件包的行保留 Enter，避免查看列表时意外切换方案。 */
     const char *keys = state->row == 0 || state->row == 1 ||
                        state->row == 3 || state->row == 7
         ? "Up/Down move   Enter packages   Space change   Esc back"
@@ -65,11 +67,13 @@ void handle_base_system(UiState *state, int key)
     else if (key == KEY_DOWN && state->row < 7) ++state->row;
     else if (page_enter_pressed(key) && inspect_packages(state)) return;
     else if (key == ' ' || key == KEY_LEFT || key == KEY_RIGHT || page_enter_pressed(key)) {
+        /* 普通枚举直接轮换；涉及外部信任输入的开关在启用路径单独确认。 */
         switch (state->row) {
         case 0: system->platform = (Platform)(((int)system->platform + 1) % 3); changed = true; break;
         case 1: system->kernel = (Kernel)(((int)system->kernel + 1) % 4); changed = true; break;
         case 2: system->locale = system->locale == LOCALE_EN_US ? LOCALE_ZH_CN : LOCALE_EN_US; changed = true; break;
         case 3:
+            /* 关闭本地镜像可直接回到网络源，只有扩大信任边界时才显示警告。 */
             if (system->local_mirror) {
                 system->local_mirror = false;
                 changed = true;
@@ -91,6 +95,7 @@ void handle_base_system(UiState *state, int key)
         case 5: break;
         case 6: system->create_efi_entry = !system->create_efi_entry; changed = true; break;
         case 7:
+            /* 与本地镜像一致，关闭无需确认，启用则由默认 No 的窗口明确授权。 */
             if (system->secure_boot) {
                 system->secure_boot = false;
                 changed = true;

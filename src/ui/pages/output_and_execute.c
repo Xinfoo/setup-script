@@ -25,6 +25,7 @@ void handle_output(UiState *state, int key)
     if (key == KEY_UP && state->row > 0) --state->row;
     else if (key == KEY_DOWN && state->row < 2) ++state->row;
     else if (key == ' ' || page_enter_pressed(key)) {
+        /* 三个动作共用 ui_generate，确保保存方案、验证和原子输出语义完全一致。 */
         if (state->row == 0) {
             (void)ui_generate(state);
         } else if (state->row == 1) {
@@ -35,6 +36,7 @@ void handle_output(UiState *state, int key)
         } else if (ui_generate(state) &&
                    confirm_dialog("Run generated installer",
                                   "Leave the TUI and execute the generated Bash script now?")) {
+            /* 主循环退出后由顶层入口 exec 脚本，页面本身不破坏 ncurses 状态。 */
             state->running = true;
             state->quit = true;
         }
@@ -56,6 +58,7 @@ void draw_output_preview(UiState *state)
         mvprintw(5, 2, "Cannot open %s: %s", state->script_path, strerror(errno));
         return;
     }
+    /* 逐行跳过滚动偏移，只保留 getline 的单个复用缓冲区。 */
     while ((length = getline(&line, &capacity, file)) >= 0) {
         if (number++ < state->preview_offset) continue;
         if (y >= LINES - 3) break;

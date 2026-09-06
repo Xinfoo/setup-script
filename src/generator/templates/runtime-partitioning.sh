@@ -13,6 +13,7 @@ partition_disk() {
         root_size=${DISK_ROOT_SIZE_MIB[index]}
         home_size=${DISK_HOME_SIZE_MIB[index]}
         swap_size=${DISK_SWAP_SIZE_MIB[index]}
+    # Zero has mode-specific meaning, so validate the selected schema rather than every field uniformly. / 零值含义随布局模式变化，因此按所选方案而非统一规则校验字段。
     # Validate every computed layout before erasing the current partition table. / 擦除当前分区表前验证所有计算出的布局参数。
     case "$mode" in
         auto-root-swap)
@@ -34,6 +35,7 @@ partition_disk() {
     phase "Rebuilding the GPT partition table on $disk"
     wipefs --all --force "$disk"
     # sfdisk receives the exact layout selected for this disk. / sfdisk 接收为当前磁盘选择的精确布局。
+    # Omitted final sizes intentionally consume the remaining aligned space. / 末分区省略大小时会有意占用剩余的对齐空间。
     case "$mode" in
         auto-root-swap)
             sfdisk --wipe always --wipe-partitions always "$disk" <<SFDISK

@@ -16,6 +16,7 @@ void draw_review(UiState *state)
     int colors[AI_MAX_PLAN_DISKS * (AI_MAX_PARTITIONS + 2) + AI_MAX_ISSUES + 20] = {0};
     size_t count = 0;
     int y = 4;
+    /* 文本与颜色使用相同下标并行保存，构造完成后再统一处理滚动窗口。 */
     validate_plan(state->plan, &report);
     draw_shell(state, "Review", "Up/Down/PgUp/PgDn scroll   Esc back");
     if (report.error_count == 0 && state->target_identity_matches) {
@@ -98,6 +99,7 @@ void draw_review(UiState *state)
 
 void handle_review(UiState *state, int key)
 {
+    /* 下翻允许暂时越过末尾，下一次绘制会按实际报告行数统一收敛。 */
     if (key == 27) { state->screen = SCREEN_HOME; state->row = 5; return; }
     if (key == KEY_UP && state->review_offset > 0) --state->review_offset;
     else if (key == KEY_DOWN) ++state->review_offset;

@@ -47,6 +47,7 @@ verify_existing_partition() {
     actual_start=$(lsblk -dnro START -- "$device")
     actual_size=$(blockdev --getsize64 "$device")
     actual_type=$(lsblk -dnro PARTTYPE -- "$device")
+    # Geometry and GPT identifiers together distinguish a reused partition from a renamed node. / 几何信息与 GPT 标识共同区分复用分区和仅同名的设备节点。
     [[ "$actual_number" == "$expected_number" ]] || die "Partition number changed for $device"
     [[ "$actual_start" == "$expected_start" ]] || die "Start sector changed for $device"
     [[ "$actual_size" == "$expected_size" ]] || die "Partition size changed for $device"
@@ -115,6 +116,7 @@ verify_created_partition() {
     fi
     # Fixed-size records require equality; fill-to-end records allow GPT tail slack. / 固定大小记录要求相等；占满剩余空间的记录允许 GPT 尾部余量。
     if [[ "$storage_mode" == auto-data ]]; then
+        # A data-only disk always has one fill-to-end Linux partition. / 纯数据盘始终只有一个占满剩余空间的 Linux 分区。
         expected_mib=0
     else
         case "$usage" in
@@ -146,6 +148,7 @@ verify_storage_state() {
     [[ -d "$TARGET_ROOT" && ! -L "$TARGET_ROOT" ]] ||
         die "Target mountpoint changed or became a symlink: $TARGET_ROOT"
     verify_disk_identities
+    # Reject any pre-existing mount inside the complete target subtree, not only /mnt itself. / 拒绝完整目标子树中的既有挂载，而不只检查 /mnt 本身。
     mount_targets=$(findmnt -rn -o TARGET) || die 'Cannot inspect active mounts.'
     while IFS= read -r mounted_target; do
         case "$mounted_target" in

@@ -9,6 +9,7 @@ probe_kept_filesystems() {
         [[ "${PART_ACTIONS[index]}" != keep ]] || has_keep=true
     done
     [[ "$has_keep" == true ]] || return 0
+    # The probe directory lives inside the private workspace and is never a target mountpoint. / 探测目录位于私有工作区内，绝不会充当目标系统挂载点。
     KEEP_PROBE_MOUNT=$WORK_DIR/keep-probe
     install -d -m 0700 "$KEEP_PROBE_MOUNT"
     phase 'Read-only probing of filesystems marked KEEP'
@@ -25,6 +26,7 @@ probe_kept_filesystems() {
             continue
         fi
         case "$filesystem" in
+            # Journal replay is disabled where each filesystem exposes a suitable option. / 各文件系统提供相应选项时均禁用日志回放。
             vfat) options='ro,nodev,nosuid,noexec' ;;
             ext4) options='ro,noload,nodev,nosuid,noexec' ;;
             xfs) options='ro,norecovery,nodev,nosuid,noexec' ;;

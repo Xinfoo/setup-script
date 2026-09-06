@@ -16,6 +16,7 @@ atomic_install_file() {
     stage_index=$((${#SECURE_BOOT_STAGED_FILES[@]} - 1))
     install -m "$mode" -- "$source" "$stage"
     # Commit the completed file, then clear its cleanup record. / 提交完整文件后清除对应清理记录。
+    # mv -T treats the destination as one path and never descends into an unexpected directory. / mv -T 将目标视为单一路径，不会进入意外出现的目录。
     mv -fT -- "$stage" "$destination"
     SECURE_BOOT_STAGED_FILES[stage_index]=''
 }
@@ -76,6 +77,7 @@ sign_secure_boot_assets() {
     # Verify both outputs against the selected MOK before committing either one. / 提交任何文件前用所选 MOK 校验两个输出。
     sbverify --cert "$secure_root/secure-boot/MOK.crt" "$boot_signed" >/dev/null
     sbverify --cert "$secure_root/secure-boot/MOK.crt" "$kernel_signed" >/dev/null
+    # Only after both verifications succeed may either destination be replaced. / 只有两项验证都成功后才允许替换任一目标文件。
     # Keep the original unsigned kernel as a manual recovery image. / 保留原始未签名内核，供手工恢复使用。
     atomic_install_file "$kernel_original" "$kernel_original.bak" 0644
     atomic_install_file "$kernel_signed" "$kernel_original" 0644

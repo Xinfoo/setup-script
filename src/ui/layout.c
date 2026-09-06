@@ -69,6 +69,7 @@ void calculate_table_layout(UiTableLayout *layout, int x, int available_width,
         size_t candidate = count;
         int greatest_slack = 0;
 
+        /* 每轮只压缩富余最多的一列，使各列逐步接近自己的最小宽度。 */
         for (size_t index = 0; index < count; ++index) {
             int minimum = columns[index].minimum_width > 0 ? columns[index].minimum_width : 1;
             int slack = layout->widths[index] - minimum;
@@ -110,6 +111,7 @@ static void draw_table_cell(WINDOW *window, int y, int x, int width,
     int text_x = x;
     int window_width = getmaxx(window);
 
+    /* 所有边界裁切集中在单元格层，调用页面可以始终提交完整布局。 */
     if (width <= 0 || x >= window_width || y < 0 || y >= getmaxy(window)) return;
     if (x + width > window_width) width = window_width - x;
     if (width <= 0) return;

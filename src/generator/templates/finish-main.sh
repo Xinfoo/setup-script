@@ -13,6 +13,7 @@ main() {
     preflight
     # Present the plan; only a local-mirror bootstrap requires source confirmation. / 展示计划；仅本地镜像引导需要软件源确认。
     print_plan
+    # Network mode returns immediately; local mode performs its two-stage trust confirmation. / 网络模式会立即返回；本地模式执行两阶段信任确认。
     confirm_package_preparation
     prepare_package_source
     snapshot_secure_boot_assets

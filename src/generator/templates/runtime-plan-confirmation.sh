@@ -12,7 +12,7 @@ print_plan() {
             "${DISK_MODELS[index]:-unknown}" "${DISK_SIZES[index]}" "${DISK_MODES[index]}"
     done
     if [[ "$USE_LOCAL_MIRROR" == true ]]; then
-        # Include the captured mirror identity used by the confirmation phrase. / 显示确认短语所使用的镜像身份。
+        # Show the captured identity before the separate risk and phrase confirmation. / 在独立的风险与短语确认前显示已捕获的镜像身份。
         printf 'Local mirror: %s  UUID=%s  parent=%s  serial=%s\n' \
             "$LOCAL_MIRROR_SOURCE" "$LOCAL_MIRROR_UUID" \
             "$LOCAL_MIRROR_PARENT" "${LOCAL_MIRROR_PARENT_SERIAL:-unknown}"
@@ -35,6 +35,7 @@ confirm_secure_boot_package_source() {
     printf '\nWARNING: shim-signed.pkg.tar.zst is a user-trusted input.\n'
     printf 'The installer checks its package name and EFI signature presence, but does not authenticate its source or inspect its install scripts.\n'
     printf 'You must independently confirm that this package comes from a trusted source and is usable on this system.\n'
+    # The fixed phrase prevents an accidental Enter from accepting this external package. / 固定短语可避免误按 Enter 接受此外部软件包。
     printf 'Type TRUST SHIM-SIGNED to accept responsibility and continue: '
     IFS= read -r answer || die 'Secure Boot package confirmation was interrupted.'
     [[ "$answer" == 'TRUST SHIM-SIGNED' ]] ||
@@ -56,6 +57,7 @@ confirm_package_preparation() {
     printf 'Detected source: %s  UUID=%s  parent=%s\n' \
         "$LOCAL_MIRROR_SOURCE" "$LOCAL_MIRROR_UUID" "$LOCAL_MIRROR_PARENT"
     printf 'The source must remain an unused F2FS partition labelled F2FS-DATA, contain repo/archlinux, and stay outside every installation disk.\n'
+    # Separate the ordinary decision from the deliberate final acceptance phrase. / 将普通选择与刻意输入的最终接受短语分开。
     while true; do
         printf 'Accept these risks and use this local mirror? [yes/no]: '
         IFS= read -r answer || die 'Preparation confirmation was interrupted.'
@@ -69,6 +71,7 @@ confirm_package_preparation() {
     IFS= read -r answer || die 'Preparation confirmation was interrupted.'
     [[ "$answer" == 'ACCEPT USE LOCAL MIRROR' ]] ||
         die 'Local mirror use was not confirmed.'
+    # Bind the accepted identity to the device that will be mounted next. / 将已接受的身份绑定到随后要挂载的设备。
     verify_local_mirror_identity
 }
 
@@ -87,6 +90,7 @@ confirm_destructive_actions() {
         model=${DISK_MODELS[disk_index]:-unknown}
         mode=${DISK_MODES[disk_index]}
         if [[ "$mode" != existing ]]; then
+            # Automatic layouts affect the whole parent disk before partition-level work begins. / 自动布局会在分区级操作开始前影响整块父磁盘。
             printf '%-22s  %-28s  %-22s  %-30s  %s\n' \
                 "$disk" "$model" "$disk" 'ERASE+REPARTITION' '-'
         fi
@@ -95,11 +99,13 @@ confirm_destructive_actions() {
             action=${PART_ACTIONS[index]}
             usage=${PART_USAGES[index]}
             if [[ "$action" == format ]]; then
+                # Planned partitions are created by sfdisk; existing ones only recreate their filesystem. / 计划分区由 sfdisk 新建；现有分区只重建文件系统。
                 [[ "$mode" == existing ]] && operation='FORMAT' || operation='CREATE+FORMAT'
             else
                 operation='KEEP'
             fi
             case "$usage" in
+                # Usage adds the runtime effect that follows the base KEEP/FORMAT operation. / 用途会在基础 KEEP/FORMAT 动作后追加运行时效果。
                 swap)
                     operation+='+SWAPON'
                     target='swap'

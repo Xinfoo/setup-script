@@ -293,6 +293,7 @@ static const UiTableColumn storage_columns[] = {
     {"Options", 12, 7, UI_ALIGN_LEFT}
 };
 
+/* 磁盘组表头使用独立列模型，但与分区表共享同一布局计算和裁切实现。 */
 static const UiTableColumn disk_group_columns[] = {
     {"Disk", 26, 18, UI_ALIGN_LEFT},
     {"Size", 9, 7, UI_ALIGN_RIGHT},
@@ -334,6 +335,7 @@ static void draw_partition_row(int y, const UiTableLayout *layout,
     const char *values[sizeof(storage_columns) / sizeof(storage_columns[0])];
 
     format_size(partition->size_bytes, size, sizeof(size));
+    /* 显示动作同时考虑来源与用途：未分配的 KEEP 分区在执行阶段会被忽略。 */
     if (partition->planned) operation = "CREATE";
     else if (partition->usage == PART_UNUSED && partition->action == ACTION_KEEP)
         operation = "IGNORE";
@@ -403,6 +405,7 @@ void draw_storage(UiState *state)
     draw_table_header(stdscr, 5, &table, storage_columns);
     attroff(A_BOLD);
 
+    /* 选中项先换算为包含组间空行的全局逻辑行，再据此移动视口。 */
     for (size_t disk_index = 0; disk_index < state->active_disk; ++disk_index)
         selected_line += 2 + (int)storage->disks[disk_index].partition_count;
     /* 逻辑坐标中表头占一行，所以 row=-1 恰好映射到该组的第一行。 */

@@ -168,6 +168,7 @@ int choose_table_dialog(const char *title, const UiTableColumn columns[],
     UiTableLayout layout;
     WINDOW *window;
 
+    /* 弹窗限制最大宽度以维持可读性，小终端则继续服从实际屏幕边界。 */
     if (width > 104) width = 104;
     if (width < 58) width = 58;
     if (height > LINES - 2) height = LINES - 2;
@@ -189,6 +190,7 @@ int choose_table_dialog(const char *title, const UiTableColumn columns[],
         wattroff(window, A_BOLD | COLOR_PAIR(COLOR_TITLE));
         for (int line = 0; line < visible && (size_t)(offset + line) < row_count; ++line) {
             int index = offset + line;
+            /* cells 是按行展开的一维矩阵，这里定位当前行的首个单元格。 */
             const char *const *values = cells + (size_t)index * column_count;
             if (index == selected) wattron(window, COLOR_PAIR(COLOR_SELECTED));
             draw_table_row(window, line + 4, &layout, columns, values);

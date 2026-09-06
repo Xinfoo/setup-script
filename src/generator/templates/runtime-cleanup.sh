@@ -11,6 +11,7 @@ cleanup() {
     # Disable recursive traps and error-exit while collecting cleanup failures. / 收集清理失败时禁用递归 trap 和遇错退出。
     trap - EXIT INT TERM HUP
     set +e
+    # Cleanup is best-effort: record every failure instead of stopping at the first one. / 清理采用尽力而为策略：记录全部失败而非在首个错误处停止。
     # Identify only resources still owned by this run. / 只识别仍由本次运行持有的资源。
     if command -v findmnt >/dev/null 2>&1; then
         # A KEEP probe is owned only when its mounted source still matches. / 仅当挂载源仍匹配时才认为 KEEP 探测由本次运行持有。
@@ -165,6 +166,7 @@ cleanup() {
     if [[ "$snapshot_active" != true && "$snapshot_remove_safe" == true &&
           -n "$SECURE_BOOT_ASSET_SNAPSHOT" &&
           -d "$SECURE_BOOT_ASSET_SNAPSHOT" ]]; then
+        # Never recurse into a path still known to be mounted or whose ownership is uncertain. / 对仍已知处于挂载状态或归属不明的路径绝不递归删除。
         if ! rm -rf -- "$SECURE_BOOT_ASSET_SNAPSHOT"; then
             printf 'WARNING: failed to remove the private Secure Boot snapshot.\n' >&2
             cleanup_failed=true
@@ -194,6 +196,7 @@ cleanup() {
             [[ "$status" -ne 0 ]] || status=1
         fi
         kill -TERM "$logger_watchdog" 2>/dev/null
+        # Reap the watchdog regardless of whether it already fired. / 无论 watchdog 是否已经触发都回收其子进程。
         wait "$logger_watchdog" 2>/dev/null
     fi
     # Report one final outcome after resource and logger cleanup. / 资源与日志清理结束后报告唯一的最终结果。
