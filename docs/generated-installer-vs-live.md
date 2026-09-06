@@ -395,7 +395,7 @@ console-mode keep
 
 当前脚本先根据实际根分区读取并检查非空 UUID。Intel/AMD 平台在启动项中加入对应 microcode initrd，虚拟机不加。
 
-旧版 fallback entry 仍引用普通的 `initramfs-<kernel>.img`，实际上没有使用 fallback 镜像。当前脚本改为引用 `initramfs-<kernel>-fallback.img`。
+两版 fallback entry 都引用普通的 `initramfs-<kernel>.img`，不依赖新版 mkinitcpio 默认不再生成的 `*-fallback.img`。这里的 fallback 是内核参数回退项：用户以后修改普通 `arch.conf` 的内核参数时，可以保留 `arch-fallback.conf` 中安装器生成的已知可用参数作为恢复入口。
 
 ### 3.17 Secure Boot 签名
 
@@ -589,7 +589,6 @@ Secure Boot 与临时本地镜像在当前实现中可以同时启用。此组�
 - chroot 改为自动执行；
 - 密码重试从无限改为最多三次；
 - sudoers 从手工编辑改为生成 drop-in 并验证；
-- fallback 启动项改用真正的 fallback initramfs；
 - Secure Boot 私钥不进入目标系统；
 - EFI 分区编号不再截取设备名最后一个字符；
 - 增加日志、原子输出和失败清理。

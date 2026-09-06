@@ -10,7 +10,6 @@ ROOT_UUID=$(blkid -s UUID -o value -- "$ROOT_DEVICE") || {
 readonly ROOT_UUID
 readonly KERNEL_FILE="vmlinuz-$KERNEL_IMAGE"
 readonly INITRAMFS_FILE="initramfs-$KERNEL_IMAGE.img"
-readonly FALLBACK_FILE="initramfs-$KERNEL_IMAGE-fallback.img"
 readonly MICROCODE_FILE="${MICROCODE_PACKAGE:+$MICROCODE_PACKAGE.img}"
 
 # Install a package list only when it is non-empty. / 仅在软件包列表非空时执行安装。

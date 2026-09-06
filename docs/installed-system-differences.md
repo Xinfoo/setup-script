@@ -31,7 +31,6 @@
 | sudo | 新版固定生成 wheel sudoers drop-in；旧版结果取决于人工 `visudo` |
 | 新用户默认 Shell | 新版只为本次用户指定 Zsh；旧版还尝试修改 `/etc/default/useradd` |
 | initramfs | 新版在全部包安装后明确运行 `mkinitcpio -P` |
-| fallback 启动项 | 新版引用真正的 fallback initramfs；旧版错误地再次引用普通 initramfs |
 | Secure Boot | 启用时新版不安装 `shim-signed`、不留下私钥和未签名内核备份；旧版会留下这些内容 |
 
 与此同时，`/etc/fstab` 和 `/etc/environment` 在“全新目标 + 相同选择”前提下预期具有相同的有效内容。两边的写入方法不同，但不应把方法差异误报为成品差异。
@@ -274,12 +273,7 @@ MODULES=(nvidia nvidia_modeset nvidia_uvm nvidia_drm)
 
 两边都会运行 `bootctl --no-variables install`，普通 `arch.conf` 的 title、kernel、microcode、root UUID 和内核参数相同，`loader.conf` 也相同。
 
-fallback 条目存在实质差异：
-
-- 旧版 `arch-fallback.conf` 仍引用 `initramfs-<kernel>.img`；
-- 新版引用 `initramfs-<kernel>-fallback.img`。
-
-因此旧版菜单中的普通项和 fallback 项实际上使用同一普通 initramfs；新版 fallback 项才会使用真正的 fallback 镜像。
+两边的 `arch-fallback.conf` 都与旧版设计保持一致，引用普通的 `initramfs-<kernel>.img`，不引用 `initramfs-<kernel>-fallback.img`。这个条目不是另一套 initramfs，而是内核参数回退入口：用户以后修改普通 `arch.conf` 时，可以保留 fallback entry 中安装器生成的参数，在普通项因参数错误无法启动时进入系统修复。
 
 ### 9.2 EFI NVRAM
 
@@ -361,6 +355,7 @@ fallback 条目存在实质差异：
 - NetworkManager iwd、coredump 和 journal 配置；
 - 相同选项对应的 systemd enabled units；
 - 普通 systemd-boot entry 和 loader.conf；
+- 使用普通 initramfs 的参数回退启动项；
 - 本次创建用户的 home、wheel 组和 Zsh 登录 Shell。
 
 ### 最终内容或行为不同
@@ -371,7 +366,6 @@ fallback 条目存在实质差异：
 - `/etc/default/useradd` 的处理；
 - sudoers 文件和旧版不确定的人工编辑结果；
 - NVIDIA 配置对上游文件变化的适应性及最终 `mkinitcpio -P`；
-- fallback loader entry；
 - Secure Boot 的目标包数据库、私钥、kernel backup、证书权限和 ESP 旧文件处理；
 - EFI NVRAM 的重复项与多位分区号行为。
 

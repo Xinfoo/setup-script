@@ -23,7 +23,7 @@ ENTRY
 title Arch Linux Fallback
 linux /$KERNEL_FILE
 initrd /$MICROCODE_FILE
-initrd /$FALLBACK_FILE
+initrd /$INITRAMFS_FILE
 options root=UUID=$ROOT_UUID rw loglevel=3
 ENTRY
     else
@@ -36,7 +36,7 @@ ENTRY
         cat > /boot/loader/entries/arch-fallback.conf <<ENTRY
 title Arch Linux Fallback
 linux /$KERNEL_FILE
-initrd /$FALLBACK_FILE
+initrd /$INITRAMFS_FILE
 options root=UUID=$ROOT_UUID rw loglevel=3
 ENTRY
     fi
