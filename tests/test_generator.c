@@ -214,6 +214,24 @@ static bool forbid_fragment(const GeneratedScript *script, const char *fragment,
     return false;
 }
 
+static bool require_fragment_count(const GeneratedScript *script, const char *fragment,
+                                   size_t expected, const char *description)
+{
+    const char *cursor = script->text;
+    size_t count = 0;
+    size_t length = strlen(fragment);
+
+    if (length == 0) return false;
+    while ((cursor = strstr(cursor, fragment)) != NULL) {
+        ++count;
+        cursor += length;
+    }
+    if (count == expected) return true;
+    (void)fprintf(stderr, "generated script has %zu occurrences of %s; expected %zu\n",
+                  count, description, expected);
+    return false;
+}
+
 static bool require_order(const GeneratedScript *script, const char *first,
                           const char *second, const char *description)
 {
@@ -303,6 +321,18 @@ static bool test_automatic_script(void)
     passed &= forbid_fragment(&script,
                               "/etc/systemd/timesyncd.conf.d/local.conf",
                               "the former timesyncd drop-in path");
+    passed &= require_fragment(&script,
+                               "################################################################################\n"
+                               "############################ Arch Linux mirrorlist #############################\n"
+                               "################################################################################\n\n"
+                               "Server = https://mirrors.tuna.tsinghua.edu.cn/archlinux/$repo/os/$arch\n",
+                               "the legacy China mirrorlist header and first server");
+    passed &= require_fragment(&script,
+                               "Server = https://mirrors.xjtu.edu.cn/archlinux/$repo/os/$arch\n"
+                               "MIRRORS",
+                               "the legacy China mirrorlist final server");
+    passed &= require_fragment_count(&script, "Server = https://", 21,
+                                     "legacy China mirror servers");
     passed &= require_fragment(&script,
                                "# Installation orchestration / 安装流程编排",
                                "a bilingual installation-flow section comment");

@@ -32,7 +32,6 @@
 | 新用户默认 Shell | 新版只为本次用户指定 Zsh；旧版还尝试修改 `/etc/default/useradd` |
 | initramfs | 新版在全部包安装后明确运行 `mkinitcpio -P` |
 | fallback 启动项 | 新版引用真正的 fallback initramfs；旧版错误地再次引用普通 initramfs |
-| 中国镜像 | 启用时新版写 5 个服务器，旧版写 21 个服务器及 banner |
 | Secure Boot | 启用时新版不安装 `shim-signed`、不留下私钥和未签名内核备份；旧版会留下这些内容 |
 
 与此同时，`/etc/fstab` 和 `/etc/environment` 在“全新目标 + 相同选择”前提下预期具有相同的有效内容。两边的写入方法不同，但不应把方法差异误报为成品差异。
@@ -326,21 +325,11 @@ fallback 条目存在实质差异：
 
 关闭中国镜像且不使用本地镜像时，两边通常保留 pacstrap 从同一 Live 环境带入的 mirrorlist，因此没有有意差异。
 
-开启中国镜像时，旧版写入 21 个服务器并带三行 banner；新版只写以下 5 个服务器且不带 banner：
-
-```text
-mirrors.tuna.tsinghua.edu.cn
-mirrors.ustc.edu.cn
-mirrors.bfsu.edu.cn
-mirrors.nju.edu.cn
-mirrors.sjtug.sjtu.edu.cn
-```
-
-所以即使选项同为“中国镜像”，最终 `/etc/pacman.d/mirrorlist` 也明显不同，镜像故障切换范围和尝试顺序随之不同。
+开启中国镜像时，新版已恢复旧版完整内容：两边都写入相同的三行 banner、21 个服务器及相同排列顺序。因此相同选择下，最终 `/etc/pacman.d/mirrorlist` 没有有意差异。
 
 ### 11.2 临时本地镜像
 
-在两边都使用本地 F2FS-DATA 镜像并最终选择中国镜像时，本地 nginx 只服务安装过程；目标系统不会安装 nginx，也不会保存 nginx 服务。最终目标差异仍主要是上一节的永久 mirrorlist。
+在两边都使用本地 F2FS-DATA 镜像并最终选择中国镜像时，本地 nginx 只服务安装过程；目标系统不会安装 nginx，也不会保存 nginx 服务。两边最终都会写入相同的永久 China mirrorlist。
 
 旧版允许“临时本地镜像 + 不写永久中国镜像”，这种路径可能把目标 mirrorlist 留在 `http://127.0.0.1:2304/...`，重启后不可用。新版把这一组合判定为错误，因此没有相同的新路径可供比较。
 
@@ -367,6 +356,7 @@ mirrors.sjtug.sjtu.edu.cn
 - fstab 中普通挂载与 Swap 的有效条目；
 - Fcitx 路径的 `/etc/environment` 正文；
 - 字体包及完整的 `/etc/fonts/local.conf` 回退链；
+- 启用中国镜像时的完整 21 项 mirrorlist；
 - timezone、Locale、hostname、vconsole 和 pacman Color；
 - NetworkManager iwd、coredump 和 journal 配置；
 - 相同选项对应的 systemd enabled units；
@@ -382,7 +372,6 @@ mirrors.sjtug.sjtu.edu.cn
 - sudoers 文件和旧版不确定的人工编辑结果；
 - NVIDIA 配置对上游文件变化的适应性及最终 `mkinitcpio -P`；
 - fallback loader entry；
-- 中国 mirrorlist；
 - Secure Boot 的目标包数据库、私钥、kernel backup、证书权限和 ESP 旧文件处理；
 - EFI NVRAM 的重复项与多位分区号行为。
 
