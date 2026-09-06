@@ -1,0 +1,17 @@
+if(NOT DEFINED INPUT OR NOT DEFINED OUTPUT)
+    message(FATAL_ERROR "INPUT and OUTPUT are required")
+endif()
+
+file(READ "${INPUT}" CONTENT HEX)
+string(REGEX REPLACE "(..)" "0x\\1," CONTENT "${CONTENT}")
+
+get_filename_component(OUTPUT_DIRECTORY "${OUTPUT}" DIRECTORY)
+file(MAKE_DIRECTORY "${OUTPUT_DIRECTORY}")
+set(TEMPORARY_OUTPUT "${OUTPUT}.tmp")
+file(WRITE "${TEMPORARY_OUTPUT}" "${CONTENT}\n")
+execute_process(
+    COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+            "${TEMPORARY_OUTPUT}" "${OUTPUT}"
+    COMMAND_ERROR_IS_FATAL ANY
+)
+file(REMOVE "${TEMPORARY_OUTPUT}")
