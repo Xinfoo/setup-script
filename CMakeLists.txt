@@ -23,6 +23,12 @@ pkg_check_modules(NCURSESW REQUIRED IMPORTED_TARGET ncursesw)
 pkg_check_modules(JSONC REQUIRED IMPORTED_TARGET json-c)
 
 set(
+    COMMON_SOURCES
+    "${PROJECT_SOURCE_DIR}/src/util.c"
+    "${PROJECT_SOURCE_DIR}/src/atomic_file.c"
+)
+
+set(
     MODEL_SOURCES
     "${PROJECT_SOURCE_DIR}/src/model/model.c"
     "${PROJECT_SOURCE_DIR}/src/model/validation.c"
@@ -91,7 +97,7 @@ add_custom_target(
 add_executable(
     arch-install-builder
     src/main.c
-    src/util.c
+    ${COMMON_SOURCES}
     ${MODEL_SOURCES}
     src/packages.c
     src/detect.c

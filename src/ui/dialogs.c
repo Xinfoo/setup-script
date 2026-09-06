@@ -24,6 +24,7 @@ static const char *package_item_at(const PackageConfig *packages,
                                    const PackageGroup groups[], size_t group_count,
                                    size_t position)
 {
+    /* 逐组扣减位置，把多个固定数组映射成一个只读的逻辑索引空间。 */
     for (size_t index = 0; index < group_count; ++index) {
         const PackageList *list = packages_get(packages, groups[index]);
         if (list == NULL) continue;
@@ -79,6 +80,7 @@ void packages_dialog(const char *title, const PackageConfig *packages,
             if (stop_requested || key == KEY_RESIZE) break;
             if (key == ERR) continue;
             if (key == '\n' || key == KEY_ENTER || key == 27) break;
+            /* offset 始终限制到“最后一页的起点”，不会滚出空白页。 */
             if (key == KEY_UP && offset > 0) --offset;
             else if (key == KEY_DOWN && offset + page < count) ++offset;
             else if (key == KEY_PPAGE) offset = offset > page ? offset - page : 0;
@@ -182,11 +184,13 @@ static bool next_wrapped_line(const char **cursor, size_t width,
         return true;
     }
 
+    /* 从宽度边界反向寻找空白；找不到时才硬切超长单词。 */
     split = width;
     while (split > 0 && text[split] != ' ' && text[split] != '\t') --split;
     if (split == 0) split = width;
     *start = text;
     *length = split;
+    /* 输出不包含行尾空白，下一次扫描也跳过分隔空白，避免新行以空格开头。 */
     while (*length > 0 &&
            (text[*length - 1] == ' ' || text[*length - 1] == '\t')) --(*length);
     text += split;
@@ -298,6 +302,7 @@ bool text_dialog(const char *title, char *value, size_t size)
     curs_set(1);
     for (;;) {
         int field_width = width - 4;
+        /* 文本超出输入框后让视口跟随光标，缓冲区内容本身不被截断。 */
         size_t view_start = cursor >= (size_t)field_width ? cursor - (size_t)field_width + 1 : 0;
         werase(window);
         box(window, 0, 0);
@@ -331,6 +336,7 @@ bool text_dialog(const char *title, char *value, size_t size)
             return false;
         }
         if ((key == KEY_BACKSPACE || key == 127 || key == '\b') && cursor > 0) {
+            /* memmove 连同结尾 NUL 一起移动，编辑过程中缓冲区始终是合法字符串。 */
             memmove(buffer + cursor - 1, buffer + cursor, length - cursor + 1);
             --cursor;
             --length;

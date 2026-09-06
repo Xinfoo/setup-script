@@ -27,9 +27,8 @@ void copy_text(char *destination, size_t size, const char *source)
     (void)snprintf(destination, size, "%s", source);
 }
 
-static bool run_capture_internal(const char *program, char *const argv[],
-                                 bool merge_standard_error, ProcessResult *result,
-                                 char *error, size_t error_size)
+bool run_capture_stdout(const char *program, char *const argv[], ProcessResult *result,
+                        char *error, size_t error_size)
 {
     int pipefd[2];
     pid_t child;
@@ -59,16 +58,13 @@ static bool run_capture_internal(const char *program, char *const argv[],
         if (dup2(pipefd[1], STDOUT_FILENO) < 0) {
             _exit(126);
         }
-        if (merge_standard_error) {
-            if (dup2(pipefd[1], STDERR_FILENO) < 0) _exit(126);
-        } else {
-            null_descriptor = open("/dev/null", O_WRONLY);
-            if (null_descriptor < 0 || dup2(null_descriptor, STDERR_FILENO) < 0) {
-                _exit(126);
-            }
-            (void)close(null_descriptor);
+        null_descriptor = open("/dev/null", O_WRONLY);
+        if (null_descriptor < 0 || dup2(null_descriptor, STDERR_FILENO) < 0) {
+            _exit(126);
         }
+        (void)close(null_descriptor);
         (void)close(pipefd[1]);
+        /* execv 不经过 PATH 搜索或 Shell；126/127 分别保留给重定向和执行失败。 */
         execv(program, argv);
         _exit(127);
     }
@@ -82,7 +78,10 @@ static bool run_capture_internal(const char *program, char *const argv[],
         return false;
     }
 
-    /* 按需扩展缓冲区，完整读取输出后再等待子进程并记录退出状态。 */
+    /*
+     * 按需扩展并在 waitpid 前持续排空管道，否则大量输出可能填满管道，
+     * 造成父进程等待子进程、子进程等待父进程读取的互锁。
+     */
     for (;;) {
         ssize_t count;
         if (capacity - used < 2048) {
@@ -133,21 +132,10 @@ static bool run_capture_internal(const char *program, char *const argv[],
             return false;
         }
     }
+    /* 调用方主要区分成功与失败；被信号终止统一映射为非零的 128。 */
     result->status = WIFEXITED(wait_status) ? WEXITSTATUS(wait_status) : 128;
     result->output = buffer;
     return true;
-}
-
-bool run_capture(const char *program, char *const argv[], ProcessResult *result,
-                 char *error, size_t error_size)
-{
-    return run_capture_internal(program, argv, true, result, error, error_size);
-}
-
-bool run_capture_stdout(const char *program, char *const argv[], ProcessResult *result,
-                        char *error, size_t error_size)
-{
-    return run_capture_internal(program, argv, false, result, error, error_size);
 }
 
 void process_result_free(ProcessResult *result)

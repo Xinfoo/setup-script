@@ -84,6 +84,10 @@ static bool canonical_destination(const char *path, char *output, size_t output_
     const char *base;
     int written;
 
+    /*
+     * 输出文件可能尚不存在，所以只 realpath 父目录，再把末级名称接回去；
+     * 这样仍可识别 a/../b、相对路径等指向同一待创建文件的写法。
+     */
     if (strlen(path) >= sizeof(copy)) return false;
     copy_text(copy, sizeof(copy), path);
     slash = strrchr(copy, '/');
@@ -108,6 +112,7 @@ static bool paths_refer_to_same_destination(const char *left, const char *right)
     char left_path[PATH_MAX];
     char right_path[PATH_MAX];
 
+    /* 由便宜到昂贵依次检查字面相等、现有 inode 相等和规范化后的目标相等。 */
     if (strcmp(left, right) == 0) return true;
     if (stat(left, &left_status) == 0 && stat(right, &right_status) == 0 &&
         left_status.st_dev == right_status.st_dev && left_status.st_ino == right_status.st_ino) {
@@ -174,6 +179,7 @@ int main(int argc, char **argv)
         return EXIT_FAILURE;
     }
 
+    /* 防止原子替换输出脚本时把作为输入或稍后保存的计划文件覆盖掉。 */
     if (paths_refer_to_same_destination(generate_path != NULL ? generate_path : plan_path,
                                         script_path)) {
         (void)fprintf(stderr, "Plan input and script output must use different files.\n");

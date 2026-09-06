@@ -1,5 +1,6 @@
 #define _POSIX_C_SOURCE 200809L
 
+#include "atomic_file.h"
 #include "packages.h"
 
 #include "util.h"
@@ -8,9 +9,7 @@
 
 #include <ctype.h>
 #include <errno.h>
-#include <fcntl.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -136,7 +135,6 @@ void packages_init_defaults(PackageConfig *config)
     static const char *const secure_boot_live[] = {"sbsigntools"};
 
     memset(config, 0, sizeof(*config));
-    config->version = 2;
     SET_DEFAULT(config, PKG_BOOTSTRAP, bootstrap);
     SET_DEFAULT(config, PKG_CORE, core);
     SET_DEFAULT(config, PKG_KERNEL_LINUX, kernel_linux);
@@ -183,6 +181,136 @@ const PackageList *packages_get(const PackageConfig *config, PackageGroup group)
     return &config->groups[group];
 }
 
+/* 内核始终有对应的基础包组；越界值保守回退到标准 linux。 */
+PackageGroup packages_kernel_group(Kernel kernel)
+{
+    switch (kernel) {
+    case KERNEL_LINUX: return PKG_KERNEL_LINUX;
+    case KERNEL_LTS: return PKG_KERNEL_LTS;
+    case KERNEL_ZEN: return PKG_KERNEL_ZEN;
+    case KERNEL_HARDENED: return PKG_KERNEL_HARDENED;
+    }
+    return PKG_KERNEL_LINUX;
+}
+
+/* VM 不需要实体 CPU 微码包，因此通过 false 明确表示“没有附加组”。 */
+bool packages_platform_group(Platform platform, PackageGroup *group)
+{
+    if (group == NULL) return false;
+    if (platform == PLATFORM_INTEL) {
+        *group = PKG_PLATFORM_INTEL;
+        return true;
+    }
+    if (platform == PLATFORM_AMD) {
+        *group = PKG_PLATFORM_AMD;
+        return true;
+    }
+    return false;
+}
+
+/* Desktop None 没有桌面基础组，调用方仍可显示一个明确的空包列表。 */
+bool packages_desktop_group(Desktop desktop, PackageGroup *group)
+{
+    if (group == NULL) return false;
+    switch (desktop) {
+    case DESKTOP_KDE: *group = PKG_KDE; return true;
+    case DESKTOP_GNOME: *group = PKG_GNOME; return true;
+    case DESKTOP_HYPRLAND: *group = PKG_HYPRLAND; return true;
+    case DESKTOP_NONE: return false;
+    }
+    return false;
+}
+
+/* 推荐包目前只属于 KDE 和 GNOME；Hyprland 的完整组件已经包含在基础组中。 */
+bool packages_desktop_recommended_group(Desktop desktop, PackageGroup *group)
+{
+    if (group == NULL) return false;
+    if (desktop == DESKTOP_KDE) {
+        *group = PKG_KDE_RECOMMENDED;
+        return true;
+    }
+    if (desktop == DESKTOP_GNOME) {
+        *group = PKG_GNOME_RECOMMENDED;
+        return true;
+    }
+    return false;
+}
+
+/* 输入法跟随桌面集成方式选择：GNOME 使用 IBus，其余受支持桌面使用 Fcitx。 */
+bool packages_input_group(Desktop desktop, PackageGroup *group)
+{
+    if (group == NULL) return false;
+    if (desktop == DESKTOP_GNOME) {
+        *group = PKG_IBUS;
+        return true;
+    }
+    if (desktop == DESKTOP_KDE || desktop == DESKTOP_HYPRLAND) {
+        *group = PKG_FCITX;
+        return true;
+    }
+    return false;
+}
+
+static void append_group(PackageGroupList *groups, PackageGroup group)
+{
+    /* 容量等于全部已知组数量；边界判断使该辅助函数面对异常调用仍保持有界。 */
+    if (groups->count < PKG_GROUP_COUNT) groups->values[groups->count++] = group;
+}
+
+/*
+ * 安装前预解析的软件包并集在这里按稳定顺序构造。生成器不再自行重述每个
+ * SystemPlan 开关的含义，新增软件选项时只需维护这一处映射。
+ */
+void packages_collect_required_groups(const InstallPlan *plan, PackageGroupList *groups)
+{
+    const SystemPlan *system;
+    PackageGroup group;
+
+    if (groups == NULL) return;
+    groups->count = 0;
+    if (plan == NULL) return;
+    system = &plan->system;
+
+    /* 列表前部依次放置 bootstrap、目标系统核心、内核和平台微码。 */
+    append_group(groups, PKG_BOOTSTRAP);
+    append_group(groups, PKG_CORE);
+    append_group(groups, packages_kernel_group(system->kernel));
+    if (packages_platform_group(system->platform, &group)) append_group(groups, group);
+    if (system->laptop) {
+        append_group(groups, PKG_LAPTOP_FIRMWARE);
+        append_group(groups, PKG_LAPTOP_TOOLS);
+    }
+
+    /* 第二阶段追加用户明确选择的硬件支持和桌面环境组件。 */
+    if (system->intel_graphics) append_group(groups, PKG_INTEL_GRAPHICS);
+    if (system->nvidia_graphics) append_group(groups, PKG_NVIDIA_GRAPHICS);
+    if (system->bluetooth) append_group(groups, PKG_BLUETOOTH);
+    if (packages_desktop_group(system->desktop, &group)) append_group(groups, group);
+    if (system->desktop == DESKTOP_GNOME && system->laptop) {
+        append_group(groups, PKG_GNOME_LAPTOP);
+    }
+    if (system->desktop_recommended &&
+        packages_desktop_recommended_group(system->desktop, &group)) {
+        append_group(groups, group);
+    }
+    if (system->chinese_input && packages_input_group(system->desktop, &group)) {
+        append_group(groups, group);
+    }
+
+    /* 字体是固定基础项，其后的通用工具组严格跟随各自开关。 */
+    append_group(groups, PKG_FONTS);
+    if (system->firewall) append_group(groups, PKG_FIREWALL);
+    if (system->printer) append_group(groups, PKG_PRINTER);
+    if (system->archive_tools) append_group(groups, PKG_ARCHIVE_TOOLS);
+    if (system->terminal_tools) append_group(groups, PKG_TERMINAL_TOOLS);
+    if (system->extra_tools) append_group(groups, PKG_EXTRA_TOOLS);
+    if (system->desktop_apps) append_group(groups, PKG_DESKTOP_APPS);
+
+    /* Live 专用依赖只参与安装前预解析，不代表它们会常驻目标系统。 */
+    if (system->local_mirror) append_group(groups, PKG_LOCAL_MIRROR_LIVE);
+    if (system->secure_boot) append_group(groups, PKG_SECURE_BOOT_LIVE);
+}
+
 bool packages_load_json(PackageConfig *config, const char *path,
                         char *error, size_t error_size)
 {
@@ -225,7 +353,6 @@ bool packages_load_json(PackageConfig *config, const char *path,
         return false;
     }
     /* 当前格式要求所有已知组完整存在，缺项不会静默回退到内建默认值。 */
-    loaded.version = 2;
     for (int group = PKG_BOOTSTRAP; group < PKG_GROUP_COUNT; ++group) {
         const char *name = package_group_name((PackageGroup)group);
         struct json_object *array = NULL;
@@ -275,25 +402,10 @@ bool packages_save_json(const PackageConfig *config, const char *path,
 {
     struct json_object *root = NULL;
     struct json_object *groups = NULL;
-    struct stat status;
     const char *serialized;
-    char *temporary = NULL;
-    int descriptor = -1;
-    int path_result;
-    bool result = false;
 
-    /* 目标只允许是普通文件或尚不存在的路径，拒绝覆盖链接和其他节点。 */
     if (config == NULL || path == NULL) {
         (void)snprintf(error, error_size, "package config and path are required");
-        return false;
-    }
-    path_result = lstat(path, &status);
-    if (path_result == 0 && !S_ISREG(status.st_mode)) {
-        (void)snprintf(error, error_size, "refusing to replace non-regular package config: %s", path);
-        return false;
-    } else if (path_result != 0 && errno != ENOENT) {
-        (void)snprintf(error, error_size, "cannot inspect package config %s: %s",
-                       path, strerror(errno));
         return false;
     }
     /* 序列化完整版本和全部软件包组，使后续加载可以执行严格完整性检查。 */
@@ -322,65 +434,11 @@ bool packages_save_json(const PackageConfig *config, const char *path,
         json_object_object_add(groups, package_group_name((PackageGroup)group), array);
     }
     json_object_object_add(root, "groups", groups);
-    /* 在目标目录写入、同步并重命名临时文件，避免留下半写入配置。 */
-    temporary = malloc(strlen(path) + 16);
-    if (temporary == NULL) {
-        (void)snprintf(error, error_size, "out of memory while saving package config");
-        json_object_put(root);
-        return false;
-    }
-    (void)snprintf(temporary, strlen(path) + 16, "%s.tmp.XXXXXX", path);
-    descriptor = mkstemp(temporary);
-    if (descriptor < 0) {
-        (void)snprintf(error, error_size, "cannot create temporary package config: %s",
-                       strerror(errno));
-        goto finish;
-    }
-    if (fchmod(descriptor, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH) != 0) {
-        (void)snprintf(error, error_size, "cannot set package config permissions: %s",
-                       strerror(errno));
-        goto finish;
-    }
     serialized = json_object_to_json_string_ext(
         root, JSON_C_TO_STRING_PRETTY | JSON_C_TO_STRING_SPACED);
-    {
-        const char *cursor = serialized;
-        size_t remaining = strlen(serialized);
-
-        while (remaining > 0) {
-            ssize_t written = write(descriptor, cursor, remaining);
-            if (written < 0 && errno == EINTR) continue;
-            if (written <= 0) {
-                (void)snprintf(error, error_size, "cannot write package config: %s",
-                               strerror(errno));
-                goto finish;
-            }
-            cursor += written;
-            remaining -= (size_t)written;
-        }
-    }
-    if (write(descriptor, "\n", 1) != 1 || fsync(descriptor) != 0) {
-        (void)snprintf(error, error_size, "cannot commit package config: %s", strerror(errno));
-        goto finish;
-    }
-    if (close(descriptor) != 0) {
-        descriptor = -1;
-        (void)snprintf(error, error_size, "cannot close package config: %s", strerror(errno));
-        goto finish;
-    }
-    descriptor = -1;
-    if (rename(temporary, path) != 0) {
-        (void)snprintf(error, error_size, "cannot replace package config %s: %s",
-                       path, strerror(errno));
-        goto finish;
-    }
-    result = true;
-
-finish:
-    /* 失败路径关闭描述符并删除临时文件，原目标文件保持不变。 */
-    if (descriptor >= 0) (void)close(descriptor);
-    if (!result && temporary != NULL) (void)unlink(temporary);
-    free(temporary);
+    /* 保留 packages.json 原有的结尾换行，提交细节交给公共原子写入器。 */
+    bool saved = atomic_write_text_file(path, 0644, serialized, true,
+                                        "package config", error, error_size);
     json_object_put(root);
-    return result;
+    return saved;
 }

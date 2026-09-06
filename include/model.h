@@ -58,8 +58,6 @@ typedef struct {
     char path[AI_PATH_LEN];
     char current_fs[32];
     char fs_uuid[AI_TEXT_LEN];
-    char label[AI_TEXT_LEN];
-    char mountpoint[AI_PATH_LEN];
     char part_uuid[AI_TEXT_LEN];
     char part_type[64];
     uint64_t size_bytes;
@@ -68,11 +66,9 @@ typedef struct {
 } PartitionInfo;
 
 typedef struct {
-    char name[64];
     char path[AI_PATH_LEN];
     char model[AI_TEXT_LEN];
     char serial[AI_TEXT_LEN];
-    char transport[32];
     char partition_table[32];
     uint64_t size_bytes;
     bool removable;
@@ -173,17 +169,12 @@ typedef struct {
     size_t error_count;
 } ValidationReport;
 
-/* 方案构造、磁盘布局和分区编辑。 */
+/* 方案构造与磁盘布局。 */
 void plan_init(InstallPlan *plan);
-void plan_select_disk(InstallPlan *plan, const DiskInfo *disk);
 bool plan_add_disk(InstallPlan *plan, const DiskInfo *disk);
 DiskPlan *plan_find_disk(InstallPlan *plan, const char *path);
 void disk_plan_use_existing(DiskPlan *plan, const DiskInfo *disk);
 void disk_plan_use_automatic(DiskPlan *plan, const DiskInfo *disk, StorageMode mode);
-void plan_use_existing(InstallPlan *plan, const DiskInfo *disk);
-void plan_use_automatic(InstallPlan *plan, const DiskInfo *disk, StorageMode mode);
-void plan_cycle_usage(PartitionPlan *partition);
-void plan_cycle_format(PartitionPlan *partition);
 
 /* 枚举与界面、JSON 及 Shell 使用的稳定文本之间的转换。 */
 const char *filesystem_name(Filesystem value);
@@ -197,6 +188,10 @@ const char *locale_name(LocaleChoice value);
 const char *f2fs_mode_name(F2fsMountMode value);
 const char *partition_mountpoint(PartitionUsage value);
 Filesystem filesystem_from_name(const char *name);
+
+/* 分区动作推导和普通挂载格式规则由模型层统一解释。 */
+Filesystem partition_effective_filesystem(const PartitionPlan *partition);
+bool filesystem_is_regular(Filesystem filesystem);
 uint64_t recommended_swap_bytes(void);
 void format_size(uint64_t bytes, char *buffer, size_t size);
 
