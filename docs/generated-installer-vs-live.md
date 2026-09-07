@@ -359,7 +359,7 @@ arch-chroot "$TARGET_ROOT" /bin/bash /root/.arch-install-chroot.sh
 
 当前 TUI 在所有会改变 Pacman 包集合的行上支持 Enter 查看实际包名，Space 才修改选项。弹窗直接读取当前 `packages.json`，因此预览内容与生成器数据源一致。
 
-当前 chroot 中除 KDE/Plasma 主软件包组外，软件安装统一经过 `pacman -S --needed --noconfirm`。KDE/Plasma 主组改用 `pacman -S --needed`，保留 Pacman 的提供者选择交互，例如允许用户在 `jack2` 与 `pipewire-jack` 之间选择；KDE 推荐包、输入法和其他桌面仍保持非交互安装。旧版 KDE、GNOME 和 Hyprland 的主安装命令都没有 `--noconfirm`，因此其他桌面相较旧版仍减少了安装过程中的 Pacman 交互。
+当前 chroot 中 KDE/Plasma、GNOME 和 Hyprland 三个主桌面软件包组都使用 `pacman -S --needed`，保留 Pacman 的包组、语言包和虚拟依赖提供者选择交互，例如允许用户在 `jack2` 与 `pipewire-jack` 之间选择。桌面推荐包、笔记本附加包、输入法、字体及其他软件仍统一经过 `pacman -S --needed --noconfirm`。这一点与旧版三个主桌面安装命令的交互行为一致，同时避免无关的后续软件包组反复询问。
 
 NVIDIA 处理也有差别：
 
@@ -522,7 +522,7 @@ Secure Boot 与临时本地镜像在当前实现中可以同时启用。此组�
 | `basic-software-installer.sh` | `bootstrap`、kernel、platform、laptop firmware | 选择提前进入计划；完整预解析后才写盘 |
 | `critical-component-installer.sh` | `core`、`laptop_tools` | 包名移到 JSON；统一安装函数 |
 | `extra-driver-installer.sh` | Intel/NVIDIA/Bluetooth 组 | 选择提前；NVIDIA 配置更不依赖默认文件的完整文本 |
-| `desktop-environment-installer.sh` | KDE/GNOME/Hyprland、recommended、input、fonts | 选择提前；Pacman 非交互；包组可编辑 |
+| `desktop-environment-installer.sh` | KDE/GNOME/Hyprland、recommended、input、fonts | 选择提前；主桌面组保留 Pacman 交互，其余组非交互；包组可编辑 |
 | `extra-software-installer.sh` | firewall、printer、archive、terminal、extra、desktop apps | 选择提前；TUI 可查看实际包列表 |
 | `basic-setter.sh` | `chroot-base.sh` | 时区、Locale、hostname 预先验证；密码重试有上限 |
 | `final-setter.sh` | `chroot-system.sh` | 使用 drop-in；自动写 wheel sudoers 并校验 |

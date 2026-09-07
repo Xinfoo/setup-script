@@ -39,7 +39,10 @@ install_desktop() {
             ;;
         gnome)
             # GNOME laptop integration, recommendations, and IBus are separate groups. / GNOME 笔记本集成、推荐软件和 IBus 使用独立软件包组。
-            pacman_install "${PKG_GNOME[@]}"
+            # Keep the GNOME package group interactive so language and provider selections remain available. / 保持 GNOME 包组交互安装，以便选择语言包和依赖提供者。
+            if (( ${#PKG_GNOME[@]} > 0 )); then
+                pacman -S --needed "${PKG_GNOME[@]}"
+            fi
             [[ "$IS_LAPTOP" != true ]] || pacman_install "${PKG_GNOME_LAPTOP[@]}"
             if [[ "$DESKTOP_RECOMMENDED" == true ]]; then
                 pacman_install "${PKG_GNOME_RECOMMENDED[@]}"
@@ -50,7 +53,10 @@ install_desktop() {
             ;;
         hyprland)
             # Hyprland uses greetd and ReGreet as the generated login environment. / Hyprland 使用 greetd 与 ReGreet 作为生成的登录环境。
-            pacman_install "${PKG_HYPRLAND[@]}"
+            # Keep the main desktop selection interactive for package groups and virtual providers. / 主桌面集合保持交互，以便处理包组及虚拟依赖提供者选择。
+            if (( ${#PKG_HYPRLAND[@]} > 0 )); then
+                pacman -S --needed "${PKG_HYPRLAND[@]}"
+            fi
             if [[ "$CHINESE_INPUT" == true ]]; then
                 pacman_install "${PKG_FCITX[@]}"
                 configure_fcitx_environment

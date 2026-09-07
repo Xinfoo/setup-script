@@ -423,6 +423,18 @@ static bool test_automatic_script(void)
                               "pacman -S --needed --noconfirm \"${PKG_KDE[@]}\"",
                               "noninteractive KDE provider selection");
     passed &= require_fragment(&script,
+                               "pacman -S --needed \"${PKG_GNOME[@]}\"",
+                               "interactive GNOME package-group selection");
+    passed &= forbid_fragment(&script,
+                              "pacman -S --needed --noconfirm \"${PKG_GNOME[@]}\"",
+                              "noninteractive GNOME package-group selection");
+    passed &= require_fragment(&script,
+                               "pacman -S --needed \"${PKG_HYPRLAND[@]}\"",
+                               "interactive Hyprland package selection");
+    passed &= forbid_fragment(&script,
+                              "pacman -S --needed --noconfirm \"${PKG_HYPRLAND[@]}\"",
+                              "noninteractive Hyprland package selection");
+    passed &= require_fragment(&script,
                                "readonly TARGET_DISK='/dev/nvme0n1'",
                                "the quoted target disk");
     passed &= require_fragment(&script,
