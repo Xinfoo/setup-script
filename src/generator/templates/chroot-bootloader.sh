@@ -25,6 +25,11 @@ configure_bootloader() {
             printf '\xff\xfe'
             printf 'SHIMX64.EFI,Linux Boot Manager,,Linux Boot Manager\r\n' | iconv -f UTF-8 -t UTF-16LE
         } > /boot/EFI/ARCH/BOOTX64.CSV
+    else
+        # Ordinary UEFI entries use a dedicated copy instead of bootctl's internal path. / 普通 UEFI 启动项使用专用副本，不直接引用 bootctl 的内部路径。
+        install -d /boot/EFI/ARCH
+        install -m 0644 -- /boot/EFI/systemd/systemd-bootx64.efi \
+            /boot/EFI/ARCH/SYSTEMD-BOOTX64.EFI
     fi
     # Physical CPU modes load microcode before the common initramfs. / 物理 CPU 模式会在通用 initramfs 前加载微码。
     if [[ -n "$MICROCODE_FILE" ]]; then

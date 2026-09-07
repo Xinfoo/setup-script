@@ -747,6 +747,16 @@ static bool test_automatic_script(void)
     passed &= require_fragment(&script,
                                "label='Linux Boot Manager'",
                                "the unified EFI boot entry label");
+    passed &= require_fragment(&script,
+                               "install -m 0644 -- /boot/EFI/systemd/systemd-bootx64.efi \\\n"
+                               "            /boot/EFI/ARCH/SYSTEMD-BOOTX64.EFI",
+                               "the ordinary systemd-boot vendor-directory copy");
+    passed &= require_fragment(&script,
+                               "loader='\\EFI\\ARCH\\SYSTEMD-BOOTX64.EFI'",
+                               "the ordinary vendor-directory EFI loader path");
+    passed &= forbid_fragment(&script,
+                              "loader='\\EFI\\systemd\\systemd-bootx64.efi'",
+                              "the former direct bootctl EFI loader path");
     passed &= forbid_fragment(&script,
                               "label='Arch Linux'",
                               "a Secure Boot-specific EFI entry label");

@@ -404,6 +404,8 @@ console-mode keep
 
 两版 fallback entry 都引用普通的 `initramfs-<kernel>.img`，不依赖新版 mkinitcpio 默认不再生成的 `*-fallback.img`。这里的 fallback 是内核参数回退项：用户以后修改普通 `arch.conf` 的内核参数时，可以保留 `arch-fallback.conf` 中安装器生成的已知可用参数作为恢复入口。
 
+非 Secure Boot 模式下，当前脚本会把 `bootctl` 安装的 `/boot/EFI/systemd/systemd-bootx64.efi` 复制为 `/boot/EFI/ARCH/SYSTEMD-BOOTX64.EFI`，固件启动项只引用后一个架构目录下的专用副本，不再直接指向 `/EFI/systemd`。
+
 ### 3.17 Secure Boot 签名
 
 当前 chroot 阶段先通过 `pacman -U` 安装已由用户确认信任、并经过结构检查的 `shim-signed` 包快照，然后删除临时副本，再安装 systemd-boot、创建目标目录和 `BOOTX64.CSV`；私钥不进入 chroot。chroot 完成后，外层 Live 脚本才执行签名：
@@ -443,7 +445,7 @@ Secure Boot 与临时本地镜像在当前实现中可以同时启用。此组�
 - 用 PARTUUID 标识 EFI 分区；
 - 先读取现有 `efibootmgr -v` 输出；
 - 同时匹配 label、PARTUUID 和 loader，避免创建重复项；
-- Secure Boot 使用 `\\EFI\\ARCH\\SHIMX64.EFI`，否则使用 systemd-boot 路径；
+- Secure Boot 使用 `\\EFI\\ARCH\\SHIMX64.EFI`，否则使用 `\\EFI\\ARCH\\SYSTEMD-BOOTX64.EFI`；
 - 两种模式的 NVRAM label 以及 shim `BOOTX64.CSV` 中的回退注册名称统一为 `Linux Boot Manager`。
 
 旧版在 chroot 中询问是否创建，然后用 `/boot` 设备路径的最后一个字符作为分区号。多位分区号会被截断，且没有重复项检查。旧命令中的主磁盘变量也没有加引号。

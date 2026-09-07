@@ -14,7 +14,7 @@ create_firmware_entry() {
     if [[ "$ENABLE_SECURE_BOOT" == true ]]; then
         loader='\EFI\ARCH\SHIMX64.EFI'
     else
-        loader='\EFI\systemd\systemd-bootx64.efi'
+        loader='\EFI\ARCH\SYSTEMD-BOOTX64.EFI'
     fi
     # Bind duplicate detection to the EFI filesystem's stable partition UUID. / 使用 EFI 文件系统的稳定分区 UUID 进行重复项检测。
     boot_partuuid=$(lsblk -dnro PARTUUID -- "$BOOT_DEVICE") ||

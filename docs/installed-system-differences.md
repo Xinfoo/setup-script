@@ -262,7 +262,7 @@ MODULES=(nvidia nvidia_modeset nvidia_uvm nvidia_drm)
 
 ### 9.1 普通启动项
 
-两边都会运行 `bootctl --no-variables install`，普通 `arch.conf` 的 title、kernel、microcode、root UUID 和内核参数相同，`loader.conf` 也相同。
+两边都会运行 `bootctl --no-variables install`，普通 `arch.conf` 的 title、kernel、microcode、root UUID 和内核参数相同，`loader.conf` 也相同。新版在非 Secure Boot 模式下会额外把 `/boot/EFI/systemd/systemd-bootx64.efi` 复制到 `/boot/EFI/ARCH/SYSTEMD-BOOTX64.EFI`，并让 NVRAM 项指向这个专用副本；旧版直接指向 `/EFI/systemd/systemd-bootx64.efi`。
 
 两边的 `arch-fallback.conf` 都与旧版设计保持一致，引用普通的 `initramfs-<kernel>.img`，不引用 `initramfs-<kernel>-fallback.img`。这个条目不是另一套 initramfs，而是内核参数回退入口：用户以后修改普通 `arch.conf` 时，可以保留 fallback entry 中安装器生成的参数，在普通项因参数错误无法启动时进入系统修复。
 
