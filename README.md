@@ -47,7 +47,7 @@ VS Code 调试配置默认使用 GDB：
 sudo pacman -S --needed gdb
 ```
 
-运行 TUI 时需要 `lsblk`（由 `util-linux` 提供）；从 Storage 页面启动手动分区器还需要同属 `util-linux` 的 `cfdisk`。生成的脚本面向 Arch Linux Live ISO，并使用该环境中的 `pacstrap`、`arch-chroot`、`sfdisk`、`reflector`、文件系统工具和 systemd-boot 等命令。网络模式通过 Reflector 生成按下载速度排序的中国大陆 HTTPS 镜像列表；本地镜像模式则从只读的 `F2FS-DATA` 仓库引导安装 nginx，再通过仅监听回环地址的临时 HTTP 镜像同时服务 `pacstrap` 和 chroot。
+运行 TUI 时需要 `lsblk`（由 `util-linux` 提供）；从 Storage 页面启动手动分区器还需要同属 `util-linux` 的 `cfdisk`。生成的脚本还使用 util-linux 的 `script` 创建带实时日志的伪终端，并面向具备 `pacstrap`、`arch-chroot`、`sfdisk`、`reflector`、文件系统工具和 systemd-boot 等命令的 Arch Linux Live ISO。网络模式通过 Reflector 生成按下载速度排序的中国大陆 HTTPS 镜像列表；本地镜像模式则从只读的 `F2FS-DATA` 仓库引导安装 nginx，再通过仅监听回环地址的临时 HTTP 镜像同时服务 `pacstrap` 和 chroot。
 
 ## 使用 CMake 构建
 
@@ -285,7 +285,7 @@ system
 /tmp/arch-install.XXXXXX.log
 ```
 
-也可以在运行前设置 `ARCH_INSTALL_LOG` 指定位置；为避免覆盖或符号链接攻击，该路径必须尚不存在。
+也可以在运行前设置 `ARCH_INSTALL_LOG` 指定位置；为避免覆盖或符号链接攻击，该路径必须尚不存在。脚本会通过 util-linux `script --return --flush` 在伪终端中重新启动自身，只记录终端输出而不启用输入日志：Pacman、`pacstrap` 和 chroot 内命令仍能识别真实 TTY，交互列表、下载进度和持续输出不会被 `tee` 管道缓冲。日志会保留 ANSI、回车覆盖等原始终端控制字符；`passwd` 关闭回显时输入的密码不会作为终端输出写入日志。
 
 执行流程为：
 

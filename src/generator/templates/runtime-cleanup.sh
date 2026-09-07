@@ -4,7 +4,7 @@
 
 cleanup() {
     local status=$?
-    local index logger_watchdog query_status cleanup_failed=false
+    local index query_status cleanup_failed=false
     local target_active=false mirror_active=false snapshot_active=false active_swaps=''
     local snapshot_remove_safe=true
     local mounted_source=''
@@ -184,29 +184,13 @@ cleanup() {
             cleanup_failed=true
         fi
     fi
-    # Drain the logger last so all cleanup diagnostics reach the log. / 最后结束日志进程，确保清理诊断全部写入日志。
+    # The outer PTY recorder remains active until this cleanup function exits. / 外层 PTY 记录器会一直工作到本清理函数退出。
     if [[ "$status" -eq 0 && "$cleanup_failed" == true ]]; then status=1; fi
-    if [[ -n "$LOG_TEE_PID" ]]; then
-        # Restore terminal output, then bound the wait for tee with a watchdog. / 恢复终端输出，并用 watchdog 限制等待 tee 的时间。
-        if [[ -n "$CONSOLE_FD" ]]; then exec 1>&$CONSOLE_FD 2>&1; fi
-        ( /usr/bin/sleep 5; kill -TERM "$LOG_TEE_PID" 2>/dev/null ) &
-        logger_watchdog=$!
-        if ! wait "$LOG_TEE_PID"; then
-            printf 'WARNING: the install logger exited unsuccessfully.\n' >&2
-            [[ "$status" -ne 0 ]] || status=1
-        fi
-        kill -TERM "$logger_watchdog" 2>/dev/null
-        # Reap the watchdog regardless of whether it already fired. / 无论 watchdog 是否已经触发都回收其子进程。
-        wait "$logger_watchdog" 2>/dev/null
-    fi
     # Report one final outcome after resource and logger cleanup. / 资源与日志清理结束后报告唯一的最终结果。
     if [[ "$status" -ne 0 ]]; then
         printf '\nInstallation failed (exit %d). Log: %s\n' "$status" "${LOG_FILE:-unavailable}" >&2
     elif [[ "$INSTALL_SUCCEEDED" == true ]]; then
         printf '\nTarget filesystems were unmounted cleanly. Log: %s\n' "$LOG_FILE"
     fi
-    # Close inherited descriptors explicitly before returning the original status. / 返回原始状态前显式关闭继承的描述符。
-    if [[ -n "$LOG_FD" ]]; then exec {LOG_FD}>&-; fi
-    if [[ -n "$CONSOLE_FD" ]]; then exec {CONSOLE_FD}>&-; fi
     exit "$status"
 }

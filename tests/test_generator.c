@@ -708,6 +708,21 @@ static bool test_automatic_script(void)
     passed &= require_fragment(&script, "cleanup() {", "the cleanup function");
     passed &= require_fragment(&script, "trap cleanup EXIT", "the cleanup trap");
     passed &= require_fragment(&script,
+                               "start_logged_session() {",
+                               "the outer PTY logging launcher");
+    passed &= require_fragment(&script,
+                               "--log-out \"/proc/self/fd/$log_fd\" -- /usr/bin/bash \"$script_path\"",
+                               "output-only PTY session logging");
+    passed &= require_fragment(&script,
+                               "exec /usr/bin/script --quiet --return --flush --force",
+                               "flushed PTY logging with child status propagation");
+    passed &= forbid_fragment(&script,
+                              "exec > >(/usr/bin/tee",
+                              "the former pipe-based logger");
+    passed &= forbid_fragment(&script,
+                              "LOG_TEE_PID",
+                              "the former tee child state");
+    passed &= require_fragment(&script,
                                "umount -R -- \"$TARGET_ROOT\"",
                                "target mount cleanup");
     passed &= require_fragment(&script,
