@@ -745,7 +745,7 @@ static bool test_automatic_script(void)
                                "${entry,,}\" == *\"${boot_partuuid,,}\"*",
                                "EFI entry matching by partition identity");
     passed &= require_fragment(&script,
-                               "label='Linux Boot Manager'",
+                               "label='Arch Linux Boot Manager'",
                                "the unified EFI boot entry label");
     passed &= require_fragment(&script,
                                "install -m 0644 -- /boot/EFI/systemd/systemd-bootx64.efi \\\n"
@@ -758,10 +758,10 @@ static bool test_automatic_script(void)
                               "loader='\\EFI\\systemd\\systemd-bootx64.efi'",
                               "the former direct bootctl EFI loader path");
     passed &= forbid_fragment(&script,
-                              "label='Arch Linux'",
-                              "a Secure Boot-specific EFI entry label");
+                              "label='Linux Boot Manager'",
+                              "the former EFI boot entry label");
     passed &= require_fragment(&script,
-                               "SHIMX64.EFI,Linux Boot Manager,,Linux Boot Manager\\r\\n",
+                               "SHIMX64.EFI,Arch Linux Boot Manager,,Arch Linux Boot Manager\\r\\n",
                                "the unified shim fallback entry label");
     passed &= forbid_fragment(&script,
                               "SHIMX64.EFI,Arch Linux,,Arch Linux Secure Boot",

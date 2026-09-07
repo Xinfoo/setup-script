@@ -23,7 +23,7 @@ configure_bootloader() {
         {
             # fallback.efi expects a BOM-prefixed UTF-16LE CSV description. / fallback.efi 需要带 BOM 的 UTF-16LE CSV 描述文件。
             printf '\xff\xfe'
-            printf 'SHIMX64.EFI,Linux Boot Manager,,Linux Boot Manager\r\n' | iconv -f UTF-8 -t UTF-16LE
+            printf 'SHIMX64.EFI,Arch Linux Boot Manager,,Arch Linux Boot Manager\r\n' | iconv -f UTF-8 -t UTF-16LE
         } > /boot/EFI/ARCH/BOOTX64.CSV
     else
         # Ordinary UEFI entries use a dedicated copy instead of bootctl's internal path. / 普通 UEFI 启动项使用专用副本，不直接引用 bootctl 的内部路径。

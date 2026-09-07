@@ -9,7 +9,7 @@ create_firmware_entry() {
     part_number=$(lsblk -dnro PARTN -- "$BOOT_DEVICE")
     [[ "$part_number" =~ ^[0-9]+$ ]] || die 'Cannot determine the EFI partition number.'
     # Keep the firmware-visible name identical in normal and Secure Boot modes. / 普通模式与 Secure Boot 模式使用相同的固件显示名称。
-    label='Linux Boot Manager'
+    label='Arch Linux Boot Manager'
     # Only the loader path changes with the selected boot chain. / 只有加载器路径随所选启动链变化。
     if [[ "$ENABLE_SECURE_BOOT" == true ]]; then
         loader='\EFI\ARCH\SHIMX64.EFI'
