@@ -417,6 +417,24 @@ static bool test_automatic_script(void)
                                "# Installation orchestration / 安装流程编排",
                                "a bilingual installation-flow section comment");
     passed &= require_fragment(&script,
+                               "pacman -S --needed \"${PKG_KDE[@]}\"",
+                               "interactive KDE provider selection");
+    passed &= forbid_fragment(&script,
+                              "pacman -S --needed --noconfirm \"${PKG_KDE[@]}\"",
+                              "noninteractive KDE provider selection");
+    passed &= require_fragment(&script,
+                               "pacman -S --needed \"${PKG_GNOME[@]}\"",
+                               "interactive GNOME package-group selection");
+    passed &= forbid_fragment(&script,
+                              "pacman -S --needed --noconfirm \"${PKG_GNOME[@]}\"",
+                              "noninteractive GNOME package-group selection");
+    passed &= require_fragment(&script,
+                               "pacman -S --needed \"${PKG_HYPRLAND[@]}\"",
+                               "interactive Hyprland package selection");
+    passed &= forbid_fragment(&script,
+                              "pacman -S --needed --noconfirm \"${PKG_HYPRLAND[@]}\"",
+                              "noninteractive Hyprland package selection");
+    passed &= require_fragment(&script,
                                "readonly TARGET_DISK='/dev/nvme0n1'",
                                "the quoted target disk");
     passed &= require_fragment(&script,
@@ -452,6 +470,16 @@ static bool test_automatic_script(void)
     passed &= forbid_fragment(&script,
                               "Type PREPARE to continue:",
                               "the former network repository confirmation");
+    passed &= require_fragment(&script,
+                               "[[ \"$USE_LOCAL_MIRROR\" == true ]] || require_command reflector",
+                               "Reflector required only for network installation");
+    passed &= require_fragment(&script,
+                               "reflector --country China --protocol https --sort rate \\\n"
+                               "            --save \"$WORK_DIR/network-mirrorlist\"",
+                               "rate-sorted China HTTPS mirror generation");
+    passed &= require_fragment(&script,
+                               "install -m 0644 -- \"$WORK_DIR/network-mirrorlist\" /etc/pacman.d/mirrorlist",
+                               "ranked network mirror activation");
     passed &= require_fragment(&script,
                                "confirm_secure_boot_package_source() {",
                                "the Secure Boot package trust confirmation");
@@ -680,6 +708,21 @@ static bool test_automatic_script(void)
     passed &= require_fragment(&script, "cleanup() {", "the cleanup function");
     passed &= require_fragment(&script, "trap cleanup EXIT", "the cleanup trap");
     passed &= require_fragment(&script,
+                               "start_logged_session() {",
+                               "the outer PTY logging launcher");
+    passed &= require_fragment(&script,
+                               "--log-out \"/proc/self/fd/$log_fd\" -- /usr/bin/bash \"$script_path\"",
+                               "output-only PTY session logging");
+    passed &= require_fragment(&script,
+                               "exec /usr/bin/script --quiet --return --flush --force",
+                               "flushed PTY logging with child status propagation");
+    passed &= forbid_fragment(&script,
+                              "exec > >(/usr/bin/tee",
+                              "the former pipe-based logger");
+    passed &= forbid_fragment(&script,
+                              "LOG_TEE_PID",
+                              "the former tee child state");
+    passed &= require_fragment(&script,
                                "umount -R -- \"$TARGET_ROOT\"",
                                "target mount cleanup");
     passed &= require_fragment(&script,
@@ -702,13 +745,23 @@ static bool test_automatic_script(void)
                                "${entry,,}\" == *\"${boot_partuuid,,}\"*",
                                "EFI entry matching by partition identity");
     passed &= require_fragment(&script,
-                               "label='Linux Boot Manager'",
+                               "label='Arch Linux Boot Manager'",
                                "the unified EFI boot entry label");
-    passed &= forbid_fragment(&script,
-                              "label='Arch Linux'",
-                              "a Secure Boot-specific EFI entry label");
     passed &= require_fragment(&script,
-                               "SHIMX64.EFI,Linux Boot Manager,,Linux Boot Manager\\r\\n",
+                               "install -m 0644 -- /boot/EFI/systemd/systemd-bootx64.efi \\\n"
+                               "            /boot/EFI/ARCH/SYSTEMD-BOOTX64.EFI",
+                               "the ordinary systemd-boot vendor-directory copy");
+    passed &= require_fragment(&script,
+                               "loader='\\EFI\\ARCH\\SYSTEMD-BOOTX64.EFI'",
+                               "the ordinary vendor-directory EFI loader path");
+    passed &= forbid_fragment(&script,
+                              "loader='\\EFI\\systemd\\systemd-bootx64.efi'",
+                              "the former direct bootctl EFI loader path");
+    passed &= forbid_fragment(&script,
+                              "label='Linux Boot Manager'",
+                              "the former EFI boot entry label");
+    passed &= require_fragment(&script,
+                               "SHIMX64.EFI,Arch Linux Boot Manager,,Arch Linux Boot Manager\\r\\n",
                                "the unified shim fallback entry label");
     passed &= forbid_fragment(&script,
                               "SHIMX64.EFI,Arch Linux,,Arch Linux Secure Boot",

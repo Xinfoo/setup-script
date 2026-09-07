@@ -8,9 +8,11 @@ preflight() {
     [[ "$EUID" -eq 0 ]] || die 'Run this installer as root.'
     [[ -d /sys/firmware/efi ]] || die 'The live environment was not booted in UEFI mode.'
     # Keep the dependency list explicit so failures occur before package or storage preparation. / 显式列出依赖，使缺失命令在软件源或存储准备前失败。
-    for command in bash cat tee sleep lsblk blockdev sed grep find findmnt wipefs sfdisk blkid mount umount swapon swapoff pacman pacstrap genfstab arch-chroot mktemp mkdir rmdir install cp rm chmod mv sync; do
+    for command in bash cat sleep lsblk blockdev sed grep find findmnt wipefs sfdisk blkid mount umount swapon swapoff pacman pacstrap genfstab arch-chroot mktemp mkdir rmdir install cp rm chmod mv sync; do
         require_command "$command"
     done
+    # Network installation ranks Chinese mirrors at runtime; local mode does not need Reflector. / 网络安装会在运行时对中国镜像测速排序；本地模式不依赖 Reflector。
+    [[ "$USE_LOCAL_MIRROR" == true ]] || require_command reflector
     # Establish a real, non-symlink target directory before validating storage. / 校验存储前建立真实且非符号链接的目标目录。
     [[ ! -L "$TARGET_ROOT" ]] || die "Target mountpoint must not be a symlink: $TARGET_ROOT"
     mkdir -p -- "$TARGET_ROOT"

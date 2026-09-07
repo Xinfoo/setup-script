@@ -95,7 +95,7 @@ umask 022
 
 它把脚本自身所在目录作为 Secure Boot 资产目录，把 `/mnt` 作为目标根目录。脚本创建权限为 `0700` 的私有工作目录，并尽早注册 `EXIT`、`INT`、`TERM`、`HUP` 清理逻辑。
 
-日志默认创建在 `/tmp/arch-install.XXXXXX.log`。也可以用 `ARCH_INSTALL_LOG` 指定路径，但指定路径必须尚不存在且不能是符号链接。标准输出和标准错误通过 `tee` 同时写入终端和日志；清理阶段最后才结束日志进程，以保留清理错误。
+日志默认创建在 `/tmp/arch-install.XXXXXX.log`。也可以用 `ARCH_INSTALL_LOG` 指定路径，但指定路径必须尚不存在且不能是符号链接。外层进程安全创建日志后，通过 util-linux `script --return --flush` 在伪终端中重新启动安装脚本；内层安装器的 stdin、stdout 和 stderr 都保持 TTY 语义，因此 Pacman 的包组/虚拟依赖选择列表、进度条和连续输出能够实时显示。记录器只启用输出日志，不启用 `--log-in` 或 `--log-io`；日志保留原始终端控制字符，`passwd` 关闭回显后的密码输入不会作为输出被记录。外层记录器一直存活到内层 EXIT 清理完成，并返回内层退出状态。
 
 旧版没有统一日志文件，也没有捕获所有退出路径的清理函数。
 
@@ -161,14 +161,14 @@ umask 022
 
 之后准备软件源：
 
-- 网络源不要求输入确认，直接刷新软件包数据库；
+- 网络源不要求输入确认，先由 Reflector 筛选中国大陆 HTTPS 镜像并按实测速率从高到低排序，再刷新软件包数据库；
 - 本地源先显示来源未经认证、软件包及 hook 可用 root 权限运行、Live 引导阶段临时关闭签名校验等风险，并列出检测到的设备、UUID 和父磁盘。用户选择 `yes` 后还必须精确输入 `ACCEPT USE LOCAL MIRROR`；目标系统仍使用标准签名策略。
 
 旧版使用默认 Yes 的 `[Y/n]` 确认，而且在选择目标磁盘之前就可能挂载本地镜像、修改 Live pacman 配置并启动 nginx。
 
 ### 3.5 软件源准备和完整软件包预解析
 
-网络模式直接运行 `pacman -Syy --noconfirm`，不再用 `ping baidu.com` 作为联网判据。网络可达但 ICMP 被禁用的环境不会因为 ping 失败被提前拒绝；真正的 pacman 操作失败仍会中止。
+网络模式先运行 `reflector --country China --protocol https --sort rate`，将非空结果安装为 Live mirrorlist，再运行 `pacman -Syy --noconfirm`。该临时列表会被 `pacstrap` 带入目标系统，供后续 chroot 软件安装使用；脚本退出时恢复 Live 原 mirrorlist。流程不再用 `ping baidu.com` 作为联网判据，网络可达但 ICMP 被禁用的环境不会因为 ping 失败被提前拒绝；Reflector 或真正的 Pacman 操作失败仍会中止。
 
 本地模式先以 `ro,nodev,nosuid,noexec` 挂载 `F2FS-DATA`，备份 Live 的 pacman 配置，并临时用 `file://` 和 `SigLevel = Never` 安装 `local_mirror_live` 组中的 nginx。随后启动只监听 `127.0.0.1:2304` 的独立 nginx 配置，立即恢复 Live 原有 `pacman.conf`，将 mirrorlist 切换到 `http://127.0.0.1:2304/$repo/os/$arch` 并重新刷新数据库。由此只有 nginx 引导安装绕过验签，后续 HTTP 操作恢复 Live 的原签名策略。
 
@@ -359,7 +359,7 @@ arch-chroot "$TARGET_ROOT" /bin/bash /root/.arch-install-chroot.sh
 
 当前 TUI 在所有会改变 Pacman 包集合的行上支持 Enter 查看实际包名，Space 才修改选项。弹窗直接读取当前 `packages.json`，因此预览内容与生成器数据源一致。
 
-当前 chroot 中的软件安装统一经过 `pacman -S --needed --noconfirm`。旧版 KDE、GNOME 和 Hyprland 的主安装命令没有 `--noconfirm`，可能在中途再次进入 pacman 交互。
+当前 chroot 中 KDE/Plasma、GNOME 和 Hyprland 三个主桌面软件包组都使用 `pacman -S --needed`，保留 Pacman 的包组、语言包和虚拟依赖提供者选择交互，例如允许用户在 `jack2` 与 `pipewire-jack` 之间选择。桌面推荐包、笔记本附加包、输入法、字体及其他软件仍统一经过 `pacman -S --needed --noconfirm`。这一点与旧版三个主桌面安装命令的交互行为一致，同时避免无关的后续软件包组反复询问。
 
 NVIDIA 处理也有差别：
 
@@ -404,6 +404,8 @@ console-mode keep
 
 两版 fallback entry 都引用普通的 `initramfs-<kernel>.img`，不依赖新版 mkinitcpio 默认不再生成的 `*-fallback.img`。这里的 fallback 是内核参数回退项：用户以后修改普通 `arch.conf` 的内核参数时，可以保留 `arch-fallback.conf` 中安装器生成的已知可用参数作为恢复入口。
 
+非 Secure Boot 模式下，当前脚本会把 `bootctl` 安装的 `/boot/EFI/systemd/systemd-bootx64.efi` 复制为 `/boot/EFI/ARCH/SYSTEMD-BOOTX64.EFI`，固件启动项只引用后一个架构目录下的专用副本，不再直接指向 `/EFI/systemd`。
+
 ### 3.17 Secure Boot 签名
 
 当前 chroot 阶段先通过 `pacman -U` 安装已由用户确认信任、并经过结构检查的 `shim-signed` 包快照，然后删除临时副本，再安装 systemd-boot、创建目标目录和 `BOOTX64.CSV`；私钥不进入 chroot。chroot 完成后，外层 Live 脚本才执行签名：
@@ -443,8 +445,8 @@ Secure Boot 与临时本地镜像在当前实现中可以同时启用。此组�
 - 用 PARTUUID 标识 EFI 分区；
 - 先读取现有 `efibootmgr -v` 输出；
 - 同时匹配 label、PARTUUID 和 loader，避免创建重复项；
-- Secure Boot 使用 `\\EFI\\ARCH\\SHIMX64.EFI`，否则使用 systemd-boot 路径；
-- 两种模式的 NVRAM label 以及 shim `BOOTX64.CSV` 中的回退注册名称统一为 `Linux Boot Manager`。
+- Secure Boot 使用 `\\EFI\\ARCH\\SHIMX64.EFI`，否则使用 `\\EFI\\ARCH\\SYSTEMD-BOOTX64.EFI`；
+- 两种模式的 NVRAM label 以及 shim `BOOTX64.CSV` 中的回退注册名称统一为 `Arch Linux Boot Manager`。
 
 旧版在 chroot 中询问是否创建，然后用 `/boot` 设备路径的最后一个字符作为分区号。多位分区号会被截断，且没有重复项检查。旧命令中的主磁盘变量也没有加引号。
 
@@ -522,7 +524,7 @@ Secure Boot 与临时本地镜像在当前实现中可以同时启用。此组�
 | `basic-software-installer.sh` | `bootstrap`、kernel、platform、laptop firmware | 选择提前进入计划；完整预解析后才写盘 |
 | `critical-component-installer.sh` | `core`、`laptop_tools` | 包名移到 JSON；统一安装函数 |
 | `extra-driver-installer.sh` | Intel/NVIDIA/Bluetooth 组 | 选择提前；NVIDIA 配置更不依赖默认文件的完整文本 |
-| `desktop-environment-installer.sh` | KDE/GNOME/Hyprland、recommended、input、fonts | 选择提前；Pacman 非交互；包组可编辑 |
+| `desktop-environment-installer.sh` | KDE/GNOME/Hyprland、recommended、input、fonts | 选择提前；主桌面组保留 Pacman 交互，其余组非交互；包组可编辑 |
 | `extra-software-installer.sh` | firewall、printer、archive、terminal、extra、desktop apps | 选择提前；TUI 可查看实际包列表 |
 | `basic-setter.sh` | `chroot-base.sh` | 时区、Locale、hostname 预先验证；密码重试有上限 |
 | `final-setter.sh` | `chroot-system.sh` | 使用 drop-in；自动写 wheel sudoers 并校验 |
@@ -553,7 +555,7 @@ Secure Boot 与临时本地镜像在当前实现中可以同时启用。此组�
 2. 验证它是 F2FS、有 UUID、有父磁盘，并记录父盘序列号和容量；
 3. 检查其设备祖先，拒绝位于任何参与安装的磁盘上；
 4. 检查未挂载、非活动 Swap、无 holder；
-5. 要求精确输入设备和 UUID 才执行 nginx 引导；
+5. 显示镜像信任风险和检测到的设备身份，要求先选择 `yes`，再精确输入 `ACCEPT USE LOCAL MIRROR`；
 6. 以 `ro,nodev,nosuid,noexec` 挂载；
 7. 备份 Live `pacman.conf` 和 mirrorlist；
 8. 临时用 `file://` 和 `SigLevel = Never` 安装 `local_mirror_live` 组中的 nginx；

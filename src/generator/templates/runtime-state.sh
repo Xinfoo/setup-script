@@ -24,10 +24,6 @@ KEEP_PROBE_ACTIVE=false
 SECURE_BOOT_ASSET_SNAPSHOT=''
 SECURE_BOOT_SNAPSHOT_MOUNTED=false
 SECURE_BOOT_SIGNING_COMPLETE=false
-# Logging descriptors remain separate so cleanup messages can reach both destinations. / 日志描述符相互独立，使清理信息能到达控制台和日志。
-CONSOLE_FD=''
-LOG_FD=''
-LOG_TEE_PID=''
 # Track reversible runtime actions in the order they are created. / 按创建顺序记录可逆的运行时操作。
 SWAPS_TO_DISABLE=()
 SECURE_BOOT_STAGED_FILES=()

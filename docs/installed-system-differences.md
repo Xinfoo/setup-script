@@ -262,13 +262,13 @@ MODULES=(nvidia nvidia_modeset nvidia_uvm nvidia_drm)
 
 ### 9.1 普通启动项
 
-两边都会运行 `bootctl --no-variables install`，普通 `arch.conf` 的 title、kernel、microcode、root UUID 和内核参数相同，`loader.conf` 也相同。
+两边都会运行 `bootctl --no-variables install`，普通 `arch.conf` 的 title、kernel、microcode、root UUID 和内核参数相同，`loader.conf` 也相同。新版在非 Secure Boot 模式下会额外把 `/boot/EFI/systemd/systemd-bootx64.efi` 复制到 `/boot/EFI/ARCH/SYSTEMD-BOOTX64.EFI`，并让 NVRAM 项指向这个专用副本；旧版直接指向 `/EFI/systemd/systemd-bootx64.efi`。
 
 两边的 `arch-fallback.conf` 都与旧版设计保持一致，引用普通的 `initramfs-<kernel>.img`，不引用 `initramfs-<kernel>-fallback.img`。这个条目不是另一套 initramfs，而是内核参数回退入口：用户以后修改普通 `arch.conf` 时，可以保留 fallback entry 中安装器生成的参数，在普通项因参数错误无法启动时进入系统修复。
 
 ### 9.2 EFI NVRAM
 
-新版无论是否启用 Secure Boot，EFI NVRAM label 都统一为 `Linux Boot Manager`；Secure Boot 的 shim `BOOTX64.CSV` 回退注册名称也使用该名称。旧版普通模式使用 `Linux Boot Manager`，Secure Boot 模式则使用 `Arch Linux`，其 CSV 描述中还包含 `Arch Linux Secure Boot`。两版仍根据模式选择不同的 loader 路径。
+新版无论是否启用 Secure Boot，EFI NVRAM label 都统一为 `Arch Linux Boot Manager`；Secure Boot 的 shim `BOOTX64.CSV` 回退注册名称也使用该名称。旧版普通模式使用 `Linux Boot Manager`，Secure Boot 模式则使用 `Arch Linux`，其 CSV 描述中还包含 `Arch Linux Secure Boot`。两版仍根据模式选择不同的 loader 路径。
 
 已有启动项或多位分区号会导致不同结果：
 
@@ -308,7 +308,7 @@ MODULES=(nvidia nvidia_modeset nvidia_uvm nvidia_drm)
 
 ### 11.1 最终 mirrorlist
 
-关闭中国镜像且不使用本地镜像时，两边通常保留 pacstrap 从同一 Live 环境带入的 mirrorlist，因此没有有意差异。
+关闭永久中国镜像且不使用本地镜像时，新版会先由 Reflector 筛选中国大陆 HTTPS 镜像并按实测速率排序，`pacstrap` 会把该列表带入目标系统；旧版通常直接沿用 Live 环境原有 mirrorlist。因此这一选择路径的最终 `/etc/pacman.d/mirrorlist` 现在存在有意差异。
 
 开启中国镜像时，新版已恢复旧版完整内容：两边都写入相同的三行 banner、21 个服务器及相同排列顺序。因此相同选择下，最终 `/etc/pacman.d/mirrorlist` 没有有意差异。
 

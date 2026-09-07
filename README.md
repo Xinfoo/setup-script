@@ -47,7 +47,7 @@ VS Code 调试配置默认使用 GDB：
 sudo pacman -S --needed gdb
 ```
 
-运行 TUI 时需要 `lsblk`（由 `util-linux` 提供）；从 Storage 页面启动手动分区器还需要同属 `util-linux` 的 `cfdisk`。生成的脚本面向 Arch Linux Live ISO，并使用该环境中的 `pacstrap`、`arch-chroot`、`sfdisk`、文件系统工具和 systemd-boot 等命令。本地镜像模式从只读的 `F2FS-DATA` 仓库引导安装 nginx，再通过仅监听回环地址的临时 HTTP 镜像同时服务 `pacstrap` 和 chroot。
+运行 TUI 时需要 `lsblk`（由 `util-linux` 提供）；从 Storage 页面启动手动分区器还需要同属 `util-linux` 的 `cfdisk`。生成的脚本还使用 util-linux 的 `script` 创建带实时日志的伪终端，并面向具备 `pacstrap`、`arch-chroot`、`sfdisk`、`reflector`、文件系统工具和 systemd-boot 等命令的 Arch Linux Live ISO。网络模式通过 Reflector 生成按下载速度排序的中国大陆 HTTPS 镜像列表；本地镜像模式则从只读的 `F2FS-DATA` 仓库引导安装 nginx，再通过仅监听回环地址的临时 HTTP 镜像同时服务 `pacstrap` 和 chroot。
 
 ## 使用 CMake 构建
 
@@ -285,14 +285,14 @@ system
 /tmp/arch-install.XXXXXX.log
 ```
 
-也可以在运行前设置 `ARCH_INSTALL_LOG` 指定位置；为避免覆盖或符号链接攻击，该路径必须尚不存在。
+也可以在运行前设置 `ARCH_INSTALL_LOG` 指定位置；为避免覆盖或符号链接攻击，该路径必须尚不存在。脚本会通过 util-linux `script --return --flush` 在伪终端中重新启动自身，只记录终端输出而不启用输入日志：Pacman、`pacstrap` 和 chroot 内命令仍能识别真实 TTY，交互列表、下载进度和持续输出不会被 `tee` 管道缓冲。日志会保留 ANSI、回车覆盖等原始终端控制字符；`passwd` 关闭回显时输入的密码不会作为终端输出写入日志。
 
 执行流程为：
 
 1. 检查 root、UEFI、命令依赖和 EFI variables；
 2. 核对每个参与安装的目标都是整块磁盘，并比较容量、型号、非空序列号与 GPT 类型；
 3. 核对现有分区的父磁盘、编号、起始扇区、容量、PARTUUID 和 GPT 类型；`KEEP` 还会核对文件系统 UUID 并做只读挂载探测；
-4. 显示存储表；网络源直接刷新 Live 包数据库，本地源则先显示风险和检测到的设备身份，要求选择 `yes/no` 并精确输入 `ACCEPT USE LOCAL MIRROR`，随后预先解析完整软件包集；
+4. 显示存储表；网络源先由 Reflector 生成按速度排序的中国大陆 HTTPS 镜像列表并刷新 Live 包数据库，本地源则先显示风险和检测到的设备身份，要求选择 `yes/no` 并精确输入 `ACCEPT USE LOCAL MIRROR`，随后预先解析完整软件包集；
 5. 软件源就绪后，以表格列出每个将被擦除、重新分区、格式化、挂载写入或启用为 Swap 的块设备及其父磁盘；用户先选择 `yes/no`，选择 `yes` 后还必须精确输入 `CONFIRM EXECUTE`，然后立即再做一次所有参与磁盘的身份核对；
 6. 分别在选择了引导式布局的磁盘上重建 GPT 并核对新分区；现有分区模式不写对应磁盘的分区表；
 7. 只格式化 `FORMAT`，随后按挂载路径顺序挂载到 `/mnt` 并启用指定 Swap；
@@ -507,6 +507,8 @@ git show legacy:live/chroot-setup.sh
 - [相同选项下两者安装出的最终系统差异](docs/installed-system-differences.md)
 
 ## 已知限制
+
+项目当前阶段主要面向中国大陆用户，软件源选择和 Locale 处理仍包含面向该使用环境的硬编码假设，尚未完整抽象为可配置策略。这些国际化与软件源适配问题计划在后续更新中逐步解决。
 
 - 只支持 UEFI + GPT + systemd-boot；
 - 最多允许八块磁盘参与同一安装方案；
