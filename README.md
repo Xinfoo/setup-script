@@ -392,7 +392,7 @@ explicit execution
 
 本地镜像模式要求恰好一个标签为 `F2FS-DATA` 的分区，其中包含 `repo/archlinux`。脚本会拒绝使用任意参与安装磁盘上的分区作为本地镜像。
 
-脚本会显示本地镜像内容未经认证、软件包及 hook 可用 root 权限运行等风险，以及检测到的设备、UUID 和父磁盘；用户先选择 `yes/no`，选择 `yes` 后还必须精确输入 `ACCEPT USE LOCAL MIRROR`。随后脚本再次核对镜像身份，确认该分区是目标盘之外、未使用的 F2FS，然后以 `ro,nodev,nosuid,noexec` 挂载。Live 环境临时使用 `file://` 和 `SigLevel = Never` 安装 `local_mirror_live` 组中的 nginx；nginx 启动后立即恢复原签名策略，并将软件源切换为仅监听 `127.0.0.1:2304` 的 HTTP 镜像。`pacstrap` 和 chroot 都通过该 HTTP 地址工作，目标 `pacman.conf` 始终保持标准签名策略。chroot 写入永久镜像后，脚本停止 nginx，并在退出清理时恢复 Live 配置、卸载镜像分区。
+脚本会显示本地镜像内容未经认证、软件包及 hook 可用 root 权限运行等风险，以及检测到的设备、UUID 和父磁盘；用户先选择 `yes/no`，选择 `yes` 后还必须精确输入 `ACCEPT USE LOCAL MIRROR`。随后脚本再次核对镜像身份，确认该分区是目标盘之外、未使用的 F2FS，然后以 `ro,nodev,nosuid,noexec` 挂载。Live 环境临时使用 `file://` 和 `SigLevel = Never` 安装 `local_mirror_live` 组中的 nginx；nginx 启动后立即恢复原签名策略，将软件源切换为仅监听 `127.0.0.1:2304` 的 HTTP 镜像，并显式初始化、填充 Arch Linux 的 Live Pacman 密钥环。`pacstrap` 和 chroot 都通过该 HTTP 地址工作，目标 `pacman.conf` 始终保持标准签名策略。chroot 写入永久镜像后，脚本停止 nginx，并在退出清理时恢复 Live 配置、卸载镜像分区。
 
 ## Secure Boot
 

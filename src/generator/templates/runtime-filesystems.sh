@@ -193,4 +193,7 @@ NGINX_CONFIG
     cp -a -- "$WORK_DIR/host-pacman.conf" /etc/pacman.conf
     printf '%s\n' 'Server = http://127.0.0.1:2304/$repo/os/$arch' > /etc/pacman.d/mirrorlist
     pacman -Syy --noconfirm
+    # ArchISO may not have populated its transient Pacman keyring yet; initialize it explicitly before signed Live installs. / ArchISO 的临时 Pacman 密钥环此时可能尚未填充；在 Live 环境验签安装前显式初始化。
+    pacman-key --init
+    pacman-key --populate archlinux
 }

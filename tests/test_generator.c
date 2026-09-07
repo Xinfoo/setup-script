@@ -471,7 +471,7 @@ static bool test_automatic_script(void)
                               "Type PREPARE to continue:",
                               "the former network repository confirmation");
     passed &= require_fragment(&script,
-                               "[[ \"$USE_LOCAL_MIRROR\" == true ]] || require_command reflector",
+                               "else\n        require_command reflector\n    fi",
                                "Reflector required only for network installation");
     passed &= require_fragment(&script,
                                "reflector --country China --protocol https --sort rate \\\n"
@@ -933,6 +933,9 @@ static bool test_local_mirror_script(void)
     passed &= require_fragment(&script,
                                "Server = http://127.0.0.1:2304/$repo/os/$arch",
                                "the HTTP mirror inherited by the target");
+    passed &= require_fragment(&script,
+                               "require_command pacman-key",
+                               "the local-mirror keyring tool preflight");
     passed &= require_order(&script,
                             "Server = file:///run/media/root/F2FS-DATA/repo/archlinux/",
                             "pacman -S --needed --noconfirm \"${LOCAL_MIRROR_LIVE_PACKAGES[@]}\"",
@@ -941,6 +944,18 @@ static bool test_local_mirror_script(void)
                             "pacman -S --needed --noconfirm \"${LOCAL_MIRROR_LIVE_PACKAGES[@]}\"",
                             "Server = http://127.0.0.1:2304/$repo/os/$arch",
                             "the switch to HTTP after nginx installation");
+    passed &= require_order(&script,
+                            "Server = http://127.0.0.1:2304/$repo/os/$arch",
+                            "pacman-key --init",
+                            "Live keyring initialization after the HTTP switch");
+    passed &= require_order(&script,
+                            "pacman-key --init",
+                            "pacman-key --populate archlinux",
+                            "explicit Arch keyring population");
+    passed &= require_order(&script,
+                            "pacman-key --populate archlinux",
+                            "phase 'Installing the Live signing tool'",
+                            "keyring population before signed Live packages");
     passed &= require_order(&script,
                             "arch-chroot \"$TARGET_ROOT\"",
                             "        stop_local_mirror_server\n",

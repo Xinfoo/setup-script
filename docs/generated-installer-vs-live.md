@@ -170,7 +170,7 @@ umask 022
 
 网络模式先运行 `reflector --country China --protocol https --sort rate`，将非空结果安装为 Live mirrorlist，再运行 `pacman -Syy --noconfirm`。该临时列表会被 `pacstrap` 带入目标系统，供后续 chroot 软件安装使用；脚本退出时恢复 Live 原 mirrorlist。流程不再用 `ping baidu.com` 作为联网判据，网络可达但 ICMP 被禁用的环境不会因为 ping 失败被提前拒绝；Reflector 或真正的 Pacman 操作失败仍会中止。
 
-本地模式先以 `ro,nodev,nosuid,noexec` 挂载 `F2FS-DATA`，备份 Live 的 pacman 配置，并临时用 `file://` 和 `SigLevel = Never` 安装 `local_mirror_live` 组中的 nginx。随后启动只监听 `127.0.0.1:2304` 的独立 nginx 配置，立即恢复 Live 原有 `pacman.conf`，将 mirrorlist 切换到 `http://127.0.0.1:2304/$repo/os/$arch` 并重新刷新数据库。由此只有 nginx 引导安装绕过验签，后续 HTTP 操作恢复 Live 的原签名策略。
+本地模式先以 `ro,nodev,nosuid,noexec` 挂载 `F2FS-DATA`，备份 Live 的 pacman 配置，并临时用 `file://` 和 `SigLevel = Never` 安装 `local_mirror_live` 组中的 nginx。随后启动只监听 `127.0.0.1:2304` 的独立 nginx 配置，立即恢复 Live 原有 `pacman.conf`，将 mirrorlist 切换到 `http://127.0.0.1:2304/$repo/os/$arch` 并重新刷新数据库。刷新后显式执行 `pacman-key --init` 和 `pacman-key --populate archlinux`，确保 ArchISO 的临时 Live 密钥环可用于后续签名验证。由此只有 nginx 引导安装绕过验签，后续 HTTP 操作恢复 Live 的原签名策略。
 
 随后脚本使用 `pacman -Sp --needed --noconfirm` 预解析本次方案的完整软件包并集。桌面、驱动和可选软件如果在仓库中不可解析，会在任何磁盘写入之前失败。
 
@@ -560,10 +560,11 @@ Secure Boot 与临时本地镜像在当前实现中可以同时启用。此组�
 7. 备份 Live `pacman.conf` 和 mirrorlist；
 8. 临时用 `file://` 和 `SigLevel = Never` 安装 `local_mirror_live` 组中的 nginx；
 9. nginx 使用工作目录中的独立配置并只监听 `127.0.0.1:2304`，不修改系统 nginx 配置；
-10. nginx 启动后立即恢复 Live 原有签名策略，后续 pacstrap 通过 HTTP 工作；
-11. 目标 chroot 通过 localhost HTTP 使用镜像，不修改目标 `pacman.conf`，不建立目标 bind mount；
-12. 内层流程结束时写入永久 China mirror，返回 Live 后停止 nginx；
-13. EXIT 清理也会停止本次 nginx、恢复 Live pacman 配置并卸载源分区。
+10. nginx 启动后立即恢复 Live 原有签名策略并刷新数据库；
+11. 显式初始化 Live Pacman 密钥环并只填充 Arch Linux 密钥，为后续签名验证做好准备；
+12. 目标 chroot 通过 localhost HTTP 使用镜像，不修改目标 `pacman.conf`，不建立目标 bind mount；
+13. 内层流程结束时写入永久 China mirror，返回 Live 后停止 nginx；
+14. EXIT 清理也会停止本次 nginx、恢复 Live pacman 配置并卸载源分区。
 
 当前验证规则不允许“临时本地镜像开启但目标 China mirrors 关闭”的有效方案，这是为了避免目标系统保留重启后不存在的 localhost HTTP 地址；它不限制本地镜像与 Secure Boot 同时使用。
 
