@@ -24,7 +24,11 @@ install_desktop() {
     case "$DESKTOP" in
         kde)
             # KDE recommendations and Fcitx remain independently selectable. / KDE 推荐软件与 Fcitx 可独立选择。
-            pacman_install "${PKG_KDE[@]}"
+            # Keep Plasma interactive so Pacman can ask which virtual-dependency provider to install. / 保持 Plasma 交互安装，使 Pacman 可以询问虚拟依赖的提供者。
+            # In particular, the operator must be able to choose between jack2 and pipewire-jack. / 尤其需要允许操作者在 jack2 与 pipewire-jack 之间选择。
+            if (( ${#PKG_KDE[@]} > 0 )); then
+                pacman -S --needed "${PKG_KDE[@]}"
+            fi
             if [[ "$DESKTOP_RECOMMENDED" == true ]]; then
                 pacman_install "${PKG_KDE_RECOMMENDED[@]}"
             fi

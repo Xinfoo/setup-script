@@ -359,7 +359,7 @@ arch-chroot "$TARGET_ROOT" /bin/bash /root/.arch-install-chroot.sh
 
 当前 TUI 在所有会改变 Pacman 包集合的行上支持 Enter 查看实际包名，Space 才修改选项。弹窗直接读取当前 `packages.json`，因此预览内容与生成器数据源一致。
 
-当前 chroot 中的软件安装统一经过 `pacman -S --needed --noconfirm`。旧版 KDE、GNOME 和 Hyprland 的主安装命令没有 `--noconfirm`，可能在中途再次进入 pacman 交互。
+当前 chroot 中除 KDE/Plasma 主软件包组外，软件安装统一经过 `pacman -S --needed --noconfirm`。KDE/Plasma 主组改用 `pacman -S --needed`，保留 Pacman 的提供者选择交互，例如允许用户在 `jack2` 与 `pipewire-jack` 之间选择；KDE 推荐包、输入法和其他桌面仍保持非交互安装。旧版 KDE、GNOME 和 Hyprland 的主安装命令都没有 `--noconfirm`，因此其他桌面相较旧版仍减少了安装过程中的 Pacman 交互。
 
 NVIDIA 处理也有差别：
 

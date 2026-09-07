@@ -417,6 +417,12 @@ static bool test_automatic_script(void)
                                "# Installation orchestration / 安装流程编排",
                                "a bilingual installation-flow section comment");
     passed &= require_fragment(&script,
+                               "pacman -S --needed \"${PKG_KDE[@]}\"",
+                               "interactive KDE provider selection");
+    passed &= forbid_fragment(&script,
+                              "pacman -S --needed --noconfirm \"${PKG_KDE[@]}\"",
+                              "noninteractive KDE provider selection");
+    passed &= require_fragment(&script,
                                "readonly TARGET_DISK='/dev/nvme0n1'",
                                "the quoted target disk");
     passed &= require_fragment(&script,
