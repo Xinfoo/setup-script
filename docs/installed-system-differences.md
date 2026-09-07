@@ -308,7 +308,7 @@ MODULES=(nvidia nvidia_modeset nvidia_uvm nvidia_drm)
 
 ### 11.1 最终 mirrorlist
 
-关闭中国镜像且不使用本地镜像时，两边通常保留 pacstrap 从同一 Live 环境带入的 mirrorlist，因此没有有意差异。
+关闭永久中国镜像且不使用本地镜像时，新版会先由 Reflector 筛选中国大陆 HTTPS 镜像并按实测速率排序，`pacstrap` 会把该列表带入目标系统；旧版通常直接沿用 Live 环境原有 mirrorlist。因此这一选择路径的最终 `/etc/pacman.d/mirrorlist` 现在存在有意差异。
 
 开启中国镜像时，新版已恢复旧版完整内容：两边都写入相同的三行 banner、21 个服务器及相同排列顺序。因此相同选择下，最终 `/etc/pacman.d/mirrorlist` 没有有意差异。
 

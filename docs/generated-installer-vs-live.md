@@ -161,14 +161,14 @@ umask 022
 
 之后准备软件源：
 
-- 网络源不要求输入确认，直接刷新软件包数据库；
+- 网络源不要求输入确认，先由 Reflector 筛选中国大陆 HTTPS 镜像并按实测速率从高到低排序，再刷新软件包数据库；
 - 本地源先显示来源未经认证、软件包及 hook 可用 root 权限运行、Live 引导阶段临时关闭签名校验等风险，并列出检测到的设备、UUID 和父磁盘。用户选择 `yes` 后还必须精确输入 `ACCEPT USE LOCAL MIRROR`；目标系统仍使用标准签名策略。
 
 旧版使用默认 Yes 的 `[Y/n]` 确认，而且在选择目标磁盘之前就可能挂载本地镜像、修改 Live pacman 配置并启动 nginx。
 
 ### 3.5 软件源准备和完整软件包预解析
 
-网络模式直接运行 `pacman -Syy --noconfirm`，不再用 `ping baidu.com` 作为联网判据。网络可达但 ICMP 被禁用的环境不会因为 ping 失败被提前拒绝；真正的 pacman 操作失败仍会中止。
+网络模式先运行 `reflector --country China --protocol https --sort rate`，将非空结果安装为 Live mirrorlist，再运行 `pacman -Syy --noconfirm`。该临时列表会被 `pacstrap` 带入目标系统，供后续 chroot 软件安装使用；脚本退出时恢复 Live 原 mirrorlist。流程不再用 `ping baidu.com` 作为联网判据，网络可达但 ICMP 被禁用的环境不会因为 ping 失败被提前拒绝；Reflector 或真正的 Pacman 操作失败仍会中止。
 
 本地模式先以 `ro,nodev,nosuid,noexec` 挂载 `F2FS-DATA`，备份 Live 的 pacman 配置，并临时用 `file://` 和 `SigLevel = Never` 安装 `local_mirror_live` 组中的 nginx。随后启动只监听 `127.0.0.1:2304` 的独立 nginx 配置，立即恢复 Live 原有 `pacman.conf`，将 mirrorlist 切换到 `http://127.0.0.1:2304/$repo/os/$arch` 并重新刷新数据库。由此只有 nginx 引导安装绕过验签，后续 HTTP 操作恢复 Live 的原签名策略。
 
@@ -553,7 +553,7 @@ Secure Boot 与临时本地镜像在当前实现中可以同时启用。此组�
 2. 验证它是 F2FS、有 UUID、有父磁盘，并记录父盘序列号和容量；
 3. 检查其设备祖先，拒绝位于任何参与安装的磁盘上；
 4. 检查未挂载、非活动 Swap、无 holder；
-5. 要求精确输入设备和 UUID 才执行 nginx 引导；
+5. 显示镜像信任风险和检测到的设备身份，要求先选择 `yes`，再精确输入 `ACCEPT USE LOCAL MIRROR`；
 6. 以 `ro,nodev,nosuid,noexec` 挂载；
 7. 备份 Live `pacman.conf` 和 mirrorlist；
 8. 临时用 `file://` 和 `SigLevel = Never` 安装 `local_mirror_live` 组中的 nginx；

@@ -47,7 +47,7 @@ VS Code 调试配置默认使用 GDB：
 sudo pacman -S --needed gdb
 ```
 
-运行 TUI 时需要 `lsblk`（由 `util-linux` 提供）；从 Storage 页面启动手动分区器还需要同属 `util-linux` 的 `cfdisk`。生成的脚本面向 Arch Linux Live ISO，并使用该环境中的 `pacstrap`、`arch-chroot`、`sfdisk`、文件系统工具和 systemd-boot 等命令。本地镜像模式从只读的 `F2FS-DATA` 仓库引导安装 nginx，再通过仅监听回环地址的临时 HTTP 镜像同时服务 `pacstrap` 和 chroot。
+运行 TUI 时需要 `lsblk`（由 `util-linux` 提供）；从 Storage 页面启动手动分区器还需要同属 `util-linux` 的 `cfdisk`。生成的脚本面向 Arch Linux Live ISO，并使用该环境中的 `pacstrap`、`arch-chroot`、`sfdisk`、`reflector`、文件系统工具和 systemd-boot 等命令。网络模式通过 Reflector 生成按下载速度排序的中国大陆 HTTPS 镜像列表；本地镜像模式则从只读的 `F2FS-DATA` 仓库引导安装 nginx，再通过仅监听回环地址的临时 HTTP 镜像同时服务 `pacstrap` 和 chroot。
 
 ## 使用 CMake 构建
 
@@ -292,7 +292,7 @@ system
 1. 检查 root、UEFI、命令依赖和 EFI variables；
 2. 核对每个参与安装的目标都是整块磁盘，并比较容量、型号、非空序列号与 GPT 类型；
 3. 核对现有分区的父磁盘、编号、起始扇区、容量、PARTUUID 和 GPT 类型；`KEEP` 还会核对文件系统 UUID 并做只读挂载探测；
-4. 显示存储表；网络源直接刷新 Live 包数据库，本地源则先显示风险和检测到的设备身份，要求选择 `yes/no` 并精确输入 `ACCEPT USE LOCAL MIRROR`，随后预先解析完整软件包集；
+4. 显示存储表；网络源先由 Reflector 生成按速度排序的中国大陆 HTTPS 镜像列表并刷新 Live 包数据库，本地源则先显示风险和检测到的设备身份，要求选择 `yes/no` 并精确输入 `ACCEPT USE LOCAL MIRROR`，随后预先解析完整软件包集；
 5. 软件源就绪后，以表格列出每个将被擦除、重新分区、格式化、挂载写入或启用为 Swap 的块设备及其父磁盘；用户先选择 `yes/no`，选择 `yes` 后还必须精确输入 `CONFIRM EXECUTE`，然后立即再做一次所有参与磁盘的身份核对；
 6. 分别在选择了引导式布局的磁盘上重建 GPT 并核对新分区；现有分区模式不写对应磁盘的分区表；
 7. 只格式化 `FORMAT`，随后按挂载路径顺序挂载到 `/mnt` 并启用指定 Swap；

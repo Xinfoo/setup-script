@@ -471,6 +471,16 @@ static bool test_automatic_script(void)
                               "Type PREPARE to continue:",
                               "the former network repository confirmation");
     passed &= require_fragment(&script,
+                               "[[ \"$USE_LOCAL_MIRROR\" == true ]] || require_command reflector",
+                               "Reflector required only for network installation");
+    passed &= require_fragment(&script,
+                               "reflector --country China --protocol https --sort rate \\\n"
+                               "            --save \"$WORK_DIR/network-mirrorlist\"",
+                               "rate-sorted China HTTPS mirror generation");
+    passed &= require_fragment(&script,
+                               "install -m 0644 -- \"$WORK_DIR/network-mirrorlist\" /etc/pacman.d/mirrorlist",
+                               "ranked network mirror activation");
+    passed &= require_fragment(&script,
                                "confirm_secure_boot_package_source() {",
                                "the Secure Boot package trust confirmation");
     passed &= require_fragment(&script,

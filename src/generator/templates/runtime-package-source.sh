@@ -7,8 +7,19 @@ prepare_package_source() {
     if [[ "$USE_LOCAL_MIRROR" == true ]]; then
         setup_local_mirror
     else
-        # Official network repositories refresh immediately without an extra acknowledgement. / 官方网络仓库无需额外确认，直接刷新数据库。
-        phase 'Checking package repositories'
+        # Preserve the Live configuration so EXIT cleanup can undo the temporary mirror selection. / 保存 Live 配置，使 EXIT 清理能够撤销临时镜像选择。
+        cp -a /etc/pacman.conf "$WORK_DIR/host-pacman.conf"
+        cp -a /etc/pacman.d/mirrorlist "$WORK_DIR/host-mirrorlist"
+        HOST_PACMAN_CHANGED=true
+        # Rate HTTPS mirrors in mainland China and stage the result before replacing mirrorlist. / 对中国大陆 HTTPS 镜像测速排序，并在替换 mirrorlist 前暂存结果。
+        phase 'Ranking network mirrors in China'
+        reflector --country China --protocol https --sort rate \
+            --save "$WORK_DIR/network-mirrorlist"
+        [[ -s "$WORK_DIR/network-mirrorlist" ]] ||
+            die 'Reflector returned an empty China mirror list.'
+        install -m 0644 -- "$WORK_DIR/network-mirrorlist" /etc/pacman.d/mirrorlist
+        # Network repositories refresh immediately without an extra acknowledgement. / 网络仓库无需额外确认，直接刷新数据库。
+        phase 'Refreshing package databases from ranked mirrors'
         pacman -Syy --noconfirm
     fi
     if [[ "$ENABLE_SECURE_BOOT" == true ]]; then
