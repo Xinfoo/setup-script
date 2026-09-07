@@ -508,6 +508,8 @@ git show legacy:live/chroot-setup.sh
 
 ## 已知限制
 
+项目当前阶段主要面向中国大陆用户，软件源选择和 Locale 处理仍包含面向该使用环境的硬编码假设，尚未完整抽象为可配置策略。这些国际化与软件源适配问题计划在后续更新中逐步解决。
+
 - 只支持 UEFI + GPT + systemd-boot；
 - 最多允许八块磁盘参与同一安装方案；
 - 不支持加密、LVM、RAID 和 Btrfs 格式化；
